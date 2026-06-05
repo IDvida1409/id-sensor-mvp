@@ -77,6 +77,19 @@ function html(res, status, body) {
   res.end(body);
 }
 
+function requestPublicBase(req) {
+  const host = req.headers['x-forwarded-host'] || req.headers.host;
+  if (!host) return publicApiUrl;
+
+  const protoHeader = req.headers['x-forwarded-proto'];
+  const proto = Array.isArray(protoHeader)
+    ? protoHeader[0]
+    : String(protoHeader || '').split(',')[0].trim();
+
+  const fallbackProto = String(host).includes('onrender.com') ? 'https' : 'http';
+  return `${proto || fallbackProto}://${host}`;
+}
+
 function escapeHtml(value) {
   return String(value ?? '')
     .replace(/&/g, '&amp;')
@@ -285,10 +298,9 @@ function renderDeviceQrPage(card, code) {
 </html>`;
 }
 
-function renderActivationQrPage(activation, code) {
+function renderActivationQrPage(activation, code, appUrl = publicApiUrl) {
   const clientName = activation?.cliente_nome || 'Cliente vinculado';
   const unitName = activation?.unidade_nome || 'Unidade vinculada';
-  const appUrl = publicApiUrl;
 
   return `<!doctype html>
 <html lang="pt-BR">
@@ -557,7 +569,7 @@ addRoute('GET', '/q/:codigo', async ({ params, res }) => {
   return html(res, 200, renderDeviceQrPage(buildDeviceCard(row), code));
 });
 
-addRoute('GET', '/a/:codigo', async ({ params, res }) => {
+addRoute('GET', '/a/:codigo', async ({ params, req, res }) => {
   const code = extractScannedCode(params.codigo);
   const activation = getDb().prepare(`
     SELECT ac.*, c.nome AS cliente_nome, u.nome AS unidade_nome
@@ -567,10 +579,14 @@ addRoute('GET', '/a/:codigo', async ({ params, res }) => {
     WHERE ac.codigo = ? AND ac.ativo = 1 AND ac.tipo_ativacao = 'app_alerta'
   `).get(code);
 
-  return html(res, activation ? 200 : 404, renderActivationQrPage(activation, code || 'CODIGO INVALIDO'));
+  return html(res, activation ? 200 : 404, renderActivationQrPage(
+    activation,
+    code || 'CODIGO INVALIDO',
+    requestPublicBase(req)
+  ));
 });
 
-addRoute('GET', '/devices/by-code/:codigo', async ({ params, res }) => {
+addRoute('GET', '/devices/by-code/:codigo', async ({ params, req, res }) => {
   const code = extractScannedCode(params.codigo);
   const db = getDb();
   advanceSimulationIfNeeded(db);
@@ -578,7 +594,7 @@ addRoute('GET', '/devices/by-code/:codigo', async ({ params, res }) => {
 
   if (!row) return fail(res, 404, 'Dispositivo nao encontrado para este QR Code.');
 
-  const payload = buildDevicePayload(row.qr_code);
+  const payload = buildDevicePayload(row.qr_code, requestPublicBase(req));
   const card = buildDeviceCard(row);
   return ok(res, {
     device: card,
@@ -640,7 +656,7 @@ addRoute('GET', '/noc/occurrences/live', async ({ query, res }) => {
   }));
 });
 
-addRoute('POST', '/activation-code', async ({ body, res }) => {
+addRoute('POST', '/activation-code', async ({ body, req, res }) => {
   const db = getDb();
   const clienteId = body.cliente_id;
   const unidadeId = body.unidade_id;
@@ -662,9 +678,10 @@ addRoute('POST', '/activation-code', async ({ body, res }) => {
     ) VALUES (?, ?, ?, ?, ?, ?, 1, ?)
   `).run(activationId, code, clienteId, unidadeId, dispositivoId, tipoAtivacao, createdAt);
 
+  const publicBase = requestPublicBase(req);
   const payload = tipoAtivacao === 'dispositivo_qrcode'
-    ? buildDevicePayload(code)
-    : buildActivationPayload(code);
+    ? buildDevicePayload(code, publicBase)
+    : buildActivationPayload(code, publicBase);
 
   ok(res, {
     id: activationId,

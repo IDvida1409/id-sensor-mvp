@@ -4,17 +4,17 @@ function normalizeBase(base) {
   return String(base || '').replace(/\/+$/, '');
 }
 
-function joinPublicLink(path, code) {
+function joinPublicLink(path, code, base = publicApiUrl) {
   const cleanPath = String(path || '').replace(/^\/?/, '/').replace(/\/+$/, '');
-  return `${normalizeBase(publicApiUrl)}${cleanPath}/${encodeURIComponent(code)}`;
+  return `${normalizeBase(base || publicApiUrl)}${cleanPath}/${encodeURIComponent(code)}`;
 }
 
-function buildActivationPayload(code) {
-  return joinPublicLink('/a', code);
+function buildActivationPayload(code, base) {
+  return joinPublicLink('/a', code, base);
 }
 
-function buildDevicePayload(code) {
-  return joinPublicLink('/q', code);
+function buildDevicePayload(code, base) {
+  return joinPublicLink('/q', code, base);
 }
 
 function buildQrImageUrl(payload) {
