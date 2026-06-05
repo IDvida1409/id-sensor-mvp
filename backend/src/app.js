@@ -132,7 +132,6 @@ function renderDeviceQrPage(card, code) {
   const state = cardWebState(card);
   const status = cardWebLabel(card);
   const level = thermometerPercent(card);
-  const safeCode = escapeHtml(code);
 
   return `<!doctype html>
 <html lang="pt-BR">
@@ -144,55 +143,61 @@ function renderDeviceQrPage(card, code) {
     :root { color-scheme: light; font-family: Inter, Arial, sans-serif; }
     * { box-sizing: border-box; }
     body { margin: 0; background: #f4f8fc; color: #14243b; }
-    main { min-height: 100vh; padding: 22px 16px 28px; }
-    .shell { margin: 0 auto; max-width: 460px; }
-    .brand { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
-    .logo { color: #2f373b; font-size: 30px; font-weight: 900; letter-spacing: 0; }
-    .logo span { color: #39b8a5; }
-    .pill { background: #eaf2fb; border: 1px solid #d8e4f2; border-radius: 999px; color: #0b2f55; font-size: 12px; font-weight: 900; padding: 8px 11px; }
-    .client { margin-bottom: 14px; }
-    .client h1 { font-size: 24px; line-height: 1.15; margin: 0; }
-    .client p { color: #65758f; font-size: 14px; font-weight: 700; margin: 5px 0 0; }
-    .device-card { border-radius: 8px; border: 1px solid rgba(255,255,255,0.22); box-shadow: 0 18px 38px rgba(9,35,67,0.18); color: white; min-height: 310px; padding: 20px; }
+    main { min-height: 100vh; padding: 22px 16px 26px; }
+    .shell { margin: 0 auto; max-width: 448px; }
+    .brand { align-items: center; display: flex; justify-content: center; margin-bottom: 18px; }
+    .brand-logo { display: block; height: auto; max-width: 282px; width: 78%; }
+    .client { margin-bottom: 14px; text-align: left; }
+    .client h1 { color: #10284a; font-size: 30px; line-height: 1.08; margin: 0; }
+    .client p { color: #5c6f8d; font-size: 15px; font-weight: 800; margin: 6px 0 0; }
+    .device-heading { align-items: center; background: #ffffff; border: 1px solid #d8e4f2; border-radius: 8px; box-shadow: 0 10px 26px rgba(9,35,67,0.08); color: #0b2f55; display: flex; font-size: 18px; font-weight: 900; justify-content: center; margin-bottom: 14px; min-height: 52px; padding: 12px 16px; text-align: center; }
+    .device-card { border-radius: 8px; border: 1px solid rgba(255,255,255,0.22); box-shadow: 0 18px 38px rgba(9,35,67,0.18); color: white; min-height: 390px; padding: 25px 24px 22px; }
     .device-card.blue { background: #243f7d; }
     .device-card.warn { background: #d99135; }
     .device-card.crit, .device-card.offline { background: #b83246; }
     .card-top { align-items: flex-start; display: flex; justify-content: space-between; gap: 12px; }
-    .device-name { font-size: 22px; font-weight: 900; margin: 0; }
-    .sector { color: #d7e6ff; font-size: 13px; font-weight: 700; margin-top: 4px; }
+    .device-name { font-size: 24px; font-weight: 900; margin: 0; }
+    .sector { color: #d7e6ff; font-size: 14px; font-weight: 800; margin-top: 5px; }
     .dot { border: 2px solid rgba(255,255,255,0.65); border-radius: 50%; height: 22px; width: 22px; }
     .blue .dot, .blue .fill, .blue .bulb { background: #35a9ff; }
     .warn .dot, .warn .fill, .warn .bulb { background: #ffcf79; }
     .crit .dot, .crit .fill, .crit .bulb, .offline .dot, .offline .fill, .offline .bulb { background: #ff7480; }
-    .reading { align-items: center; display: flex; justify-content: space-between; margin-top: 34px; }
-    .temp { font-size: 68px; font-weight: 300; line-height: 1; }
+    .reading { align-items: center; display: flex; justify-content: space-between; margin-top: 44px; }
+    .temp { font-size: 74px; font-weight: 300; line-height: 1; }
     .status { background: rgba(255,255,255,0.16); border-radius: 6px; display: inline-block; font-size: 12px; font-weight: 900; margin-top: 12px; padding: 7px 10px; }
-    .thermo { align-items: center; display: flex; flex-direction: column; justify-content: flex-end; margin-left: 16px; width: 48px; }
-    .track { align-items: center; background: #e9edf4; border: 4px solid #bac7d8; border-radius: 16px; display: flex; height: 114px; justify-content: flex-end; overflow: hidden; width: 30px; }
+    .thermo { align-items: center; display: flex; flex-direction: column; justify-content: flex-end; margin-left: 16px; width: 52px; }
+    .track { align-items: center; background: #e9edf4; border: 4px solid #bac7d8; border-radius: 16px; display: flex; height: 124px; justify-content: flex-end; overflow: hidden; width: 32px; }
     .fill { border-radius: 10px; width: 12px; }
-    .bulb { border: 4px solid #cad7e6; border-radius: 50%; height: 44px; margin-top: -8px; width: 44px; }
-    .metrics { display: grid; gap: 10px; grid-template-columns: 1fr 1fr; margin-top: 26px; }
-    .metric { background: rgba(255,255,255,0.14); border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; padding: 12px; }
+    .bulb { border: 4px solid #cad7e6; border-radius: 50%; height: 48px; margin-top: -8px; width: 48px; }
+    .metrics { display: grid; gap: 14px; grid-template-columns: 1fr 1fr; margin-top: 32px; }
+    .metric { background: rgba(255,255,255,0.14); border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; padding: 15px; }
     .metric small { color: #d5e3f6; display: block; font-size: 11px; font-weight: 900; }
-    .metric strong { color: white; display: block; font-size: 21px; font-weight: 900; margin-top: 4px; }
-    .footer { display: flex; justify-content: space-between; gap: 12px; margin-top: 18px; color: #f1f7ff; font-size: 14px; font-weight: 800; }
-    .web-actions { color: #65758f; font-size: 13px; font-weight: 700; line-height: 1.45; margin-top: 16px; }
-    .powered { align-items: center; color: #65758f; display: flex; gap: 6px; justify-content: center; margin-top: 24px; font-size: 12px; font-weight: 800; }
-    .idvida .id { color: #19ae54; }
-    .idvida .vida { color: #0b2f55; }
+    .metric strong { color: white; display: block; font-size: 22px; font-weight: 900; margin-top: 4px; }
+    .footer { display: flex; justify-content: space-between; gap: 12px; margin-top: 22px; color: #f1f7ff; font-size: 15px; font-weight: 900; }
+    .powered { align-items: center; color: #65758f; display: flex; gap: 10px; justify-content: center; margin-top: 20px; font-size: 12px; font-weight: 800; }
+    .powered-logo { display: block; height: 31px; width: auto; }
+    @media (max-width: 520px) {
+      main { padding: 16px 12px 22px; }
+      .brand-logo { max-width: 238px; width: 80%; }
+      .client h1 { font-size: 24px; }
+      .device-card { min-height: 356px; padding: 21px 18px 19px; }
+      .temp { font-size: 64px; }
+      .reading { margin-top: 34px; }
+      .metrics { margin-top: 26px; }
+    }
   </style>
 </head>
 <body>
   <main>
     <section class="shell">
       <div class="brand">
-        <div class="logo"><span>ID</span>sensor</div>
-        <div class="pill">QR ${safeCode}</div>
+        <img class="brand-logo" src="/assets/idsensor-logo.png" alt="IDsensor">
       </div>
       <div class="client">
         <h1>${escapeHtml(card.clientName || 'Cliente')}</h1>
         <p>${escapeHtml(card.unitName || 'Unidade')} - ${escapeHtml(card.local || card.sector || 'Area monitorada')}</p>
       </div>
+      <div id="pageDeviceName" class="device-heading">${escapeHtml(card.name || 'Equipamento')}</div>
       <article id="deviceCard" class="device-card ${state}">
         <div class="card-top">
           <div>
@@ -220,8 +225,7 @@ function renderDeviceQrPage(card, code) {
           <span id="humidity">Umidade ${escapeHtml(card.hum1 ?? '--')}%</span>
         </div>
       </article>
-      <p class="web-actions">Esta visualizacao funciona direto pelo navegador e atualiza a cada 60 segundos. No app IDsensor, escaneie o mesmo QR para abrir o card dentro do aplicativo.</p>
-      <div class="powered">Powered by <strong class="idvida"><span class="id">ID</span><span class="vida">VIDA</span></strong></div>
+      <div class="powered">Powered by <img class="powered-logo" src="/assets/idvida-logo.png" alt="IDvida"></div>
     </section>
   </main>
   <script>
@@ -229,6 +233,7 @@ function renderDeviceQrPage(card, code) {
     const card = document.getElementById('deviceCard');
     const fields = {
       name: document.getElementById('deviceName'),
+      pageName: document.getElementById('pageDeviceName'),
       sector: document.getElementById('sector'),
       temp: document.getElementById('temp'),
       status: document.getElementById('status'),
@@ -270,6 +275,7 @@ function renderDeviceQrPage(card, code) {
     function render(item) {
       const state = stateFor(item);
       card.className = 'device-card ' + state;
+      fields.pageName.textContent = item.name || 'Equipamento';
       fields.name.textContent = item.name || 'Equipamento';
       fields.sector.textContent = item.sector || item.local || 'Banco de Sangue';
       fields.temp.textContent = temp(item.temp);
@@ -313,25 +319,25 @@ function renderActivationQrPage(activation, code, appUrl = publicApiUrl) {
     body { background: #f4f8fc; color: #14243b; margin: 0; }
     main { min-height: 100vh; padding: 28px 18px; display: grid; place-items: center; }
     section { background: white; border: 1px solid #d8e4f2; border-radius: 8px; box-shadow: 0 18px 38px rgba(9,35,67,0.12); max-width: 440px; padding: 24px; width: 100%; }
-    .logo { color: #2f373b; font-size: 32px; font-weight: 900; letter-spacing: 0; margin-bottom: 18px; }
-    .logo span { color: #39b8a5; }
+    .logo { display: block; height: auto; margin: 0 auto 18px; max-width: 250px; width: 78%; }
     h1 { font-size: 25px; margin: 0 0 10px; }
     p { color: #65758f; font-size: 15px; font-weight: 700; line-height: 1.5; margin: 0 0 16px; }
     .code { background: #eaf2fb; border: 1px solid #d8e4f2; border-radius: 8px; color: #0b2f55; font-size: 23px; font-weight: 900; letter-spacing: 1px; padding: 14px; text-align: center; }
     .client { margin-top: 16px; }
-    .powered { color: #65758f; font-size: 12px; font-weight: 800; margin-top: 24px; text-align: center; }
+    .powered { align-items: center; color: #65758f; display: flex; gap: 10px; justify-content: center; margin-top: 24px; font-size: 12px; font-weight: 800; }
+    .powered img { display: block; height: 31px; width: auto; }
   </style>
 </head>
 <body>
   <main>
     <section>
-      <div class="logo"><span>ID</span>sensor</div>
+      <img class="logo" src="/assets/idsensor-logo.png" alt="IDsensor">
       <h1>Ativar aparelho celular</h1>
       <p>Digite este codigo no app IDsensor para vincular o celular ao cliente. Esta tela tambem confirma que o QR abriu pelo navegador.</p>
       <div class="code">${escapeHtml(code)}</div>
       <p class="client">${escapeHtml(clientName)}<br>${escapeHtml(unitName)}</p>
       <p>Backend conectado em ${escapeHtml(appUrl)}.</p>
-      <div class="powered">Powered by IDvida</div>
+      <div class="powered">Powered by <img src="/assets/idvida-logo.png" alt="IDvida"></div>
     </section>
   </main>
 </body>
@@ -350,8 +356,7 @@ function renderQrMessagePage(title, message, code) {
     body { background: #f4f8fc; color: #14243b; margin: 0; }
     main { min-height: 100vh; padding: 28px 18px; display: grid; place-items: center; }
     section { background: white; border: 1px solid #d8e4f2; border-radius: 8px; box-shadow: 0 18px 38px rgba(9,35,67,0.12); max-width: 440px; padding: 24px; width: 100%; }
-    .logo { color: #2f373b; font-size: 32px; font-weight: 900; letter-spacing: 0; margin-bottom: 18px; }
-    .logo span { color: #39b8a5; }
+    .logo { display: block; height: auto; margin: 0 auto 18px; max-width: 250px; width: 78%; }
     h1 { font-size: 25px; margin: 0 0 10px; }
     p { color: #65758f; font-size: 15px; font-weight: 700; line-height: 1.5; margin: 0 0 16px; }
     .code { background: #eaf2fb; border: 1px solid #d8e4f2; border-radius: 8px; color: #0b2f55; font-size: 18px; font-weight: 900; padding: 14px; text-align: center; }
@@ -360,7 +365,7 @@ function renderQrMessagePage(title, message, code) {
 <body>
   <main>
     <section>
-      <div class="logo"><span>ID</span>sensor</div>
+      <img class="logo" src="/assets/idsensor-logo.png" alt="IDsensor">
       <h1>${escapeHtml(title)}</h1>
       <p>${escapeHtml(message)}</p>
       <div class="code">${escapeHtml(code || '--')}</div>
