@@ -112,13 +112,6 @@ function cardWebState(card) {
   return 'blue';
 }
 
-function cardWebLabel(card) {
-  if (card.online === false) return 'SEM COMUNICACAO';
-  if (card.state === 'crit') return 'CRITICO';
-  if (card.state === 'warn') return 'ATENCAO';
-  return 'NORMAL';
-}
-
 function thermometerPercent(card) {
   const temp = Number(card.temp);
   const min = Number(card.min ?? 2);
@@ -130,8 +123,9 @@ function thermometerPercent(card) {
 
 function renderDeviceQrPage(card, code) {
   const state = cardWebState(card);
-  const status = cardWebLabel(card);
   const level = thermometerPercent(card);
+  const batteryValue = Number(card.battery);
+  const batteryWidth = Number.isFinite(batteryValue) ? Math.max(6, Math.min(100, batteryValue)) : 6;
 
   return `<!doctype html>
 <html lang="pt-BR">
@@ -143,87 +137,90 @@ function renderDeviceQrPage(card, code) {
     :root { color-scheme: light; font-family: Inter, Arial, sans-serif; }
     * { box-sizing: border-box; }
     body { margin: 0; background: #f4f8fc; color: #14243b; }
-    main { min-height: 100vh; padding: 22px 16px 26px; }
-    .shell { margin: 0 auto; max-width: 448px; }
-    .brand { align-items: center; display: flex; justify-content: center; margin-bottom: 18px; }
-    .brand-logo { display: block; height: auto; max-width: 282px; width: 78%; }
-    .client { margin-bottom: 14px; text-align: left; }
-    .client h1 { color: #10284a; font-size: 30px; line-height: 1.08; margin: 0; }
-    .client p { color: #5c6f8d; font-size: 15px; font-weight: 800; margin: 6px 0 0; }
-    .device-heading { align-items: center; background: #ffffff; border: 1px solid #d8e4f2; border-radius: 8px; box-shadow: 0 10px 26px rgba(9,35,67,0.08); color: #0b2f55; display: flex; font-size: 18px; font-weight: 900; justify-content: center; margin-bottom: 14px; min-height: 52px; padding: 12px 16px; text-align: center; }
-    .device-card { border-radius: 8px; border: 1px solid rgba(255,255,255,0.22); box-shadow: 0 18px 38px rgba(9,35,67,0.18); color: white; min-height: 390px; padding: 25px 24px 22px; }
-    .device-card.blue { background: #243f7d; }
-    .device-card.warn { background: #d99135; }
-    .device-card.crit, .device-card.offline { background: #b83246; }
-    .card-top { align-items: flex-start; display: flex; justify-content: space-between; gap: 12px; }
-    .device-name { font-size: 24px; font-weight: 900; margin: 0; }
-    .sector { color: #d7e6ff; font-size: 14px; font-weight: 800; margin-top: 5px; }
-    .dot { border: 2px solid rgba(255,255,255,0.65); border-radius: 50%; height: 22px; width: 22px; }
-    .blue .dot, .blue .fill, .blue .bulb { background: #35a9ff; }
-    .warn .dot, .warn .fill, .warn .bulb { background: #ffcf79; }
-    .crit .dot, .crit .fill, .crit .bulb, .offline .dot, .offline .fill, .offline .bulb { background: #ff7480; }
-    .reading { align-items: center; display: flex; justify-content: space-between; margin-top: 44px; }
-    .temp { font-size: 74px; font-weight: 300; line-height: 1; }
-    .status { background: rgba(255,255,255,0.16); border-radius: 6px; display: inline-block; font-size: 12px; font-weight: 900; margin-top: 12px; padding: 7px 10px; }
-    .thermo { align-items: center; display: flex; flex-direction: column; justify-content: flex-end; margin-left: 16px; width: 52px; }
-    .track { align-items: center; background: #e9edf4; border: 4px solid #bac7d8; border-radius: 16px; display: flex; height: 124px; justify-content: flex-end; overflow: hidden; width: 32px; }
-    .fill { border-radius: 10px; width: 12px; }
-    .bulb { border: 4px solid #cad7e6; border-radius: 50%; height: 48px; margin-top: -8px; width: 48px; }
-    .metrics { display: grid; gap: 14px; grid-template-columns: 1fr 1fr; margin-top: 32px; }
-    .metric { background: rgba(255,255,255,0.14); border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; padding: 15px; }
-    .metric small { color: #d5e3f6; display: block; font-size: 11px; font-weight: 900; }
-    .metric strong { color: white; display: block; font-size: 22px; font-weight: 900; margin-top: 4px; }
-    .footer { display: flex; justify-content: space-between; gap: 12px; margin-top: 22px; color: #f1f7ff; font-size: 15px; font-weight: 900; }
+    main { min-height: 100vh; padding: 18px 16px 24px; }
+    .shell { margin: 0 auto; max-width: 474px; }
+    .topbar { align-items: center; display: flex; justify-content: flex-start; margin-bottom: 14px; }
+    .brand-logo { display: block; height: auto; width: 132px; }
+    .client { margin-bottom: 14px; padding-left: 2px; text-align: left; }
+    .client h1 { color: #10284a; font-size: 22px; line-height: 1.12; margin: 0; }
+    .client p { color: #5c6f8d; font-size: 14px; font-weight: 800; margin: 4px 0 0; }
+    .device-card { border: 1px solid rgba(255,255,255,.12); border-radius: 20px; box-shadow: 0 6px 16px rgba(31,42,55,.08); color: white; min-height: 390px; overflow: hidden; padding: 18px; position: relative; width: 100%; }
+    .device-card.blue { background: radial-gradient(circle at 22% 18%, rgba(255,255,255,.08) 0%, transparent 30%), linear-gradient(180deg,#244180,#1d3162); }
+    .device-card.warn { color: #4f5869; background: radial-gradient(circle at 78% 35%, rgba(196,131,55,.16) 0%, transparent 30%), linear-gradient(180deg,#d59645,#bf7628); }
+    .device-card.crit, .device-card.offline { background: radial-gradient(circle at 74% 62%, rgba(255,104,104,.26) 0%, transparent 30%), linear-gradient(135deg,#7a2449,#c43b46); }
+    .card-head { align-items: flex-start; display: flex; gap: 8px; justify-content: space-between; margin-bottom: 8px; }
+    .device { font-size: 20px; font-weight: 900; line-height: 1.2; }
+    .comm-badge { align-items: center; background: #fff; border-radius: 50%; box-shadow: 0 0 0 2px rgba(255,255,255,.2); display: flex; height: 38px; justify-content: center; position: absolute; right: 14px; top: 14px; width: 38px; }
+    .comm-badge::before { background: #0f568d; border-radius: 50%; content: ""; height: 9px; position: absolute; top: 7px; width: 9px; }
+    .comm-badge::after { border: 5px solid #0f568d; border-bottom: 0; border-radius: 22px 22px 0 0; content: ""; height: 15px; position: absolute; top: 17px; width: 25px; }
+    .offline .comm-badge::before { background: #d6372f; }
+    .offline .comm-badge::after { border-color: #d6372f; }
+    .temp { font-size: 76px; font-weight: 300; line-height: 1; margin: 40px 66px 22px 0; text-align: center; }
+    .middle { align-items: center; display: grid; gap: 12px; grid-template-columns: 1fr 58px; margin-top: -4px; }
+    .metrics { display: grid; gap: 10px; grid-template-columns: repeat(2, 1fr); margin-top: -14px; }
+    .metric-box { background: rgba(255,255,255,.10); border: 1px solid rgba(255,255,255,.10); border-radius: 10px; min-height: 72px; padding: 11px 12px; }
+    .metric-label { font-size: 11px; font-weight: 900; margin-bottom: 7px; opacity: .85; text-transform: uppercase; }
+    .metric-value { font-size: 21px; font-weight: 900; }
+    .thermo { background: linear-gradient(180deg,rgba(255,255,255,.92),rgba(248,250,252,.88)); border: 3px solid rgba(188,198,212,.92); border-radius: 22px; box-shadow: inset 0 1px 0 rgba(255,255,255,.45); height: 132px; margin: 0 auto; position: relative; width: 34px; }
+    .thermo-track { background: #c6ced8; border-radius: 12px; bottom: 20px; box-shadow: inset 0 0 0 1px rgba(158,168,183,.55); left: 50%; overflow: hidden; position: absolute; top: 6px; transform: translateX(-50%); width: 8px; }
+    .thermo-fill { background: var(--thermo-fill,#35a9ff); border-radius: 12px; bottom: 0; box-shadow: inset 0 1px 0 rgba(255,255,255,.16); height: var(--thermo-level,0%); left: 0; position: absolute; right: 0; }
+    .thermo-bulb { background: var(--thermo-bulb,#35a9ff); border: 3px solid rgba(188,198,212,.92); border-radius: 50%; bottom: -8px; box-shadow: inset 0 1px 0 rgba(255,255,255,.14); height: 42px; left: 50%; position: absolute; transform: translateX(-50%); width: 42px; }
+    .blue { --thermo-fill: #35a9ff; --thermo-bulb: #35a9ff; }
+    .warn { --thermo-fill: #f07d3b; --thermo-bulb: #f07d3b; }
+    .crit, .offline { --thermo-fill: #ff4d55; --thermo-bulb: #ff4d55; }
+    .bottom-meta { align-items: center; bottom: 18px; display: flex; font-size: 22px; font-weight: 800; gap: 8px; justify-content: space-between; left: 18px; position: absolute; right: 18px; }
+    .left-meta, .right-meta, .battery { align-items: center; display: flex; gap: 7px; min-width: 0; }
+    .battery-icon { background: transparent; border: 2px solid rgba(255,255,255,.9); border-radius: 4px; box-shadow: none; height: 12px; position: relative; width: 20px; }
+    .battery-icon::after { background: rgba(255,255,255,.9); border-radius: 2px; content: ""; height: 4px; position: absolute; right: -4px; top: 2px; width: 3px; }
+    .battery-level { background: linear-gradient(180deg,#b5ff9d,#53d769); border-radius: 2px; bottom: 2px; left: 2px; position: absolute; top: 2px; }
+    .drop { background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 18'><defs><linearGradient id='g' x1='0' y1='0' x2='0' y2='1'><stop offset='0' stop-color='%23dff6ff'/><stop offset='0.45' stop-color='%2389d8ff'/><stop offset='1' stop-color='%232d9cff'/></linearGradient></defs><path d='M7 0C4 4.1 1 7.1 1 11.1A6 6 0 0 0 13 11.1C13 7.1 10 4.1 7 0Z' fill='url(%23g)'/></svg>"); background-position: center; background-repeat: no-repeat; background-size: contain; display: inline-block; flex: 0 0 14px; height: 18px; width: 14px; }
     .powered { align-items: center; color: #65758f; display: flex; gap: 10px; justify-content: center; margin-top: 20px; font-size: 12px; font-weight: 800; }
     .powered-logo { display: block; height: 31px; width: auto; }
     @media (max-width: 520px) {
-      main { padding: 16px 12px 22px; }
-      .brand-logo { max-width: 238px; width: 80%; }
-      .client h1 { font-size: 24px; }
-      .device-card { min-height: 356px; padding: 21px 18px 19px; }
-      .temp { font-size: 64px; }
-      .reading { margin-top: 34px; }
-      .metrics { margin-top: 26px; }
+      main { padding: 14px 12px 22px; }
+      .shell { max-width: 100%; }
+      .brand-logo { width: 112px; }
+      .client h1 { font-size: 19px; }
+      .client p { font-size: 13px; }
+      .device-card { min-height: 356px; padding: 16px; }
+      .device { font-size: 18px; }
+      .temp { font-size: 66px; margin: 34px 58px 20px 0; }
+      .metric-box { min-height: 64px; padding: 9px 10px; }
+      .metric-value { font-size: 18px; }
+      .bottom-meta { bottom: 16px; font-size: 20px; left: 16px; right: 16px; }
     }
   </style>
 </head>
 <body>
   <main>
     <section class="shell">
-      <div class="brand">
+      <div class="topbar">
         <img class="brand-logo" src="/assets/idsensor-logo.png" alt="IDsensor">
       </div>
       <div class="client">
         <h1>${escapeHtml(card.clientName || 'Cliente')}</h1>
         <p>${escapeHtml(card.unitName || 'Unidade')} - ${escapeHtml(card.local || card.sector || 'Area monitorada')}</p>
       </div>
-      <div id="pageDeviceName" class="device-heading">${escapeHtml(card.name || 'Equipamento')}</div>
       <article id="deviceCard" class="device-card ${state}">
-        <div class="card-top">
-          <div>
-            <h2 id="deviceName" class="device-name">${escapeHtml(card.name || 'Equipamento')}</h2>
-            <div id="sector" class="sector">${escapeHtml(card.sector || card.local || 'Banco de Sangue')}</div>
-          </div>
-          <div class="dot"></div>
+        <div class="card-head">
+          <div class="device-line"><div id="deviceName" class="device">${escapeHtml(card.name || 'Equipamento')}</div></div>
         </div>
-        <div class="reading">
-          <div>
-            <div id="temp" class="temp">${tempHtml(card.temp)}</div>
-            <div id="status" class="status">${status}</div>
+        <div class="temp" id="temp">${tempHtml(card.temp)}</div>
+        <div class="middle">
+          <div class="metrics">
+            <div class="metric-box"><div class="metric-label">MIN</div><div class="metric-value" id="minTemp">${tempHtml(card.dailyMin)}</div></div>
+            <div class="metric-box"><div class="metric-label">MAX</div><div class="metric-value" id="maxTemp">${tempHtml(card.dailyMax)}</div></div>
           </div>
-          <div class="thermo">
-            <div class="track"><div id="thermoFill" class="fill" style="height: ${level}%"></div></div>
-            <div class="bulb"></div>
+          <div class="thermo" aria-hidden="true" style="--thermo-level: ${level}%">
+            <div class="thermo-track"><div id="thermoFill" class="thermo-fill"></div></div>
+            <div class="thermo-bulb"></div>
           </div>
         </div>
-        <div class="metrics">
-          <div class="metric"><small>MIN</small><strong id="minTemp">${tempHtml(card.dailyMin)}</strong></div>
-          <div class="metric"><small>MAX</small><strong id="maxTemp">${tempHtml(card.dailyMax)}</strong></div>
+        <div class="bottom-meta">
+          <div class="left-meta"><div class="battery"><div class="battery-icon"><div id="batteryLevel" class="battery-level" style="width:${batteryWidth}%"></div></div><span id="batteryText">${escapeHtml(card.battery ?? '--')}%</span></div></div>
+          <div class="right-meta"><span class="drop"></span><span id="humidityText">${escapeHtml(card.hum1 ?? '--')}%</span></div>
         </div>
-        <div class="footer">
-          <span id="battery">Bateria ${escapeHtml(card.battery ?? '--')}%</span>
-          <span id="humidity">Umidade ${escapeHtml(card.hum1 ?? '--')}%</span>
-        </div>
+        <div id="commBadge" class="comm-badge" aria-hidden="true"></div>
       </article>
       <div class="powered">Powered by <img class="powered-logo" src="/assets/idvida-logo.png" alt="IDvida"></div>
     </section>
@@ -233,14 +230,12 @@ function renderDeviceQrPage(card, code) {
     const card = document.getElementById('deviceCard');
     const fields = {
       name: document.getElementById('deviceName'),
-      pageName: document.getElementById('pageDeviceName'),
-      sector: document.getElementById('sector'),
       temp: document.getElementById('temp'),
-      status: document.getElementById('status'),
       min: document.getElementById('minTemp'),
       max: document.getElementById('maxTemp'),
-      battery: document.getElementById('battery'),
-      humidity: document.getElementById('humidity'),
+      batteryText: document.getElementById('batteryText'),
+      batteryLevel: document.getElementById('batteryLevel'),
+      humidityText: document.getElementById('humidityText'),
       fill: document.getElementById('thermoFill')
     };
 
@@ -249,13 +244,6 @@ function renderDeviceQrPage(card, code) {
       if (item.state === 'crit') return 'crit';
       if (item.state === 'warn') return 'warn';
       return 'blue';
-    }
-
-    function statusFor(item) {
-      if (item.online === false) return 'SEM COMUNICACAO';
-      if (item.state === 'crit') return 'CRITICO';
-      if (item.state === 'warn') return 'ATENCAO';
-      return 'NORMAL';
     }
 
     function temp(value) {
@@ -275,16 +263,14 @@ function renderDeviceQrPage(card, code) {
     function render(item) {
       const state = stateFor(item);
       card.className = 'device-card ' + state;
-      fields.pageName.textContent = item.name || 'Equipamento';
       fields.name.textContent = item.name || 'Equipamento';
-      fields.sector.textContent = item.sector || item.local || 'Banco de Sangue';
       fields.temp.textContent = temp(item.temp);
-      fields.status.textContent = statusFor(item);
       fields.min.textContent = temp(item.dailyMin);
       fields.max.textContent = temp(item.dailyMax);
-      fields.battery.textContent = 'Bateria ' + (item.battery ?? '--') + '%';
-      fields.humidity.textContent = 'Umidade ' + (item.hum1 ?? '--') + '%';
-      fields.fill.style.height = levelFor(item) + '%';
+      fields.batteryText.textContent = (item.battery ?? '--') + '%';
+      fields.batteryLevel.style.width = Math.max(6, Math.min(100, Number(item.battery) || 6)) + '%';
+      fields.humidityText.textContent = (item.hum1 ?? '--') + '%';
+      fields.fill.parentElement.parentElement.style.setProperty('--thermo-level', levelFor(item) + '%');
     }
 
     async function refresh() {
