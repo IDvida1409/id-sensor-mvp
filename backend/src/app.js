@@ -126,6 +126,7 @@ function renderDeviceQrPage(card, code) {
   const level = thermometerPercent(card);
   const batteryValue = Number(card.battery);
   const batteryWidth = Number.isFinite(batteryValue) ? Math.max(6, Math.min(100, batteryValue)) : 6;
+  const commIconSrc = card.online === false ? '/assets/comm-offline.png' : '/assets/comm-online.png';
 
   return `<!doctype html>
 <html lang="pt-BR">
@@ -150,11 +151,8 @@ function renderDeviceQrPage(card, code) {
     .device-card.crit, .device-card.offline { background: radial-gradient(circle at 74% 62%, rgba(255,104,104,.26) 0%, transparent 30%), linear-gradient(135deg,#7a2449,#c43b46); }
     .card-head { align-items: flex-start; display: flex; gap: 8px; justify-content: space-between; margin-bottom: 8px; }
     .device { font-size: 20px; font-weight: 900; line-height: 1.2; }
-    .comm-badge { align-items: center; background: #fff; border-radius: 50%; box-shadow: 0 0 0 2px rgba(255,255,255,.2); display: flex; height: 38px; justify-content: center; position: absolute; right: 14px; top: 14px; width: 38px; }
-    .comm-badge::before { background: #0f568d; border-radius: 50%; content: ""; height: 9px; position: absolute; top: 7px; width: 9px; }
-    .comm-badge::after { border: 5px solid #0f568d; border-bottom: 0; border-radius: 22px 22px 0 0; content: ""; height: 15px; position: absolute; top: 17px; width: 25px; }
-    .offline .comm-badge::before { background: #d6372f; }
-    .offline .comm-badge::after { border-color: #d6372f; }
+    .comm-badge { align-items: center; background: #fff; border-radius: 50%; box-shadow: 0 0 0 2px rgba(255,255,255,.2); display: flex; height: 38px; justify-content: center; overflow: hidden; position: absolute; right: 14px; top: 14px; width: 38px; }
+    .comm-badge img { display: block; height: 100%; object-fit: cover; width: 100%; }
     .temp { font-size: 76px; font-weight: 300; line-height: 1; margin: 40px 66px 22px 0; text-align: center; }
     .middle { align-items: center; display: grid; gap: 12px; grid-template-columns: 1fr 58px; margin-top: -4px; }
     .metrics { display: grid; gap: 10px; grid-template-columns: repeat(2, 1fr); margin-top: -14px; }
@@ -220,7 +218,7 @@ function renderDeviceQrPage(card, code) {
           <div class="left-meta"><div class="battery"><div class="battery-icon"><div id="batteryLevel" class="battery-level" style="width:${batteryWidth}%"></div></div><span id="batteryText">${escapeHtml(card.battery ?? '--')}%</span></div></div>
           <div class="right-meta"><span class="drop"></span><span id="humidityText">${escapeHtml(card.hum1 ?? '--')}%</span></div>
         </div>
-        <div id="commBadge" class="comm-badge" aria-hidden="true"></div>
+        <div id="commBadge" class="comm-badge" aria-hidden="true"><img id="commIcon" src="${commIconSrc}" alt=""></div>
       </article>
       <div class="powered">Powered by <img class="powered-logo" src="/assets/idvida-logo.png" alt="IDvida"></div>
     </section>
@@ -236,6 +234,7 @@ function renderDeviceQrPage(card, code) {
       batteryText: document.getElementById('batteryText'),
       batteryLevel: document.getElementById('batteryLevel'),
       humidityText: document.getElementById('humidityText'),
+      commIcon: document.getElementById('commIcon'),
       fill: document.getElementById('thermoFill')
     };
 
@@ -270,6 +269,7 @@ function renderDeviceQrPage(card, code) {
       fields.batteryText.textContent = (item.battery ?? '--') + '%';
       fields.batteryLevel.style.width = Math.max(6, Math.min(100, Number(item.battery) || 6)) + '%';
       fields.humidityText.textContent = (item.hum1 ?? '--') + '%';
+      fields.commIcon.src = item.online === false ? '/assets/comm-offline.png' : '/assets/comm-online.png';
       fields.fill.parentElement.parentElement.style.setProperty('--thermo-level', levelFor(item) + '%');
     }
 
