@@ -1,0 +1,981 @@
+﻿# Handoff Técnico Oficial - Painel IoT
+
+## 1) Objetivo da entrega
+Esta entrega transforma o arquivo monolítico do painel em um pacote de handoff técnico para continuidade de desenvolvimento.
+
+Ela foi estruturada para:
+- permitir leitura e manutenção por outro time sem depender do histórico da conversa;
+- preservar o comportamento atual do protótipo;
+- separar a base em arquivos padrão (`index.html`, `styles.css`, `script.js`);
+- documentar regras de negócio, fluxos, riscos e pontos de integração com backend.
+
+## 2) Escopo executado nesta entrega
+### 2.1 Arquivos gerados
+- `handoff_tecnico/index.html`
+- `handoff_tecnico/styles.css`
+- `handoff_tecnico/script.js`
+- `handoff_tecnico/modules/README.md`
+- `handoff_tecnico/modules/state-store.js`
+- `handoff_tecnico/modules/device-rules.js`
+- `handoff_tecnico/modules/ui-renderers.js`
+- `handoff_tecnico/modules/accessibility-controller.js`
+- `handoff_tecnico/modules/gestao-drill.js`
+- `handoff_tecnico/modules/noc-engine.js`
+- `handoff_tecnico/modules/api-client.js`
+- `handoff_tecnico/modules/bootstrap.js`
+- `handoff_tecnico/HANDOFF_TECNICO.md` (este documento)
+
+### 2.2 O que foi feito tecnicamente
+- leitura integral da base atual (`painel_iot_corrigido_v5.html`);
+- extração de todos os blocos inline de `<style>` para `styles.css` mantendo ordem;
+- extração de todos os blocos inline de `<script>` para `script.js` mantendo ordem;
+- limpeza do HTML para versão estrutural com referência externa de CSS e JS;
+- criação de blueprint modular para migração progressiva do monólito.
+
+### 2.3 Métricas da base original analisada
+- total de linhas do arquivo original: `14803`;
+- blocos `<style>`: `86`;
+- blocos `<script>`: `43`;
+- handlers inline no HTML: `onclick=57`, `onchange=3`, `onblur=2`, `onkeydown=2` (após split);
+- funções extraídas no JS (nomes únicos mapeados): ~300;
+- sobreposição de funções globais (`window.*`) em vários pontos do arquivo: alta.
+
+## 3) Como a solução está separada
+## 3.1 `index.html`
+Responsabilidade:
+- estrutura visual e semântica da interface;
+- marcação de cards, overlays e modais;
+- pontos de ancoragem por `id` e `class` para JS e CSS.
+
+Decisões:
+- sem `<style>` inline;
+- sem `<script>` inline;
+- mantém IDs e classes existentes para preservar comportamento;
+- carrega `./styles.css` e `./script.js` no final.
+
+## 3.2 `styles.css`
+Responsabilidade:
+- contém os 86 blocos de estilo da versão original, preservando ordem de aplicação;
+- inclui correções acumuladas (patches) de layout, acessibilidade, NOC, gestão e refinos visuais.
+
+Observação importante:
+- a ordem foi mantida para evitar regressão, mas há múltiplos patches concorrentes sobre o mesmo seletor.
+
+## 3.3 `script.js`
+Responsabilidade:
+- contém os 43 blocos de script da versão original, preservando ordem de execução;
+- inclui dados mockados, renderização, modais, filtros, acessibilidade, NOC, gestão, auditoria e controles de painel.
+
+Observação importante:
+- há múltiplos trechos que sobrescrevem funções globais já declaradas anteriormente.
+
+## 3.4 `modules/` (blueprint)
+Responsabilidade:
+- preparar migração para arquitetura modular sem quebrar o legado atual;
+- servir como guia de refatoração gradual por domínio.
+
+## 4) Mapa funcional completo da interface
+## 4.1 Blocos visuais principais
+### 4.1.1 Topbar
+Elementos principais:
+- título e subtítulo (`#pageSubtitle`);
+- botão `Gestão` (`#gestaoBtn`);
+- botão `NOC` (`#nocBtn`);
+- botão de configuração (`#panelConfigBtn`);
+- botão de acessibilidade (`#accButton`);
+- switch de usuário/perfil (`#userSwitcher` + `#userMenu`).
+
+Função:
+- controlar entrada nos módulos de gestão e NOC;
+- controlar preferências globais do painel;
+- simular perfil/logged user.
+
+### 4.1.2 Barra de filtros e busca
+Elementos:
+- `#filtersControl`, `#statusChips`, `#filterAllBtn`, `#filterAllArrow`;
+- `#deviceSearchBtn`, `#deviceSearchPop`, `#deviceSearchInput`, `#deviceSearchRun`.
+
+Função:
+- filtrar cards por status;
+- resetar para “todos”;
+- localizar dispositivo por ID/nome/código/MAC.
+
+### 4.1.3 Grid de cards de dispositivos
+Elemento:
+- `#cardGrid` renderizado por `renderGrid()`.
+
+Função:
+- mostrar visão operacional resumida de cada equipamento;
+- exibir temperatura atual, min/max, comunicação, bateria, umidade e sino de alerta;
+- abrir detalhe flutuante ao clicar.
+
+### 4.1.4 Painel de detalhe flutuante
+Elementos dinâmicos:
+- `#cardFloatingDetail`, `#cardFloatingBackdrop`.
+
+Função:
+- detalhar dispositivo selecionado;
+- abrir modal de gráfico;
+- abrir modal de edição/informação;
+- aplicar status temporário manual.
+
+### 4.1.5 Módulo Gestão
+Elementos:
+- `#gestaoOverlay`;
+- cards: Saúde, Total+Contrato+Disponível, Status Operacional, Ações rápidas.
+
+Função:
+- visão gerencial agregada;
+- drill-down em árvores de status/saúde/contrato/configuração/orçamento.
+
+### 4.1.6 Módulo NOC
+Elementos:
+- `#nocStartOverlay`, `#nocOccurrenceOverlay`, `#nocLiveOverlay`.
+
+Função:
+- monitoramento em tempo real com seleção de modo e tipos de ocorrência;
+- exibição de cards NOC com rotação de categorias;
+- filtro de retorno para grid principal.
+
+## 4.2 Função de cada modal/overlay
+### 4.2.1 `#graphWorkspaceRoot` (dinâmico)
+Função:
+- gráfico expandido de telemetria por período (`daily`, `weekly`, `monthly`, `custom`);
+- troca de visão (`summary`, `detail`);
+- faixa de datas customizada.
+
+Principais funções:
+- `openGraphModal`, `renderGraphModal`, `setGraphPeriod`, `setGraphView`, `closeGraphModal`.
+
+### 4.2.2 `#infoOverlayModal`
+Função:
+- exibir dados de dispositivo e equipamento monitorado;
+- abrir histórico de auditoria;
+- abrir edição, MAC e clone.
+
+Principais funções:
+- `openInfoModal`, `closeInfoOverlays`, `openHistoryAuditModal`.
+
+### 4.2.3 `#infoEditOverlay`
+Função:
+- editar campos do equipamento (nome, código, modelo, área, responsável).
+
+Principais funções:
+- `openEditModal`, `saveEditModal`.
+
+### 4.2.4 `#infoMacOverlay`
+Função:
+- alterar MAC/modelo/conectividade com motivo.
+
+Principais funções:
+- `openMacModal`, `saveMacModal`.
+
+### 4.2.5 `#infoCloneOverlay` e `#cloneAttentionOverlay`
+Função:
+- clonar configuração de equipamento;
+- mostrar aviso de validação.
+
+Principais funções:
+- `openCloneModal`, `openCloneForm`, `saveCloneModal`.
+
+### 4.2.6 `#historyAuditOverlay`
+Função:
+- histórico auditável por escopo:
+- equipamento;
+- dispositivo;
+- painel;
+- status.
+
+Principais funções:
+- `renderAuditHistoryModal`, `openHistoryAuditModal`, `closeHistoryAuditModal`.
+
+### 4.2.7 `#areasModal` e `#clientsModal`
+Função:
+- selecionar área e cliente no contexto de filtros/perfil.
+
+Principais funções:
+- `openModal`, `closeModal`.
+
+### 4.2.8 `#statusConfigModal`
+Função:
+- aplicar status cíclico temporário (Reposição, Manutenção, Inventário, Degelo);
+- encerrar ciclo e voltar para status automático;
+- selecionar duração.
+
+Principais funções:
+- `openStatusConfigModal`, `applyStatusConfig`, `refreshTemporaryStatuses`, `closeStatusConfigModal`.
+
+### 4.2.9 `#gestaoOverlay`
+Função:
+- entrada principal da visão gestão com KPIs e cards clicáveis.
+
+Principais funções:
+- `abrirGestaoModal`, `fecharGestaoModal`.
+
+### 4.2.10 `#drillPanel`
+Função:
+- navegação Drill All / Drill Down / Drill Up para:
+- status operacional;
+- saúde dos dispositivos;
+- total + contrato + disponível;
+- configurações;
+- orçamento.
+
+Principais funções:
+- `abrirDrill`, `fecharDrill`, `voltarResumoDrill`;
+- `renderStatus*`, `renderSaude*`, `renderContrato*`, `renderConfig*`, `renderOrcamento*`.
+
+### 4.2.11 `#nocStartOverlay`
+Função:
+- escolher modo NOC (`area`, `device`, `client`) antes de iniciar.
+
+Principais funções:
+- `openNocStart`, `setNocMode`, `closeNoc`.
+
+### 4.2.12 `#nocOccurrenceOverlay`
+Função:
+- escolher ocorrências monitoradas:
+- próximo do limite;
+- fora do limite;
+- sem comunicação;
+- bateria e fonte (com regra de perfil);
+- todos os status.
+
+Principais funções:
+- `openOccurrenceStep`, `confirmOccurrenceStep`, `syncBatteryOptionVisibility`.
+
+### 4.2.13 `#nocLiveOverlay`
+Função:
+- exibir cards de ocorrência em modo NOC real-time;
+- alternar categorias por rotação;
+- retornar ocorrências ao grid principal.
+
+Principais funções:
+- `startIntegratedNoc`, `setupNocRotations`, `openNocOccurrences`, `updateNocOccurrenceBadge`.
+
+## 4.3 Função de cada botão (mapa funcional)
+### 4.3.1 Navegação principal
+- `#gestaoBtn`: abre módulo gestão (`abrirGestaoModal`).
+- `#nocBtn`: abre entrada NOC (`openNocStart`).
+- `#panelConfigBtn`: abre menu de configuração global do painel.
+
+### 4.3.2 Configuração de painel
+- `#toggleGlobalMute`: ativa/desativa silêncio global por 15 minutos.
+- `#toggleAutoRefresh`: liga/desliga auto refresh de 60s.
+
+### 4.3.3 Acessibilidade
+- `#toggleColorblind`: modo daltônico.
+- `#toggleContrast`: modo alto contraste.
+- `#toggleDensity`: modo compacto.
+- `#toggleCommIcon`: exibe/oculta ícones de comunicação.
+- `#toggleMinMax`: exibe/oculta blocos min/max.
+- `#toggleBattery`: exibe/oculta bateria.
+- `#toggleStatus*`: controla até 4 status visíveis na barra superior.
+
+### 4.3.4 Filtros e busca
+- `#filterAllBtn`: reset de filtros.
+- `#filterAllArrow`: expandir/colapsar trilho de chips.
+- chips de status: aplicam filtro por estado.
+- `#deviceSearchBtn`: abrir popover de busca.
+- `#deviceSearchRun`: executar busca.
+
+### 4.3.5 Gestão e drill
+- cards de gestão clicáveis: entram no respectivo drill.
+- botão voltar no drill: faz drill-up para nível anterior.
+- botão fechar drill: encerra painel lateral/modal.
+
+### 4.3.6 Ações rápidas
+- “Solicitar orçamento”: abre fluxo de orçamento.
+- “Ver OS”: abre painel de ordens de serviço.
+- botão engrenagem: abre drill de configurações/certificados.
+
+### 4.3.7 Detalhe e edição de dispositivo
+- `status-edit-btn`: abre modal de status temporário.
+- `open-graph-btn`: abre gráfico expandido.
+- botão “i”: abre modal de informações do dispositivo.
+- botões internos de info: editar, MAC, clonar, histórico.
+
+### 4.3.8 NOC
+- `#nocModeArea/#nocModeDevice/#nocModeClient`: define contexto de monitoramento.
+- botão “Monitoramento” (start): avança para seleção de ocorrência e live.
+- botão “Ocorrências (N)”: retorna cards filtrados ao grid principal.
+- botão voltar no live: fecha NOC.
+
+## 4.4 Função de cada card
+### 4.4.1 Card de dispositivo (grid principal)
+Construído por:
+- `buildSmallCard(d)`.
+
+Responsabilidades:
+- exibir estado térmico e visual;
+- apresentar min/max do período;
+- mostrar comunicação online/offline;
+- mostrar bateria e umidade;
+- indicar alerta sonoro/silenciável por sino.
+
+Estados possíveis:
+- `blue` (normal);
+- `warn` (atenção);
+- `crit` (crítico);
+- `maint` (manutenção);
+- `inventory`;
+- `defrost`;
+- `restock`.
+
+### 4.4.2 Card NOC
+Construído por:
+- `createNocCard` (versão final sobrescrita nos patches finais).
+
+Responsabilidades:
+- sumarizar ocorrências por contexto (área/cliente/dispositivo);
+- exibir anel + contador;
+- exibir texto da ocorrência e ícone (bateria/fonte quando aplicável);
+- alternar categorias por rotação periódica (`setupNocRotations`).
+
+### 4.4.3 Cards de gestão
+- Saúde dos dispositivos: KPI de calibração/comunicação/manutenção.
+- Total + contrato + disponível: visão de inventário de dispositivos.
+- Status operacional: donut de distribuição.
+- Ações rápidas: atalhos operacionais.
+
+## 4.5 Função de cada gráfico
+### 4.5.1 Gráfico resumido no detalhe
+- função de traçado: `chartPaths`.
+- objetivo: leitura rápida de tendência térmica.
+
+### 4.5.2 Gráfico expandido
+- funções: `bigChartPaths`, `buildTelemetryPath`, `buildGraphModal`.
+- modos:
+- resumo;
+- detalhado;
+- diário/semanal/mensal/personalizado.
+
+### 4.5.3 Marcadores de status no gráfico
+- funções: `ensureGraphStatusTimeline`, `recordGraphStatusEvent`, `getGraphStatusMarkers`.
+- marcadores:
+- Degelo (roxo);
+- Manutenção (cinza);
+- Inventário (marrom);
+- Reposição (amarelo).
+
+## 4.6 Área de configurações
+Contexto:
+- acessada via “Ações rápidas” > engrenagem;
+- fluxo em `renderConfigRoot`, `renderConfigAreas`, `renderConfigDevices`.
+
+Funções:
+- habilitar/desabilitar certificados por área;
+- habilitar/desabilitar por dispositivo;
+- upload de arquivo de certificado por dispositivo.
+
+## 5) Lógica de funcionamento do sistema
+## 5.1 Regras de status dos dispositivos
+Função central:
+- `resolveTelemetryState(d)`.
+
+Regras atuais:
+- sem temperatura válida: `NORMAL/blue`;
+- `CRÍTICO/crit` se temperatura `> max + 1` ou `< min - 1`;
+- `ATENÇÃO/warn` se fora do range (`temp > max` ou `temp < min`);
+- `ATENÇÃO/warn` se próximo do limite (janela de 0.8°C);
+- caso contrário `NORMAL/blue`.
+
+Status de ciclo manual:
+- `MANUTENÇÃO`, `INVENTÁRIO`, `DEGELO`, `REPOSIÇÃO`;
+- aplicados por tempo via modal;
+- ao finalizar tempo, retorno ao status automático.
+
+## 5.2 Regras de alerta
+### 5.2.1 Alerta térmico
+- warns e crits impactam visual de card e NOC;
+- crítico representa escalonamento de risco e envio de alerta.
+
+### 5.2.2 Sinos por card
+- lógica em `v20-card-bell-script`;
+- cada sino pode ser silenciado por 15 min;
+- estado global de silêncio desativa todos os sinos;
+- áudio toca em loop quando existem sinos ativos.
+
+### 5.2.3 Silêncio global
+- `toggleGlobalMute` ativa `globalMuteUntil` por 15 minutos;
+- também gera log de auditoria por dispositivo (`logGlobalMuteForAll`).
+
+## 5.3 Regras de bateria e fonte
+### 5.3.1 No card principal
+Função:
+- `getBatteryVisualClass(value)`.
+
+Regras:
+- `< 20%`: classe crítica (vermelho);
+- `20% a 35%`: classe warning (amarelo);
+- `> 35%`: classe good (verde).
+
+### 5.3.2 No NOC
+Funções:
+- `batteryStrokeColorFromValue`;
+- `batteryStrokeColorFromIds`.
+
+Regras:
+- bateria baixa usa as mesmas faixas de cor (`<20` vermelho, `20-35` amarelo, `>35` verde);
+- eventos de fonte desconectada usam destaque vermelho;
+- trilho do anel permanece cinza conforme regra final.
+
+## 5.4 Abertura/fechamento de modais
+Padrão observado:
+- adição/remoção de classe `show`;
+- em alguns casos criação dinâmica (`graphWorkspaceRoot`, `cardFloatingDetail`);
+- fechamento por:
+- clique em backdrop;
+- botão “Fechar/Cancelar”;
+- `ESC` em casos específicos (ocorrências NOC).
+
+## 5.5 Filtros
+Filtros disponíveis:
+- normal;
+- atenção;
+- crítico;
+- manutenção;
+- sem comunicação;
+- degelo;
+- reposição;
+- inventário.
+
+Regras:
+- filtro por chip altera `activeFilter`;
+- NOC também injeta `nocFilteredIds` para mostrar subconjunto de cards;
+- busca por dispositivo pode reduzir grid para um único card.
+
+## 5.6 Acessibilidade
+Estado persistido:
+- `localStorage` chave `painel_iot_accessibility_v2`.
+
+Controles:
+- daltônico;
+- contraste;
+- compacto;
+- comunicação/min-max/bateria;
+- visibilidade de status no topo (limite de 4).
+
+Comportamento:
+- `applyAccessibility()` re-renderiza grid e sincroniza toolbar;
+- múltiplos patches alteram esta função ao longo do arquivo.
+
+## 5.7 Histórico e auditoria
+Funções:
+- `buildInitialAuditLog`;
+- `pushAuditEntry`;
+- `renderAuditHistoryModal`.
+
+Registros gerados por:
+- edição de equipamento;
+- alteração de MAC;
+- mudança de status;
+- silêncio global de painel.
+
+## 5.8 NOC
+Fluxo:
+1. `openNocStart`.
+2. seleção de modo (`area/device/client`).
+3. `openOccurrenceStep` para escolher eventos.
+4. `startIntegratedNoc` para abrir live.
+5. rotação de ocorrências por card (`setupNocRotations`).
+6. retorno ao grid filtrado com `openNocOccurrences`.
+
+Permissões NOC para bateria/fonte:
+- visível somente para `master`, `admin1`, `admin2`;
+- apenas em modo `area` e `device`.
+
+## 5.9 Gestão
+Entradas principais:
+- `abrirGestaoModal`;
+- `abrirDrill('status'|'saude'|'contrato'|'configuracoes')`.
+
+Árvores de dados:
+- `DRILL_STATUS_TREE`;
+- `DRILL_SAUDE_TREE`;
+- `DRILL_CONTRATO_TREE`;
+- `DRILL_CONFIG_TREE`.
+
+Controle por perfil:
+- `applyRole(role)` ajusta visibilidade de cliente/área e textos;
+- `master` mantém visão por cliente;
+- `admin1/admin2` operam foco em unidade/área;
+- `area` restringe acesso gerencial.
+
+## 5.10 Atualização de dados
+Estado atual:
+- mock local em `const devices = [...]`;
+- auto refresh opcional recarrega a página (`location.reload()`) a cada 60s quando ativo.
+
+Comportamentos em runtime:
+- status temporários atualizados em `setInterval(refreshTemporaryStatuses, 1000)`;
+- UI NOC e sinos usam timers periódicos.
+
+## 6) Mapa técnico para integração com backend
+## 6.1 Modelo de dados esperado por componente
+### 6.1.1 DeviceCard
+Campos mínimos:
+- `id`, `name`, `sector`, `temp`, `min`, `max`, `status`, `state`, `online`, `battery`, `hum1|hum2`, `updated`, `events`, `chart`.
+
+Consumido por:
+- `buildSmallCard`, `buildDetail`, `buildGraphModal`, `renderGrid`.
+
+### 6.1.2 DeviceDetail
+Campos adicionais:
+- `dailyMin`, `dailyMax`, `timerLabel`, `timer`, `commText`, `mac`, `deviceModel`, `connType`, `code`, `equipModel`, `responsible`, `auditLog`.
+
+Consumido por:
+- `openDetail`, `openInfoModal`, `renderAuditHistoryModal`.
+
+### 6.1.3 NOCOccurrence
+Campos:
+- `deviceId`, `category` (`offline|near_limit|out_of_range|battery_low|source_disconnected`), `severity`, `startedAt`, `visibleIds`, `count`.
+
+Consumido por:
+- `getNocCounts`, `createNocCard`, `setupNocRotations`.
+
+### 6.1.4 DrillNodes (gestão)
+Campos comuns:
+- `id`, `title`, `subtitle`, `badge`, `badgeClass`.
+
+Estruturas:
+- `root -> areas -> devices`;
+- `client -> categories -> areas -> devices`.
+
+Consumido por:
+- `renderStatus*`, `renderSaude*`, `renderContrato*`, `renderConfig*`.
+
+### 6.1.5 AuditEntry
+Campos:
+- `scope`, `field`, `user`, `when`, `description`.
+
+Consumido por:
+- `renderAuditHistoryModal`.
+
+## 6.2 Funções do frontend que devem conectar API
+- `renderGrid`: trocar origem de `devices` para `GET /devices`.
+- `openDetail`: carregar detalhe completo sob demanda.
+- `buildGraphModal`: consumir série histórica real.
+- `applyStatusConfig`: `POST /devices/{id}/status-cycle`.
+- `refreshTemporaryStatuses`: idealmente governado por backend/stream.
+- `render*Drill*`: alimentar árvores por endpoints de gestão.
+- `startIntegratedNoc/getNocCounts`: usar endpoint de ocorrências NOC.
+- `saveEditModal`, `saveMacModal`, `saveCloneModal`: persistência backend.
+- `pushAuditEntry`: backend deve ser origem de verdade (server-side audit).
+
+## 6.3 Catálogo de endpoints sugeridos
+### 6.3.1 Sessão e perfil
+- `GET /api/v1/session/me`
+- `GET /api/v1/permissions`
+
+### 6.3.2 Catálogo organizacional
+- `GET /api/v1/clients`
+- `GET /api/v1/units`
+- `GET /api/v1/areas?unitId={id}`
+
+### 6.3.3 Dispositivos
+- `GET /api/v1/devices?areaId=&status=&search=&page=&pageSize=`
+- `GET /api/v1/devices/{deviceId}`
+- `GET /api/v1/devices/{deviceId}/telemetry?period=daily|weekly|monthly|custom&start=&end=`
+- `PATCH /api/v1/devices/{deviceId}`
+
+### 6.3.4 Status temporário
+- `POST /api/v1/devices/{deviceId}/status-cycle`
+- `POST /api/v1/devices/{deviceId}/status-cycle/close`
+- `GET /api/v1/devices/{deviceId}/status-cycle`
+
+### 6.3.5 Gestão (dash e drill)
+- `GET /api/v1/management/health?scope=client|unit|area&id=`
+- `GET /api/v1/management/contracts?scope=client|unit|area&id=`
+- `GET /api/v1/management/operational-status?scope=client|unit|area&id=`
+- `GET /api/v1/management/drill/{type}?scope=&id=&nodeId=`
+
+### 6.3.6 NOC
+- `POST /api/v1/noc/sessions`
+- `GET /api/v1/noc/sessions/{sessionId}/occurrences`
+- `GET /api/v1/noc/occurrences/live?mode=&filters=`
+- `POST /api/v1/noc/sessions/{sessionId}/ack`
+
+### 6.3.7 Auditoria
+- `GET /api/v1/devices/{deviceId}/audit`
+- `POST /api/v1/audit/events`
+
+### 6.3.8 Certificados e configuração
+- `GET /api/v1/config/certificates?areaId=`
+- `PATCH /api/v1/config/areas/{areaId}/certificates`
+- `PATCH /api/v1/config/devices/{deviceId}/certificates`
+- `POST /api/v1/config/devices/{deviceId}/certificate-file` (multipart)
+
+### 6.3.9 OS / orçamento
+- `POST /api/v1/service-orders`
+- `GET /api/v1/service-orders?status=&type=&scope=`
+
+## 6.4 Exemplos de payload
+### 6.4.1 `GET /api/v1/devices?areaId=bank-blood`
+Resposta exemplo:
+```json
+{
+  "items": [
+    {
+      "id": 7,
+      "name": "Geladeira 7",
+      "sector": "Banco de Sangue",
+      "temp": 4.7,
+      "min": 2,
+      "max": 8,
+      "status": "NORMAL",
+      "state": "blue",
+      "online": true,
+      "battery": 28,
+      "hum2": 63,
+      "updated": "2026-04-08T14:18:00-03:00",
+      "events": ["Sem alerta ativo"],
+      "chart": [4.8,4.7,4.8,4.9,4.8,4.7,4.6,4.7,4.8,4.8,4.7,4.7]
+    }
+  ],
+  "page": 1,
+  "pageSize": 24,
+  "total": 24
+}
+```
+
+### 6.4.2 `POST /api/v1/devices/7/status-cycle`
+Request exemplo:
+```json
+{
+  "state": "inventory",
+  "durationMinutes": 120,
+  "reason": "Conferência de estoque"
+}
+```
+
+Response exemplo:
+```json
+{
+  "deviceId": 7,
+  "status": "INVENTÁRIO",
+  "state": "inventory",
+  "activeUntil": "2026-04-08T16:20:00-03:00",
+  "preTempStatusState": "blue",
+  "preTempStatusStatus": "NORMAL"
+}
+```
+
+### 6.4.3 `GET /api/v1/noc/occurrences/live?mode=device&filters=offline,battery`
+Response exemplo:
+```json
+{
+  "mode": "device",
+  "filters": ["offline", "battery"],
+  "cards": [
+    {
+      "key": "device_2",
+      "title": "Geladeira 2",
+      "deviceId": 2,
+      "rotations": [
+        {
+          "key": "offline",
+          "count": 1,
+          "text": "Sem comunicação",
+          "severity": "critical",
+          "visibleIds": [2]
+        },
+        {
+          "key": "battery_low",
+          "count": 1,
+          "text": "Bateria",
+          "severity": "warning",
+          "visibleIds": [2]
+        }
+      ]
+    }
+  ]
+}
+```
+
+### 6.4.4 `GET /api/v1/devices/7/audit`
+Response exemplo:
+```json
+{
+  "deviceId": 7,
+  "entries": [
+    {
+      "scope": "status",
+      "field": "Status do dispositivo",
+      "user": "Admin 1",
+      "when": "2026-04-08T14:05:00-03:00",
+      "description": "Status alterado de NORMAL para INVENTÁRIO por 120 minutos."
+    }
+  ]
+}
+```
+
+## 6.5 Mapeamento função frontend -> endpoint
+- `applyRole` -> `GET /session/me` para resolver permissões reais.
+- `renderGrid` -> `GET /devices`.
+- `openDetail` -> `GET /devices/{id}`.
+- `buildGraphModal` -> `GET /devices/{id}/telemetry`.
+- `applyStatusConfig` -> `POST /devices/{id}/status-cycle`.
+- `refreshTemporaryStatuses` -> `GET /devices/{id}/status-cycle` ou websocket.
+- `renderAuditHistoryModal` -> `GET /devices/{id}/audit`.
+- `saveEditModal` -> `PATCH /devices/{id}`.
+- `saveMacModal` -> `PATCH /devices/{id}`.
+- `openNocOccurrences/getNocCounts` -> `GET /noc/occurrences/live`.
+- `renderStatusRoot/renderSaudeRoot/renderContratoRoot` -> `GET /management/*`.
+
+## 7) Árvore de pastas sugerida para implementação de produto
+```txt
+painel-iot/
+  public/
+    index.html
+    assets/
+      icons/
+      images/
+  src/
+    app/
+      bootstrap.js
+      router.js
+    api/
+      api-client.js
+      devices-api.js
+      noc-api.js
+      management-api.js
+      audit-api.js
+    domain/
+      device-rules.js
+      status-rules.js
+      noc-rules.js
+      role-rules.js
+    state/
+      store.js
+      selectors.js
+      actions.js
+    ui/
+      components/
+        device-card.js
+        device-detail.js
+        graph-modal.js
+        noc-card.js
+        filter-bar.js
+      modals/
+        info-modal.js
+        status-modal.js
+        noc-modals.js
+        gestao-modals.js
+      pages/
+        dashboard-page.js
+        noc-page.js
+        management-page.js
+    styles/
+      tokens.css
+      layout.css
+      components.css
+      states.css
+      accessibility.css
+  tests/
+    unit/
+    integration/
+    e2e/
+  docs/
+    HANDOFF_TECNICO.md
+    API_CONTRATOS.md
+    QA_CHECKLIST.md
+```
+
+## 8) Dependências
+Dependências atuais do protótipo:
+- nenhuma biblioteca externa obrigatória;
+- HTML/CSS/JS puro (vanilla).
+
+Dependências recomendadas para produto:
+- opcional: framework de testes (`vitest`/`jest`), e2e (`playwright`), lint (`eslint`), format (`prettier`).
+
+## 9) Diagnóstico rigoroso de arquitetura e manutenção
+## 9.1 Trechos duplicados detectados
+### 9.1.1 Duplicidade de funções (sobrescritas)
+Funções com múltiplas declarações:
+- `matchesOccurrenceFilter`;
+- `getFilteredOccurrenceDevices`;
+- `isMaint`, `isOffline`, `isWarn`, `isCrit`;
+- `selectedFilters`, `COLORS`;
+- `updateToolbarState`, `applyAccessibility`, `renderGrid`;
+- `startIntegratedNoc`, `setupNocRotations`, `openNocOccurrences`.
+
+Risco:
+- comportamento dependente da ordem dos patches;
+- regressão silenciosa quando bloco posterior sobrescreve regra anterior.
+
+### 9.1.2 Duplicidade de CSS utilitário/polimento
+Exemplos de repetição em dezenas de blocos:
+- `.modal-acessibilidade { ... }`;
+- `.graph-workspace-modal::-webkit-scrollbar { ... }`.
+
+Risco:
+- alto custo de manutenção;
+- cascata imprevisível;
+- dificuldade para rastrear origem de bug visual.
+
+## 9.2 Responsabilidades misturadas
+Problema:
+- o mesmo arquivo mistura:
+- dados mockados;
+- regra de negócio;
+- renderização de HTML;
+- estilo;
+- acessibilidade;
+- permissões;
+- integração comportamental NOC;
+- auditoria.
+
+Impacto:
+- baixa testabilidade;
+- baixa previsibilidade de alteração;
+- onboarding lento para novo dev.
+
+## 9.3 Pontos frágeis para manutenção
+- uso extensivo de `window.*` global;
+- criação de HTML via template string em múltiplos pontos;
+- handlers inline no markup;
+- regras de negócio acopladas ao texto renderizado (`innerText.includes(...)` em alguns fluxos);
+- uso de `setInterval` concorrente sem centralização;
+- fortes sinais de patch em camadas (“final”, “v9”, “v20”, etc.)
+
+## 9.4 Nomes de função com oportunidade de melhoria
+Sugestões de renomeação:
+- `abrirDrill` -> `openManagementDrillPanel`;
+- `renderStatusForAreaInUnit` -> `renderOperationalStatusByUnitArea`;
+- `applyRole` -> `applyUserRolePermissions`;
+- `startIntegratedNoc` -> `startNocLiveSession`;
+- `renderConfigRoot` -> `renderSettingsRootStep`;
+- `openOccurrenceStep` -> `openNocOccurrenceSelector`.
+
+## 9.5 Partes que devem ser componentizadas
+- card de dispositivo;
+- card NOC;
+- chips de filtro;
+- modal base (header/body/actions);
+- modal de detalhe e modal de gráfico;
+- bloco de status toggle de acessibilidade;
+- bloco de legenda/donut de gestão;
+- bloco de auditoria em lista.
+
+## 9.6 Partes que devem sair do HTML inline
+- `onclick`, `onchange`, `onblur`, `onkeydown`;
+- estilos inline `style="..."` em múltiplos blocos de modal;
+- SVGs inline repetidos sem reuso de componente/partial;
+- textos hardcoded em template strings longas.
+
+## 10) Checklist de implementação (time dev)
+- separar domínio de regra em módulos independentes.
+- criar store central para estado global.
+- remover sobreposições de `window.*`.
+- substituir handlers inline por `addEventListener` centralizado.
+- trocar dados mockados por providers de API.
+- padronizar contrato de tipos de `Device`, `Occurrence`, `DrillNode`, `AuditEntry`.
+- implementar camada de serviço para NOC.
+- implementar persistência real de auditoria no backend.
+- instrumentar erros (telemetria e observabilidade).
+- adicionar testes automatizados por camada.
+
+## 11) Checklist de testes (QA)
+## 11.1 Funcional
+- troca de perfil altera permissões corretamente.
+- filtro por status atualiza grid sem perder consistência.
+- busca por dispositivo localiza por nome/ID/MAC/código.
+- modal de detalhe abre/fecha sem vazamento de estado.
+- modal de gráfico respeita período e custom range.
+- status temporário aplica duração e encerra automaticamente.
+- NOC mostra somente ocorrências selecionadas.
+- bateria/fonte segue regra de visibilidade por perfil.
+- gestão drill navega corretamente em todos os níveis.
+
+## 11.2 Regras de negócio
+- limiares de temperatura (normal/atenção/crítico).
+- limiares de bateria (<20, 20-35, >35).
+- exclusão de manutenção dos alertas críticos.
+- filtro `all` em ocorrência equivale à união dos filtros individuais permitidos.
+
+## 11.3 UX e acessibilidade
+- modo daltônico altera padrões visuais previstos.
+- contraste e densidade funcionam sem quebrar layout.
+- limite de 4 status visíveis no topo é respeitado.
+- teclado e foco em menus/modais funcionam.
+
+## 11.4 Regressão técnica
+- ausência de sobrescrita indevida de função.
+- sem erro de console em fluxos principais.
+- sem timers órfãos após fechar NOC/modais.
+- sem regressão visual em resoluções desktop e mobile.
+
+## 12) Pontos de atenção
+- existe indício de problema de encoding/mojibake em textos (`GestÃ£o`, `ComunicaÃ§Ã£o`, `Â°C` etc.).
+- esse ponto deve ser tratado antes de internacionalização e publicação.
+- auto refresh atual faz `location.reload`; em produto usar atualização incremental por API.
+- áudio NOC/sinos precisa de política clara de UX e consentimento.
+- dados sensíveis (MAC, responsável, auditoria) exigem controle de acesso backend.
+
+## 13) Melhorias futuras recomendadas
+- migração gradual para arquitetura orientada a componentes.
+- adoção de tipagem (TypeScript) para contratos de dados.
+- websocket/SSE para NOC live em vez de polling.
+- auditoria 100% server-side com trilha imutável.
+- feature flags para experimentos de UX e perfis.
+- testes visuais automatizados para cards e modais.
+- unificação de tokens de design e sistema de temas.
+
+## 14) Plano de migração recomendado (sem parar operação)
+Fase 1:
+- manter `script.js` legado como fonte funcional;
+- introduzir `api-client` + `state-store`.
+
+Fase 2:
+- migrar render de card e detalhe para componentes;
+- migrar regras de status para `device-rules`.
+
+Fase 3:
+- migrar NOC para módulo isolado com contrato de API;
+- remover sobrescritas globais de patches finais.
+
+Fase 4:
+- remover handlers inline;
+- fechar cobertura de testes automatizados.
+
+Fase 5:
+- congelar monólito legado e manter apenas módulos.
+
+## 15) Visão executiva
+- o painel está funcional como protótipo rico, porém com dívida técnica alta;
+- esta entrega já cria base de handoff com separação física dos arquivos;
+- o próximo passo é modularização progressiva com contratos backend claros;
+- o risco principal hoje é manutenção por sobreposição de patches globais.
+
+## 16) Visão técnica
+- arquitetura atual: monolítica, orientada a estado global em `window`;
+- principal fragilidade: redefinições múltiplas de funções críticas;
+- principal ganho da entrega: separação em `index/styles/script` + blueprint modular + mapa de integração.
+
+## 17) Visão para frontend
+- componentes prioritários: `DeviceCard`, `DeviceDetailModal`, `GraphModal`, `NocCard`, `FilterBar`;
+- remover template strings gigantes e inline handlers;
+- manter sistema de design por tokens e estados semânticos;
+- centralizar gerenciamento de eventos e estado de UI.
+
+## 18) Visão para backend
+- padronizar contratos de `devices`, `telemetry`, `occurrences`, `drill`, `audit`;
+- expor endpoints versionados (`/api/v1`);
+- fazer backend ser fonte de verdade para status e auditoria;
+- prover stream live para NOC e atualização incremental.
+
+## 19) Visão para QA
+- priorizar testes de fluxo crítico: filtro + detalhe + status + NOC;
+- validar permissão por perfil (`master`, `admin1`, `admin2`, `area`);
+- validar regras de limiar térmico e bateria/fonte;
+- validar acessibilidade e regressão visual em múltiplas resoluções.
+
+## 20) Conclusão
+Esta documentação pode ser usada como base oficial para o time assumir o projeto.
+
+A versão separada em `index.html`, `styles.css` e `script.js` já está pronta em `handoff_tecnico/`.
+
+O blueprint de modularização também foi entregue para guiar a refatoração sem quebra funcional.
+

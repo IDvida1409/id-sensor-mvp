@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: id-sensor-mvp
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: 24.14.1
+      - key: AUTO_SEED_DEMO_DATA
+        value: true
+      - key: EXPO_PUSH_ENABLED
+        value: false

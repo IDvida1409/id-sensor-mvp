@@ -1,0 +1,14 @@
+﻿{
+  "name": "painel-iot-backend-api",
+  "version": "1.0.0",
+  "description": "Backend starter para integração do painel IoT",
+  "main": "src/server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node src/server.js"
+  },
+  "dependencies": {
+    "express": "^5.2.1"
+  }
+}

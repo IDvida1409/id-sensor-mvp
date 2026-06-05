@@ -1,0 +1,15 @@
+{
+  "name": "id-sensor-mvp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "MVP ID Sensor com painel original preservado, backend e app mobile.",
+  "engines": {
+    "node": "24.x"
+  },
+  "scripts": {
+    "start": "node backend/src/server.js",
+    "serve:panel": "node tools/serve-panel.js",
+    "backend": "node backend/src/server.js",
+    "seed": "node backend/src/scripts/seed.js"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "name": "id-sensor-backend",
+  "version": "0.1.0",
+  "description": "Backend MVP do ID Sensor para demonstracao com push, QR Code e aceite de alertas.",
+  "main": "src/server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node src/server.js",
+    "seed": "node src/scripts/seed.js"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}

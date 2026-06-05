@@ -1,0 +1,16 @@
+node_modules/
+.env
+*.db
+*.db-shm
+*.db-wal
+*.db-journal
+dist/
+.expo/
+.expo-shared/
+npm-debug.log*
+logs/
+tmp/
+runtime/
+backend/runtime/
+backend/data/
+backend/undefined
