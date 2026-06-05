@@ -27,7 +27,6 @@ module.exports = {
     ? path.resolve(rootDir, process.env.DATABASE_PATH)
     : defaultDatabasePath,
   publicApiUrl: process.env.PUBLIC_API_URL || 'http://localhost:4000',
-  appDeepLinkBase: process.env.APP_DEEP_LINK_BASE || 'idsensor://',
   expoPushEnabled: String(process.env.EXPO_PUSH_ENABLED || 'true') === 'true',
   autoSeedDemoData: String(process.env.AUTO_SEED_DEMO_DATA || 'true') === 'true',
   version: '0.1.0'

@@ -1,29 +1,27 @@
-const { appDeepLinkBase } = require('../config');
+const { publicApiUrl } = require('../config');
 
 function normalizeBase(base) {
   return String(base || '').replace(/\/+$/, '');
 }
 
-function joinDeepLink(base, suffix) {
-  const raw = String(base || '').trim();
-  const cleanSuffix = String(suffix || '').replace(/^\/+/, '');
-  if (raw.endsWith('://')) return `${raw}${cleanSuffix}`;
-  return `${normalizeBase(raw)}/${cleanSuffix}`;
+function joinPublicLink(path, code) {
+  const cleanPath = String(path || '').replace(/^\/?/, '/').replace(/\/+$/, '');
+  return `${normalizeBase(publicApiUrl)}${cleanPath}/${encodeURIComponent(code)}`;
 }
 
 function buildActivationPayload(code) {
-  return joinDeepLink(appDeepLinkBase, `activate/${encodeURIComponent(code)}`);
+  return joinPublicLink('/a', code);
 }
 
 function buildDevicePayload(code) {
-  return joinDeepLink(appDeepLinkBase, `device/${encodeURIComponent(code)}`);
+  return joinPublicLink('/q', code);
 }
 
 function buildQrImageUrl(payload) {
   return `https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encodeURIComponent(payload)}`;
 }
 
-async function buildQrDataUrl(payload) {
+async function buildQrDataUrl() {
   return null;
 }
 

@@ -21,7 +21,7 @@ const {
   startSimulation,
   stopSimulation
 } = require('./services/simulationService');
-const { version } = require('./config');
+const { publicApiUrl, version } = require('./config');
 
 const routes = [];
 const panelDir = path.resolve(__dirname, '../../painel-original');
@@ -66,6 +66,296 @@ function ok(res, data, status = 200) {
 
 function fail(res, status, message, details = null) {
   json(res, status, { ok: false, message, details });
+}
+
+function html(res, status, body) {
+  res.writeHead(status, {
+    'Content-Type': 'text/html; charset=utf-8',
+    'Cache-Control': 'no-store',
+    'Content-Length': Buffer.byteLength(body)
+  });
+  res.end(body);
+}
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function tempHtml(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return '--';
+  return `${number.toFixed(1)}&deg;C`;
+}
+
+function cardWebState(card) {
+  if (card.online === false) return 'offline';
+  if (card.state === 'crit') return 'crit';
+  if (card.state === 'warn') return 'warn';
+  return 'blue';
+}
+
+function cardWebLabel(card) {
+  if (card.online === false) return 'SEM COMUNICACAO';
+  if (card.state === 'crit') return 'CRITICO';
+  if (card.state === 'warn') return 'ATENCAO';
+  return 'NORMAL';
+}
+
+function thermometerPercent(card) {
+  const temp = Number(card.temp);
+  const min = Number(card.min ?? 2);
+  const max = Number(card.max ?? 8);
+  if (!Number.isFinite(temp)) return 18;
+  const ratio = (temp - min) / Math.max(0.1, max - min);
+  return Math.max(12, Math.min(100, Math.round(22 + ratio * 66)));
+}
+
+function renderDeviceQrPage(card, code) {
+  const state = cardWebState(card);
+  const status = cardWebLabel(card);
+  const level = thermometerPercent(card);
+  const safeCode = escapeHtml(code);
+
+  return `<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>IDsensor - ${escapeHtml(card.name)}</title>
+  <style>
+    :root { color-scheme: light; font-family: Inter, Arial, sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #f4f8fc; color: #14243b; }
+    main { min-height: 100vh; padding: 22px 16px 28px; }
+    .shell { margin: 0 auto; max-width: 460px; }
+    .brand { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
+    .logo { color: #2f373b; font-size: 30px; font-weight: 900; letter-spacing: 0; }
+    .logo span { color: #39b8a5; }
+    .pill { background: #eaf2fb; border: 1px solid #d8e4f2; border-radius: 999px; color: #0b2f55; font-size: 12px; font-weight: 900; padding: 8px 11px; }
+    .client { margin-bottom: 14px; }
+    .client h1 { font-size: 24px; line-height: 1.15; margin: 0; }
+    .client p { color: #65758f; font-size: 14px; font-weight: 700; margin: 5px 0 0; }
+    .device-card { border-radius: 8px; border: 1px solid rgba(255,255,255,0.22); box-shadow: 0 18px 38px rgba(9,35,67,0.18); color: white; min-height: 310px; padding: 20px; }
+    .device-card.blue { background: #243f7d; }
+    .device-card.warn { background: #d99135; }
+    .device-card.crit, .device-card.offline { background: #b83246; }
+    .card-top { align-items: flex-start; display: flex; justify-content: space-between; gap: 12px; }
+    .device-name { font-size: 22px; font-weight: 900; margin: 0; }
+    .sector { color: #d7e6ff; font-size: 13px; font-weight: 700; margin-top: 4px; }
+    .dot { border: 2px solid rgba(255,255,255,0.65); border-radius: 50%; height: 22px; width: 22px; }
+    .blue .dot, .blue .fill, .blue .bulb { background: #35a9ff; }
+    .warn .dot, .warn .fill, .warn .bulb { background: #ffcf79; }
+    .crit .dot, .crit .fill, .crit .bulb, .offline .dot, .offline .fill, .offline .bulb { background: #ff7480; }
+    .reading { align-items: center; display: flex; justify-content: space-between; margin-top: 34px; }
+    .temp { font-size: 68px; font-weight: 300; line-height: 1; }
+    .status { background: rgba(255,255,255,0.16); border-radius: 6px; display: inline-block; font-size: 12px; font-weight: 900; margin-top: 12px; padding: 7px 10px; }
+    .thermo { align-items: center; display: flex; flex-direction: column; justify-content: flex-end; margin-left: 16px; width: 48px; }
+    .track { align-items: center; background: #e9edf4; border: 4px solid #bac7d8; border-radius: 16px; display: flex; height: 114px; justify-content: flex-end; overflow: hidden; width: 30px; }
+    .fill { border-radius: 10px; width: 12px; }
+    .bulb { border: 4px solid #cad7e6; border-radius: 50%; height: 44px; margin-top: -8px; width: 44px; }
+    .metrics { display: grid; gap: 10px; grid-template-columns: 1fr 1fr; margin-top: 26px; }
+    .metric { background: rgba(255,255,255,0.14); border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; padding: 12px; }
+    .metric small { color: #d5e3f6; display: block; font-size: 11px; font-weight: 900; }
+    .metric strong { color: white; display: block; font-size: 21px; font-weight: 900; margin-top: 4px; }
+    .footer { display: flex; justify-content: space-between; gap: 12px; margin-top: 18px; color: #f1f7ff; font-size: 14px; font-weight: 800; }
+    .web-actions { color: #65758f; font-size: 13px; font-weight: 700; line-height: 1.45; margin-top: 16px; }
+    .powered { align-items: center; color: #65758f; display: flex; gap: 6px; justify-content: center; margin-top: 24px; font-size: 12px; font-weight: 800; }
+    .idvida .id { color: #19ae54; }
+    .idvida .vida { color: #0b2f55; }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="shell">
+      <div class="brand">
+        <div class="logo"><span>ID</span>sensor</div>
+        <div class="pill">QR ${safeCode}</div>
+      </div>
+      <div class="client">
+        <h1>${escapeHtml(card.clientName || 'Cliente')}</h1>
+        <p>${escapeHtml(card.unitName || 'Unidade')} - ${escapeHtml(card.local || card.sector || 'Area monitorada')}</p>
+      </div>
+      <article id="deviceCard" class="device-card ${state}">
+        <div class="card-top">
+          <div>
+            <h2 id="deviceName" class="device-name">${escapeHtml(card.name || 'Equipamento')}</h2>
+            <div id="sector" class="sector">${escapeHtml(card.sector || card.local || 'Banco de Sangue')}</div>
+          </div>
+          <div class="dot"></div>
+        </div>
+        <div class="reading">
+          <div>
+            <div id="temp" class="temp">${tempHtml(card.temp)}</div>
+            <div id="status" class="status">${status}</div>
+          </div>
+          <div class="thermo">
+            <div class="track"><div id="thermoFill" class="fill" style="height: ${level}%"></div></div>
+            <div class="bulb"></div>
+          </div>
+        </div>
+        <div class="metrics">
+          <div class="metric"><small>MIN</small><strong id="minTemp">${tempHtml(card.dailyMin)}</strong></div>
+          <div class="metric"><small>MAX</small><strong id="maxTemp">${tempHtml(card.dailyMax)}</strong></div>
+        </div>
+        <div class="footer">
+          <span id="battery">Bateria ${escapeHtml(card.battery ?? '--')}%</span>
+          <span id="humidity">Umidade ${escapeHtml(card.hum1 ?? '--')}%</span>
+        </div>
+      </article>
+      <p class="web-actions">Esta visualizacao funciona direto pelo navegador e atualiza a cada 60 segundos. No app IDsensor, escaneie o mesmo QR para abrir o card dentro do aplicativo.</p>
+      <div class="powered">Powered by <strong class="idvida"><span class="id">ID</span><span class="vida">VIDA</span></strong></div>
+    </section>
+  </main>
+  <script>
+    const code = ${JSON.stringify(code)};
+    const card = document.getElementById('deviceCard');
+    const fields = {
+      name: document.getElementById('deviceName'),
+      sector: document.getElementById('sector'),
+      temp: document.getElementById('temp'),
+      status: document.getElementById('status'),
+      min: document.getElementById('minTemp'),
+      max: document.getElementById('maxTemp'),
+      battery: document.getElementById('battery'),
+      humidity: document.getElementById('humidity'),
+      fill: document.getElementById('thermoFill')
+    };
+
+    function stateFor(item) {
+      if (item.online === false) return 'offline';
+      if (item.state === 'crit') return 'crit';
+      if (item.state === 'warn') return 'warn';
+      return 'blue';
+    }
+
+    function statusFor(item) {
+      if (item.online === false) return 'SEM COMUNICACAO';
+      if (item.state === 'crit') return 'CRITICO';
+      if (item.state === 'warn') return 'ATENCAO';
+      return 'NORMAL';
+    }
+
+    function temp(value) {
+      const number = Number(value);
+      return Number.isFinite(number) ? number.toFixed(1) + '\\u00b0C' : '--';
+    }
+
+    function levelFor(item) {
+      const current = Number(item.temp);
+      const min = Number(item.min || 2);
+      const max = Number(item.max || 8);
+      if (!Number.isFinite(current)) return 18;
+      const ratio = (current - min) / Math.max(0.1, max - min);
+      return Math.max(12, Math.min(100, Math.round(22 + ratio * 66)));
+    }
+
+    function render(item) {
+      const state = stateFor(item);
+      card.className = 'device-card ' + state;
+      fields.name.textContent = item.name || 'Equipamento';
+      fields.sector.textContent = item.sector || item.local || 'Banco de Sangue';
+      fields.temp.textContent = temp(item.temp);
+      fields.status.textContent = statusFor(item);
+      fields.min.textContent = temp(item.dailyMin);
+      fields.max.textContent = temp(item.dailyMax);
+      fields.battery.textContent = 'Bateria ' + (item.battery ?? '--') + '%';
+      fields.humidity.textContent = 'Umidade ' + (item.hum1 ?? '--') + '%';
+      fields.fill.style.height = levelFor(item) + '%';
+    }
+
+    async function refresh() {
+      try {
+        const response = await fetch('/devices/by-code/' + encodeURIComponent(code), { cache: 'no-store' });
+        const payload = await response.json();
+        if (payload.ok && payload.data && payload.data.card) render(payload.data.card);
+      } catch (error) {
+        console.warn('Nao foi possivel atualizar o card', error);
+      }
+    }
+
+    setInterval(refresh, 60000);
+    setTimeout(refresh, 500);
+  </script>
+</body>
+</html>`;
+}
+
+function renderActivationQrPage(activation, code) {
+  const clientName = activation?.cliente_nome || 'Cliente vinculado';
+  const unitName = activation?.unidade_nome || 'Unidade vinculada';
+  const appUrl = publicApiUrl;
+
+  return `<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>IDsensor - Ativacao</title>
+  <style>
+    :root { font-family: Inter, Arial, sans-serif; }
+    body { background: #f4f8fc; color: #14243b; margin: 0; }
+    main { min-height: 100vh; padding: 28px 18px; display: grid; place-items: center; }
+    section { background: white; border: 1px solid #d8e4f2; border-radius: 8px; box-shadow: 0 18px 38px rgba(9,35,67,0.12); max-width: 440px; padding: 24px; width: 100%; }
+    .logo { color: #2f373b; font-size: 32px; font-weight: 900; letter-spacing: 0; margin-bottom: 18px; }
+    .logo span { color: #39b8a5; }
+    h1 { font-size: 25px; margin: 0 0 10px; }
+    p { color: #65758f; font-size: 15px; font-weight: 700; line-height: 1.5; margin: 0 0 16px; }
+    .code { background: #eaf2fb; border: 1px solid #d8e4f2; border-radius: 8px; color: #0b2f55; font-size: 23px; font-weight: 900; letter-spacing: 1px; padding: 14px; text-align: center; }
+    .client { margin-top: 16px; }
+    .powered { color: #65758f; font-size: 12px; font-weight: 800; margin-top: 24px; text-align: center; }
+  </style>
+</head>
+<body>
+  <main>
+    <section>
+      <div class="logo"><span>ID</span>sensor</div>
+      <h1>Ativar aparelho celular</h1>
+      <p>Digite este codigo no app IDsensor para vincular o celular ao cliente. Esta tela tambem confirma que o QR abriu pelo navegador.</p>
+      <div class="code">${escapeHtml(code)}</div>
+      <p class="client">${escapeHtml(clientName)}<br>${escapeHtml(unitName)}</p>
+      <p>Backend conectado em ${escapeHtml(appUrl)}.</p>
+      <div class="powered">Powered by IDvida</div>
+    </section>
+  </main>
+</body>
+</html>`;
+}
+
+function renderQrMessagePage(title, message, code) {
+  return `<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>IDsensor - ${escapeHtml(title)}</title>
+  <style>
+    :root { font-family: Inter, Arial, sans-serif; }
+    body { background: #f4f8fc; color: #14243b; margin: 0; }
+    main { min-height: 100vh; padding: 28px 18px; display: grid; place-items: center; }
+    section { background: white; border: 1px solid #d8e4f2; border-radius: 8px; box-shadow: 0 18px 38px rgba(9,35,67,0.12); max-width: 440px; padding: 24px; width: 100%; }
+    .logo { color: #2f373b; font-size: 32px; font-weight: 900; letter-spacing: 0; margin-bottom: 18px; }
+    .logo span { color: #39b8a5; }
+    h1 { font-size: 25px; margin: 0 0 10px; }
+    p { color: #65758f; font-size: 15px; font-weight: 700; line-height: 1.5; margin: 0 0 16px; }
+    .code { background: #eaf2fb; border: 1px solid #d8e4f2; border-radius: 8px; color: #0b2f55; font-size: 18px; font-weight: 900; padding: 14px; text-align: center; }
+  </style>
+</head>
+<body>
+  <main>
+    <section>
+      <div class="logo"><span>ID</span>sensor</div>
+      <h1>${escapeHtml(title)}</h1>
+      <p>${escapeHtml(message)}</p>
+      <div class="code">${escapeHtml(code || '--')}</div>
+    </section>
+  </main>
+</body>
+</html>`;
 }
 
 function safePanelPath(urlPath) {
@@ -165,6 +455,17 @@ function getDeviceById(deviceId) {
   return getDb().prepare(deviceSelectSql('WHERE d.id = ?')).get(deviceId);
 }
 
+function getDeviceByScannedCode(code) {
+  const db = getDb();
+  const byQr = db.prepare(deviceSelectSql('WHERE d.qr_code = ?')).get(code);
+  if (byQr) return byQr;
+
+  return db.prepare(deviceSelectSql(`
+    JOIN activation_codes ac ON ac.dispositivo_id = d.id
+    WHERE ac.codigo = ? AND ac.ativo = 1
+  `)).get(code);
+}
+
 function alertSelectSql(where = '') {
   return `
     SELECT
@@ -239,16 +540,41 @@ addRoute('GET', '/devices', async ({ res }) => {
   ok(res, rows.map(buildDeviceCard));
 });
 
+addRoute('GET', '/q/:codigo', async ({ params, res }) => {
+  const code = extractScannedCode(params.codigo);
+  const db = getDb();
+  advanceSimulationIfNeeded(db);
+
+  const row = getDeviceByScannedCode(code);
+  if (!row) {
+    return html(res, 404, renderQrMessagePage(
+      'QR nao encontrado',
+      'Nao encontramos um equipamento ativo para este QR Code.',
+      code || 'QR NAO ENCONTRADO'
+    ));
+  }
+
+  return html(res, 200, renderDeviceQrPage(buildDeviceCard(row), code));
+});
+
+addRoute('GET', '/a/:codigo', async ({ params, res }) => {
+  const code = extractScannedCode(params.codigo);
+  const activation = getDb().prepare(`
+    SELECT ac.*, c.nome AS cliente_nome, u.nome AS unidade_nome
+    FROM activation_codes ac
+    JOIN clientes c ON c.id = ac.cliente_id
+    JOIN unidades u ON u.id = ac.unidade_id
+    WHERE ac.codigo = ? AND ac.ativo = 1 AND ac.tipo_ativacao = 'app_alerta'
+  `).get(code);
+
+  return html(res, activation ? 200 : 404, renderActivationQrPage(activation, code || 'CODIGO INVALIDO'));
+});
+
 addRoute('GET', '/devices/by-code/:codigo', async ({ params, res }) => {
   const code = extractScannedCode(params.codigo);
   const db = getDb();
-
-  const byQr = db.prepare(deviceSelectSql('WHERE d.qr_code = ?')).get(code);
-  const byActivation = byQr ? null : db.prepare(deviceSelectSql(`
-    JOIN activation_codes ac ON ac.dispositivo_id = d.id
-    WHERE ac.codigo = ? AND ac.ativo = 1
-  `)).get(code);
-  const row = byQr || byActivation;
+  advanceSimulationIfNeeded(db);
+  const row = getDeviceByScannedCode(code);
 
   if (!row) return fail(res, 404, 'Dispositivo nao encontrado para este QR Code.');
 

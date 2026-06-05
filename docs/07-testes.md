@@ -86,8 +86,8 @@ Pontos conferidos na resposta do backend:
 - textos principais corretos em JSON;
 - temperaturas com graus Celsius;
 - contrato visual do card com `visualContract.source = panel-card-v1`;
-- QR Code de dispositivo com payload interno `idsensor://device/DEV-GELADEIRA-02`;
-- sem `web_url`, `data_url` ou `image_url` na resposta de QR de dispositivo.
+- QR Code de dispositivo com payload HTTPS `https://id-sensor-mvp.onrender.com/q/DEV-GELADEIRA-02`;
+- `/devices/by-code/:codigo` aceita codigo puro ou link completo do QR.
 
 Fluxo de backend ainda a completar:
 
@@ -122,13 +122,14 @@ Validado:
 6. Confirmar push no celular.
 7. Tocar em `Estou ciente`.
 8. Conferir registro de aceite no backend/painel.
-9. Escanear QR Code de dispositivo dentro do app.
-10. Conferir se o app renderiza o card equivalente ao painel.
+9. Abrir QR Code de dispositivo no navegador.
+10. Escanear QR Code de dispositivo dentro do app.
+11. Conferir se navegador e app renderizam o card equivalente ao painel.
 
 ## Limitacoes atuais
 
 - O painel ainda tem fallback com dados mockados caso o backend esteja desligado.
-- O backend online ainda nao foi configurado.
-- O app mobile ainda nao foi criado.
+- O backend online ja esta configurado no Render.
+- O app mobile Expo ja existe como MVP de apresentacao.
 - O controle de simulacao esta conectado ao backend local.
 - SMS/e-mail nao fazem parte do MVP desta fase.

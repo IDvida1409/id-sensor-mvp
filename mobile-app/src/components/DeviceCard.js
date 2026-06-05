@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, Text, View, Pressable } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, stateColors } from '../theme/colors';
 
 function getVisualState(device) {
@@ -12,7 +12,7 @@ function getVisualState(device) {
 function formatTemp(value) {
   const number = Number(value);
   if (!Number.isFinite(number)) return '--';
-  return `${number.toFixed(1)}°C`;
+  return `${number.toFixed(1)}\u00b0C`;
 }
 
 function thermometerLevel(device) {
@@ -24,7 +24,7 @@ function thermometerLevel(device) {
   return Math.max(12, Math.min(100, Math.round(22 + ratio * 66)));
 }
 
-export function DeviceCard({ device, compact = false, onPress, onToggleFavorite, favorite }) {
+export function DeviceCard({ device, compact = false, onPress }) {
   const visualState = getVisualState(device);
   const meta = stateColors[visualState] || stateColors.blue;
   const level = thermometerLevel(device);
@@ -41,18 +41,11 @@ export function DeviceCard({ device, compact = false, onPress, onToggleFavorite,
       ]}
     >
       <View style={styles.header}>
-        <View>
+        <View style={styles.titleBlock}>
           <Text style={styles.deviceName}>{device?.name || 'Equipamento'}</Text>
           <Text style={styles.sector}>{device?.sector || device?.local || 'Banco de Sangue'}</Text>
         </View>
-        <View style={styles.headerActions}>
-          {onToggleFavorite ? (
-            <Pressable onPress={onToggleFavorite} hitSlop={12} style={styles.favoriteButton}>
-              <Text style={styles.favoriteText}>{favorite ? '★' : '☆'}</Text>
-            </Pressable>
-          ) : null}
-          <View style={[styles.statusDot, { backgroundColor: meta.accent }]} />
-        </View>
+        <View style={[styles.statusDot, { backgroundColor: meta.accent }]} />
       </View>
 
       <View style={styles.body}>
@@ -92,31 +85,29 @@ export function DeviceCard({ device, compact = false, onPress, onToggleFavorite,
 
 const styles = StyleSheet.create({
   card: {
-    minHeight: 268,
     borderRadius: 8,
     borderWidth: 1,
+    elevation: 6,
+    minHeight: 268,
     padding: 18,
     shadowColor: '#092343',
-    shadowOpacity: 0.18,
-    shadowRadius: 14,
     shadowOffset: { width: 0, height: 10 },
-    elevation: 6
+    shadowOpacity: 0.18,
+    shadowRadius: 14
   },
   compactCard: {
+    marginRight: 14,
     minHeight: 238,
-    width: 292,
-    marginRight: 14
+    width: 292
   },
   header: {
     alignItems: 'flex-start',
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 12
+    gap: 12,
+    justifyContent: 'space-between'
   },
-  headerActions: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 8
+  titleBlock: {
+    flex: 1
   },
   deviceName: {
     color: colors.white,
@@ -128,19 +119,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     marginTop: 2
-  },
-  favoriteButton: {
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.16)',
-    borderRadius: 16,
-    height: 32,
-    justifyContent: 'center',
-    width: 32
-  },
-  favoriteText: {
-    color: colors.white,
-    fontSize: 19,
-    fontWeight: '900'
   },
   statusDot: {
     borderColor: 'rgba(255,255,255,0.65)',

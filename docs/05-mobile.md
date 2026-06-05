@@ -10,8 +10,6 @@ mobile-app
 
 O nome correto no app e `IDsensor`.
 
-Nao usar outros nomes, como IDBipe ou IDCistor Alert.
-
 ## Identidade visual
 
 - Topo/tela inicial com logo completo IDsensor.
@@ -22,15 +20,15 @@ Nao usar outros nomes, como IDBipe ou IDCistor Alert.
   - laranja para atencao;
   - vermelho para critico ou sem comunicacao.
 
-## Fluxos
+## Telas do MVP
 
 ### Ativacao
 
 1. App abre.
 2. Se nao estiver ativado, mostra campo de codigo.
-3. App chama `/activate`.
-4. App recebe `app_device_id`, cliente e unidade.
-5. App mostra home com area, alertas, favoritos, scanner e configuracoes.
+3. Usuario digita codigo ou escaneia QR de ativacao.
+4. App chama `/activate`.
+5. App recebe `app_device_id`, cliente e unidade.
 
 Codigo demo:
 
@@ -38,23 +36,50 @@ Codigo demo:
 APP-DEMO-11
 ```
 
-### Push
+### Inicio
 
-1. Backend cria alerta.
-2. Backend envia push via Expo.
-3. Usuario toca na notificacao.
-4. App abre detalhe do alerta.
-5. Usuario toca em `Estou ciente`.
-6. App chama `/alerts/:id/acknowledge`.
+Tela principal para apresentacao:
 
-### QR Code de dispositivo
+- nome do cliente;
+- unidade/area;
+- resumo de equipamentos;
+- criticos agora;
+- ultimos alertas;
+- equipamentos fora do normal.
 
-1. App escaneia QR Code.
-2. App extrai codigo.
-3. App chama `/devices/by-code/:codigo`.
-4. App renderiza o card equivalente ao card do painel.
+### Alertas
 
-O QR Code nao abre um site. A leitura acontece dentro do app, que busca os dados atualizados no backend.
+- Lista de alertas do aparelho vinculado.
+- Detalhe do alerta.
+- Botao `Estou ciente`.
+
+### Escanear
+
+- Abre camera para QR Code de equipamento.
+- Permite digitar codigo manualmente.
+- Renderiza o card atualizado do equipamento no mesmo visual do painel.
+
+### Configuracoes
+
+- Som dos alertas.
+- Notificacoes.
+- Atualizacao automatica a cada 60 segundos.
+- Dados do aparelho vinculado.
+
+## QR Code hibrido
+
+O QR Code de equipamento deve funcionar de duas formas:
+
+1. Pela camera normal do celular: abre uma pagina web publica do equipamento.
+2. Dentro do app IDsensor: o app extrai o codigo e abre o card dentro do aplicativo.
+
+Formato recomendado:
+
+```text
+https://id-sensor-mvp.onrender.com/q/DEV-GELADEIRA-02
+```
+
+O endpoint `/devices/by-code/:codigo` aceita tanto o codigo puro quanto o link completo.
 
 ## Card mobile
 
@@ -69,12 +94,6 @@ O app nao deve inventar outro card. Ele deve consumir o contrato retornado pelo 
 - bateria;
 - umidade, quando houver;
 - hierarquia visual e cores do painel.
-
-## Favoritos
-
-O app permite ate 5 equipamentos favoritos em carrossel horizontal.
-
-A tela atualiza a cada 60 segundos quando a configuracao local de atualizacao automatica esta ligada.
 
 ## Rodar no celular
 

@@ -53,9 +53,12 @@ Retorna um dispositivo.
 
 ### GET `/devices/by-code/:codigo`
 
-Usado pelo app apos escanear QR Code dentro do aplicativo. O QR Code carrega apenas um codigo/payload do dispositivo; o app usa esse codigo para buscar os dados atualizados e renderizar o card equivalente ao painel.
+Usado pelo app apos escanear QR Code e tambem pela pagina web publica do QR.
 
-Importante: esta rota nao deve devolver link de site para o cliente abrir fora do app. O retorno do QR de dispositivo deve ser um contrato interno para o aplicativo.
+A rota aceita:
+
+- codigo puro: `DEV-GELADEIRA-02`;
+- link publico: `https://id-sensor-mvp.onrender.com/q/DEV-GELADEIRA-02`.
 
 Exemplo parcial:
 
@@ -81,19 +84,35 @@ Exemplo parcial:
     },
     "qr": {
       "code": "DEV-GELADEIRA-02",
-      "payload": "idsensor://device/DEV-GELADEIRA-02"
+      "payload": "https://id-sensor-mvp.onrender.com/q/DEV-GELADEIRA-02"
     }
   }
 }
 ```
 
-Campos que nao devem aparecer nesta resposta de QR de dispositivo:
+### GET `/q/:codigo`
 
-- `web_url`;
-- `data_url`;
-- `image_url`.
+Pagina publica do equipamento para abrir direto no navegador, sem instalar app.
 
-O app deve interpretar `idsensor://device/DEV-GELADEIRA-02`, chamar `/devices/by-code/DEV-GELADEIRA-02` e montar o card na tela do aplicativo.
+Exemplo:
+
+```text
+GET /q/DEV-GELADEIRA-02
+```
+
+A pagina renderiza o card do equipamento no mesmo padrao visual do painel e atualiza os dados a cada 60 segundos.
+
+### GET `/a/:codigo`
+
+Pagina publica de apoio para QR de ativacao do app.
+
+Exemplo:
+
+```text
+GET /a/APP-DEMO-11
+```
+
+Mostra o codigo de ativacao e os dados do cliente/unidade vinculados.
 
 ### POST `/devices/:id/update-status`
 
@@ -191,7 +210,7 @@ Request:
 }
 ```
 
-Observacao: a rota de ativacao pode gerar uma imagem de QR Code para parear celular no futuro. Isso e diferente do QR Code de dispositivo. O QR Code de dispositivo continua sendo lido dentro do app e nao abre site publico.
+Observacao: a rota de ativacao gera um payload HTTPS. O QR pode ser aberto pelo navegador para apoio visual ou lido dentro do app para extrair o codigo.
 
 ### POST `/activate`
 

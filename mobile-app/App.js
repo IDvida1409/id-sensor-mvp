@@ -25,10 +25,10 @@ import {
 import { colors } from './src/theme/colors';
 
 const tabs = [
-  { id: 'home', icon: '!', label: 'Alertas' },
-  { id: 'favorites', icon: '★', label: 'Favoritos' },
-  { id: 'scan', icon: '▣', label: 'Escanear' },
-  { id: 'settings', icon: '⚙', label: 'Config.' }
+  { id: 'home', icon: 'IN', label: 'Inicio' },
+  { id: 'alerts', icon: '!', label: 'Alertas' },
+  { id: 'scan', icon: 'QR', label: 'Escanear' },
+  { id: 'settings', icon: 'CFG', label: 'Config.' }
 ];
 
 function isIssueDevice(device) {
@@ -37,6 +37,20 @@ function isIssueDevice(device) {
 
 function isCriticalDevice(device) {
   return device?.online === false || device?.state === 'crit';
+}
+
+function buildStats(devices) {
+  return devices.reduce(
+    (acc, device) => {
+      acc.total += 1;
+      if (device?.online === false) acc.offline += 1;
+      else if (device?.state === 'crit') acc.crit += 1;
+      else if (device?.state === 'warn') acc.warn += 1;
+      else acc.normal += 1;
+      return acc;
+    },
+    { total: 0, normal: 0, warn: 0, crit: 0, offline: 0 }
+  );
 }
 
 function PoweredByFooter() {
@@ -59,7 +73,7 @@ function PoweredByFooter() {
 function SectionHeader({ title, caption, actionLabel, onAction }) {
   return (
     <View style={styles.sectionHeader}>
-      <View>
+      <View style={styles.sectionHeaderText}>
         <Text style={styles.sectionTitle}>{title}</Text>
         {caption ? <Text style={styles.sectionCaption}>{caption}</Text> : null}
       </View>
@@ -81,13 +95,35 @@ function EmptyState({ title, caption }) {
   );
 }
 
+function SummaryTile({ label, value, tone }) {
+  return (
+    <View style={[styles.summaryTile, tone === 'warn' && styles.summaryWarn, tone === 'crit' && styles.summaryCrit]}>
+      <Text style={styles.summaryValue}>{value}</Text>
+      <Text style={styles.summaryLabel}>{label}</Text>
+    </View>
+  );
+}
+
+function SummaryGrid({ devices }) {
+  const stats = useMemo(() => buildStats(devices), [devices]);
+
+  return (
+    <View style={styles.summaryGrid}>
+      <SummaryTile label="Total" value={stats.total} />
+      <SummaryTile label="Normais" value={stats.normal} />
+      <SummaryTile label="Atencao" value={stats.warn} tone="warn" />
+      <SummaryTile label="Criticos/offline" value={stats.crit + stats.offline} tone="crit" />
+    </View>
+  );
+}
+
 function AlertCard({ alert, onAcknowledge, busy }) {
   const critical = alert?.severidade === 'critica';
 
   return (
     <View style={[styles.alertCard, critical && styles.alertCardCritical]}>
       <View style={styles.alertTop}>
-        <View>
+        <View style={styles.alertTitleBlock}>
           <Text style={styles.alertTitle}>{alert?.dispositivo?.nome || 'Alerta'}</Text>
           <Text style={styles.alertMeta}>{alert?.dispositivo?.local || 'Banco de Sangue'}</Text>
         </View>
@@ -134,7 +170,7 @@ function ActivationScreen({ onActivated }) {
           <Image source={require('./assets/idsensor-logo.png')} style={styles.logo} resizeMode="contain" />
           <Text style={styles.activationTitle}>Ativar aparelho celular</Text>
           <Text style={styles.activationCopy}>
-            Digite o codigo enviado pelo painel para vincular este celular ao cliente e receber os alertas.
+            Digite o codigo enviado pelo painel ou escaneie o QR de ativacao para vincular este celular ao cliente.
           </Text>
         </View>
 
@@ -170,18 +206,21 @@ function Header({ session, loading, onRefresh }) {
         </Pressable>
       </View>
       <Text style={styles.clientName}>{session?.cliente?.nome || 'Laboratorio IDvida'}</Text>
-      <Text style={styles.unitName}>{session?.unidade?.nome || 'Banco de Sangue'} · Banco de Sangue</Text>
+      <Text style={styles.unitName}>{session?.unidade?.nome || 'Banco de Sangue'} - Banco de Sangue</Text>
     </View>
   );
 }
 
-function HomeScreen({ devices, alerts, favorites, toggleFavorite, onAcknowledge, acknowledgingId, setTab }) {
+function HomeScreen({ devices, alerts, onAcknowledge, acknowledgingId, setTab }) {
   const issueDevices = useMemo(() => devices.filter(isIssueDevice), [devices]);
   const criticalDevices = useMemo(() => devices.filter(isCriticalDevice), [devices]);
-  const visibleAlerts = alerts.slice(0, 5);
+  const visibleAlerts = alerts.slice(0, 3);
 
   return (
     <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <SectionHeader title="Visao geral" caption="Atualizacao automatica a cada 60 segundos" />
+      <SummaryGrid devices={devices} />
+
       <SectionHeader
         title="Criticos agora"
         caption={criticalDevices.length ? `${criticalDevices.length} equipamento(s) exigem acao` : 'Nenhum equipamento critico'}
@@ -189,13 +228,7 @@ function HomeScreen({ devices, alerts, favorites, toggleFavorite, onAcknowledge,
       {criticalDevices.length ? (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} snapToInterval={306} decelerationRate="fast">
           {criticalDevices.map((device) => (
-            <DeviceCard
-              key={device.backendId || device.id}
-              compact
-              device={device}
-              favorite={favorites.includes(device.backendId)}
-              onToggleFavorite={() => toggleFavorite(device)}
-            />
+            <DeviceCard key={device.backendId || device.id} compact device={device} />
           ))}
         </ScrollView>
       ) : (
@@ -205,6 +238,8 @@ function HomeScreen({ devices, alerts, favorites, toggleFavorite, onAcknowledge,
       <SectionHeader
         title="Ultimos alertas"
         caption={visibleAlerts.length ? 'Eventos vinculados a este celular' : 'Sem alertas ativos para este celular'}
+        actionLabel={alerts.length > 3 ? 'Ver todos' : null}
+        onAction={() => setTab('alerts')}
       />
       {visibleAlerts.length ? visibleAlerts.map((alert) => (
         <AlertCard
@@ -217,57 +252,37 @@ function HomeScreen({ devices, alerts, favorites, toggleFavorite, onAcknowledge,
         <EmptyState title="Nenhum alerta pendente" caption="A simulacao do painel criara eventos para teste." />
       )}
 
-      <SectionHeader title="Monitoramento da area" caption={`${issueDevices.length} fora do normal de ${devices.length} equipamentos`} />
-      {issueDevices.slice(0, 3).map((device) => (
+      <SectionHeader title="Equipamentos fora do normal" caption={`${issueDevices.length} fora do normal de ${devices.length} equipamentos`} />
+      {issueDevices.length ? issueDevices.slice(0, 4).map((device) => (
         <View key={device.backendId || device.id} style={styles.fullCardWrap}>
-          <DeviceCard
-            device={device}
-            favorite={favorites.includes(device.backendId)}
-            onToggleFavorite={() => toggleFavorite(device)}
-          />
+          <DeviceCard device={device} />
         </View>
-      ))}
-      {!issueDevices.length ? (
-        <Pressable onPress={() => setTab('favorites')} style={styles.secondaryButton}>
-          <Text style={styles.secondaryButtonText}>Ver favoritos</Text>
-        </Pressable>
-      ) : null}
+      )) : (
+        <EmptyState title="Nenhum equipamento em atencao" caption="Os cards ficam azuis quando tudo esta dentro da faixa segura." />
+      )}
     </ScrollView>
   );
 }
 
-function FavoritesScreen({ devices, favorites, toggleFavorite }) {
-  const favoriteDevices = devices.filter((device) => favorites.includes(device.backendId));
+function AlertsScreen({ alerts, onAcknowledge, acknowledgingId }) {
+  const activeCount = alerts.filter((alert) => alert?.status === 'ativo').length;
 
   return (
     <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-      <SectionHeader title="Favoritos" caption="Ate 5 equipamentos fixados para acompanhar de perto" />
-      {favoriteDevices.length ? (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} snapToInterval={306} decelerationRate="fast">
-          {favoriteDevices.map((device) => (
-            <DeviceCard
-              key={device.backendId || device.id}
-              compact
-              device={device}
-              favorite
-              onToggleFavorite={() => toggleFavorite(device)}
-            />
-          ))}
-        </ScrollView>
-      ) : (
-        <EmptyState title="Nenhum favorito ainda" caption="Toque na estrela de um card para fixa-lo nesta area." />
+      <SectionHeader
+        title="Alertas"
+        caption={alerts.length ? `${activeCount} ativo(s) de ${alerts.length} evento(s)` : 'Historico de eventos do cliente'}
+      />
+      {alerts.length ? alerts.map((alert) => (
+        <AlertCard
+          key={alert.id}
+          alert={alert}
+          busy={acknowledgingId === alert.id}
+          onAcknowledge={onAcknowledge}
+        />
+      )) : (
+        <EmptyState title="Sem alertas" caption="Quando o simulador gerar atencao, critico ou offline, os eventos aparecem aqui." />
       )}
-
-      <SectionHeader title="Todos os equipamentos" caption="Toque na estrela para favoritar" />
-      {devices.map((device) => (
-        <View key={device.backendId || device.id} style={styles.fullCardWrap}>
-          <DeviceCard
-            device={device}
-            favorite={favorites.includes(device.backendId)}
-            onToggleFavorite={() => toggleFavorite(device)}
-          />
-        </View>
-      ))}
     </ScrollView>
   );
 }
@@ -311,7 +326,7 @@ function ScanScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-      <SectionHeader title="Escanear equipamento" caption="Leia o QR Code da geladeira para ver o card atualizado" />
+      <SectionHeader title="Escanear equipamento" caption="O mesmo QR abre no app ou no navegador do celular" />
 
       {cameraOpen ? (
         <View style={styles.cameraBox}>
@@ -376,25 +391,20 @@ function SettingsRow({ label, value, onToggle }) {
 function SettingsScreen({ settings, setSettings, session }) {
   return (
     <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-      <SectionHeader title="Configuracoes de alertas" caption="Preferencias locais deste celular" />
+      <SectionHeader title="Configuracoes" caption="Alertas e dados deste aparelho vinculado" />
       <View style={styles.settingsBox}>
         <SettingsRow
-          label="Notificacoes push"
+          label="Notificacoes"
           value={settings.push}
           onToggle={() => setSettings((current) => ({ ...current, push: !current.push }))}
         />
         <SettingsRow
-          label="Som para alertas criticos"
+          label="Som dos alertas"
           value={settings.sound}
           onToggle={() => setSettings((current) => ({ ...current, sound: !current.sound }))}
         />
         <SettingsRow
-          label="Mostrar somente criticos"
-          value={settings.criticalOnly}
-          onToggle={() => setSettings((current) => ({ ...current, criticalOnly: !current.criticalOnly }))}
-        />
-        <SettingsRow
-          label="Atualizacao a cada 60 segundos"
+          label="Atualizacao automatica"
           value={settings.autoRefresh}
           onToggle={() => setSettings((current) => ({ ...current, autoRefresh: !current.autoRefresh }))}
         />
@@ -406,6 +416,8 @@ function SettingsScreen({ settings, setSettings, session }) {
         <Text style={styles.linkedLine}>{session?.unidade?.nome || 'Unidade Banco de Sangue'}</Text>
         <Text style={styles.linkedCode}>{session?.app_device_id || 'APP-DEMO-11'}</Text>
       </View>
+
+      <PoweredByFooter />
     </ScrollView>
   );
 }
@@ -415,14 +427,12 @@ export default function App() {
   const [tab, setTab] = useState('home');
   const [devices, setDevices] = useState([]);
   const [alerts, setAlerts] = useState([]);
-  const [favorites, setFavorites] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [acknowledgingId, setAcknowledgingId] = useState('');
   const [settings, setSettings] = useState({
     push: true,
     sound: true,
-    criticalOnly: false,
     autoRefresh: true
   });
 
@@ -437,10 +447,6 @@ export default function App() {
       ]);
       setDevices(deviceList);
       setAlerts(alertList);
-      setFavorites((current) => {
-        if (current.length) return current;
-        return deviceList.slice(0, 5).map((device) => device.backendId).filter(Boolean);
-      });
     } catch (err) {
       setError(err.message || 'Nao foi possivel atualizar o app.');
     } finally {
@@ -457,16 +463,6 @@ export default function App() {
     const interval = setInterval(loadData, 60000);
     return () => clearInterval(interval);
   }, [loadData, session, settings.autoRefresh]);
-
-  function toggleFavorite(device) {
-    const id = device?.backendId;
-    if (!id) return;
-    setFavorites((current) => {
-      if (current.includes(id)) return current.filter((item) => item !== id);
-      if (current.length >= 5) return [id, ...current.slice(0, 4)];
-      return [id, ...current];
-    });
-  }
 
   async function handleAcknowledge(alert) {
     setAcknowledgingId(alert.id);
@@ -494,15 +490,13 @@ export default function App() {
           <HomeScreen
             devices={devices}
             alerts={alerts}
-            favorites={favorites}
-            toggleFavorite={toggleFavorite}
             onAcknowledge={handleAcknowledge}
             acknowledgingId={acknowledgingId}
             setTab={setTab}
           />
         ) : null}
-        {tab === 'favorites' ? (
-          <FavoritesScreen devices={devices} favorites={favorites} toggleFavorite={toggleFavorite} />
+        {tab === 'alerts' ? (
+          <AlertsScreen alerts={alerts} onAcknowledge={handleAcknowledge} acknowledgingId={acknowledgingId} />
         ) : null}
         {tab === 'scan' ? <ScanScreen /> : null}
         {tab === 'settings' ? <SettingsScreen settings={settings} setSettings={setSettings} session={session} /> : null}
@@ -558,14 +552,14 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: 8,
     borderWidth: 1,
+    elevation: 3,
     gap: 12,
     marginTop: 18,
     padding: 16,
     shadowColor: '#102a4a',
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
     shadowOffset: { width: 0, height: 8 },
-    elevation: 3
+    shadowOpacity: 0.08,
+    shadowRadius: 12
   },
   inputLabel: {
     color: colors.ink,
@@ -587,8 +581,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: colors.navy,
     borderRadius: 8,
-    minHeight: 52,
     justifyContent: 'center',
+    minHeight: 52,
     paddingHorizontal: 18,
     paddingVertical: 14
   },
@@ -603,8 +597,8 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: 8,
     borderWidth: 1,
-    minHeight: 48,
     justifyContent: 'center',
+    minHeight: 48,
     paddingHorizontal: 16,
     paddingVertical: 12
   },
@@ -624,7 +618,7 @@ const styles = StyleSheet.create({
   powered: {
     alignItems: 'center',
     gap: 7,
-    marginBottom: 8
+    marginTop: 20
   },
   poweredText: {
     color: colors.muted,
@@ -681,9 +675,9 @@ const styles = StyleSheet.create({
   },
   header: {
     backgroundColor: colors.panel,
+    paddingBottom: 10,
     paddingHorizontal: 18,
-    paddingTop: 14,
-    paddingBottom: 10
+    paddingTop: 14
   },
   headerLogoRow: {
     alignItems: 'center',
@@ -744,6 +738,10 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     marginTop: 20
   },
+  sectionHeaderText: {
+    flex: 1,
+    paddingRight: 12
+  },
   sectionTitle: {
     color: colors.ink,
     fontSize: 21,
@@ -766,6 +764,39 @@ const styles = StyleSheet.create({
     color: colors.navy,
     fontSize: 12,
     fontWeight: '900'
+  },
+  summaryGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10
+  },
+  summaryTile: {
+    backgroundColor: colors.white,
+    borderColor: colors.border,
+    borderRadius: 8,
+    borderWidth: 1,
+    flexBasis: '47%',
+    flexGrow: 1,
+    padding: 14
+  },
+  summaryWarn: {
+    borderLeftColor: colors.warn,
+    borderLeftWidth: 5
+  },
+  summaryCrit: {
+    borderLeftColor: colors.crit,
+    borderLeftWidth: 5
+  },
+  summaryValue: {
+    color: colors.ink,
+    fontSize: 28,
+    fontWeight: '900'
+  },
+  summaryLabel: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '900',
+    marginTop: 3
   },
   emptyState: {
     backgroundColor: colors.white,
@@ -804,8 +835,11 @@ const styles = StyleSheet.create({
   alertTop: {
     alignItems: 'flex-start',
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 10
+    gap: 10,
+    justifyContent: 'space-between'
+  },
+  alertTitleBlock: {
+    flex: 1
   },
   alertTitle: {
     color: colors.ink,
@@ -965,8 +999,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderRadius: 8,
     flex: 1,
-    minHeight: 54,
     justifyContent: 'center',
+    minHeight: 54,
     paddingVertical: 6
   },
   tabItemActive: {
@@ -974,7 +1008,7 @@ const styles = StyleSheet.create({
   },
   tabIcon: {
     color: colors.muted,
-    fontSize: 18,
+    fontSize: 14,
     fontWeight: '900'
   },
   tabLabel: {

@@ -11,9 +11,9 @@
 7. Publicar backend/painel em URL fixa.
 8. Validar simulacao e NOC na URL fixa.
 9. Criar fluxo de gestao para cadastrar dispositivo e smartphone.
-10. Criar app mobile ID Sensor.
+10. Criar app mobile IDsensor. Concluido na base Expo: Ativacao, Inicio, Alertas, Escanear e Configuracoes.
 11. Configurar push notification.
-12. Implementar leitura de QR Code dentro do app.
+12. Implementar leitura de QR Code dentro do app e abertura web pelo navegador. Concluido na base MVP com `/q/:codigo`.
 13. Documentar handoff para o desenvolvedor do painel oficial.
 
 ## Integracao futura com sistema oficial
@@ -27,7 +27,7 @@ O desenvolvedor do painel oficial deve integrar o sistema real respeitando o con
 - push;
 - aceite;
 - historico;
-- QR Code lido dentro do app;
+- QR Code hibrido, lido dentro do app ou aberto pelo navegador;
 - card mobile equivalente ao card do painel.
 
 ## Regras futuras de escalonamento
@@ -45,5 +45,5 @@ O desenvolvedor do painel oficial deve integrar o sistema real respeitando o con
 - A simulacao ja esta centralizada no backend e acionada pelo botao visual do painel.
 - O backend ja serve o painel e a API na mesma origem.
 - O deploy gratuito com SQLite e suficiente para demonstracao, mas nao para persistencia real.
-- O app ainda nao foi criado.
+- O app Expo existe como MVP de apresentacao, mas ainda nao e versao instalavel/publicavel.
 - SMS/e-mail ficam fora do escopo inicial.

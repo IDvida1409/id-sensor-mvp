@@ -113,12 +113,16 @@ https://id-sensor-mvp.onrender.com
 
 ## Regra do QR Code
 
-O QR Code de dispositivo nao deve abrir um site. O fluxo correto sera:
+O QR Code de dispositivo e hibrido:
 
-1. App escaneia o QR Code dentro do aplicativo.
-2. App extrai o codigo do dispositivo.
-3. App chama o backend.
-4. App renderiza no celular o card equivalente ao card do painel.
+1. Se abrir pela camera normal do celular, abre uma pagina web publica do equipamento.
+2. Se for lido dentro do app IDsensor, o app extrai o codigo e renderiza o card no aplicativo.
+
+Exemplo:
+
+```text
+https://id-sensor-mvp.onrender.com/q/DEV-GELADEIRA-02
+```
 
 ## Observacao sobre Node nesta maquina
 
