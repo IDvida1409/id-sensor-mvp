@@ -1,23 +1,42 @@
 # 05 - Mobile
 
-O app mobile sera criado em React Native com Expo.
+O app mobile foi iniciado em React Native com Expo, na pasta:
+
+```text
+mobile-app
+```
 
 ## Nome
 
-O nome correto e `ID Sensor`.
+O nome correto no app e `IDsensor`.
 
 Nao usar outros nomes, como IDBipe ou IDCistor Alert.
+
+## Identidade visual
+
+- Topo/tela inicial com logo completo IDsensor.
+- Icone do app com o simbolo `S` do IDsensor.
+- Rodape com `Powered by IDvida`.
+- Cards com a mesma linguagem visual do painel:
+  - azul para normal;
+  - laranja para atencao;
+  - vermelho para critico ou sem comunicacao.
 
 ## Fluxos
 
 ### Ativacao
 
 1. App abre.
-2. Se nao estiver ativado, mostra campo de codigo e, quando aprovado, opcao de leitura de QR Code.
-3. App pede permissao de notificacao.
-4. App coleta Expo Push Token.
-5. App chama `/activate`.
-6. App salva `app_device_id` localmente.
+2. Se nao estiver ativado, mostra campo de codigo.
+3. App chama `/activate`.
+4. App recebe `app_device_id`, cliente e unidade.
+5. App mostra home com area, alertas, favoritos, scanner e configuracoes.
+
+Codigo demo:
+
+```text
+APP-DEMO-11
+```
 
 ### Push
 
@@ -50,3 +69,29 @@ O app nao deve inventar outro card. Ele deve consumir o contrato retornado pelo 
 - bateria;
 - umidade, quando houver;
 - hierarquia visual e cores do painel.
+
+## Favoritos
+
+O app permite ate 5 equipamentos favoritos em carrossel horizontal.
+
+A tela atualiza a cada 60 segundos quando a configuracao local de atualizacao automatica esta ligada.
+
+## Rodar no celular
+
+Instalar Expo Go no celular.
+
+Na raiz do projeto:
+
+```powershell
+npm run mobile:start
+```
+
+Ou diretamente:
+
+```powershell
+cd mobile-app
+corepack pnpm install --ignore-scripts
+.\node_modules\.bin\expo.cmd start --tunnel
+```
+
+Escanear o QR Code exibido pelo Expo com o aplicativo Expo Go.

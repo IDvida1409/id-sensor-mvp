@@ -1,4 +1,5 @@
 node_modules/
+**/node_modules/
 .env
 *.db
 *.db-shm
@@ -7,7 +8,11 @@ node_modules/
 dist/
 .expo/
 .expo-shared/
+**/.expo/
+**/.expo-shared/
 npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 logs/
 tmp/
 runtime/

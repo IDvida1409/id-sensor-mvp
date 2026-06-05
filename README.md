@@ -85,6 +85,32 @@ Arquivos de apoio:
 
 No Render gratuito, o SQLite local e efemero. Para demonstracao isso funciona porque o backend recria os 24 cards automaticamente se o banco estiver vazio. Para operacao real, usar disco persistente em plano pago ou migrar para Postgres.
 
+## App mobile Expo
+
+O app mobile inicial fica em:
+
+```text
+mobile-app
+```
+
+Para testar no celular com Expo Go:
+
+```powershell
+npm run mobile:start
+```
+
+Codigo de ativacao demo:
+
+```text
+APP-DEMO-11
+```
+
+O app aponta para o backend fixo:
+
+```text
+https://id-sensor-mvp.onrender.com
+```
+
 ## Regra do QR Code
 
 O QR Code de dispositivo nao deve abrir um site. O fluxo correto sera:

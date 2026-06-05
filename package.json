@@ -10,6 +10,7 @@
     "start": "node backend/src/server.js",
     "serve:panel": "node tools/serve-panel.js",
     "backend": "node backend/src/server.js",
-    "seed": "node backend/src/scripts/seed.js"
+    "seed": "node backend/src/scripts/seed.js",
+    "mobile:start": "powershell -ExecutionPolicy Bypass -File ./tools/start-mobile-expo.ps1"
   }
 }
