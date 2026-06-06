@@ -203,8 +203,9 @@ function Header({ session, loading, onRefresh }) {
       <Text style={styles.clientName}>{clientDisplayName(session)}</Text>
       <Text style={styles.unitName}>{unitDisplayName(session)}</Text>
       <View style={styles.userRow}>
-        <Ionicons name="person-circle-outline" size={18} color={colors.green} />
-        <Text style={styles.userText}>Usuário: IDvida</Text>
+        <Ionicons name="person-circle-outline" size={28} color={colors.green} />
+        <Text style={styles.userLabel}>Usuário: </Text>
+        <Text style={styles.userName}>IDvida</Text>
       </View>
     </View>
   );
@@ -643,13 +644,18 @@ const styles = StyleSheet.create({
   userRow: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: 6,
-    marginTop: 8
+    marginTop: 14
   },
-  userText: {
+  userLabel: {
     color: colors.muted,
-    fontSize: 13,
-    fontWeight: '800'
+    fontSize: 19,
+    fontWeight: '900',
+    marginLeft: 8
+  },
+  userName: {
+    color: colors.navy,
+    fontSize: 19,
+    fontWeight: '900'
   },
   topError: {
     backgroundColor: '#fff3f5',
