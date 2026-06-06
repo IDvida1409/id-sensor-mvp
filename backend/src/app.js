@@ -729,6 +729,12 @@ addRoute('POST', '/activate', async ({ body, res }) => {
   db.prepare('UPDATE activation_codes SET usado_em = COALESCE(usado_em, ?) WHERE id = ?')
     .run(createdAt, activation.id);
 
+  const devicesCount = db.prepare(`
+    SELECT COUNT(*) AS count
+    FROM dispositivos
+    WHERE cliente_id = ? AND unidade_id = ?
+  `).get(activation.cliente_id, activation.unidade_id).count;
+
   ok(res, {
     success: true,
     app_device_id: appDeviceId,
@@ -740,7 +746,8 @@ addRoute('POST', '/activate', async ({ body, res }) => {
       id: activation.unidade_id,
       nome: activation.unidade_nome
     },
-    dispositivo_id: activation.dispositivo_id
+    dispositivo_id: activation.dispositivo_id,
+    devices_count: devicesCount
   }, 201);
 });
 

@@ -31,14 +31,6 @@ const tabs = [
   { id: 'settings', icon: 'CFG', label: 'Config.' }
 ];
 
-function isIssueDevice(device) {
-  return device?.online === false || device?.state === 'warn' || device?.state === 'crit';
-}
-
-function isCriticalDevice(device) {
-  return device?.online === false || device?.state === 'crit';
-}
-
 function buildStats(devices) {
   return devices.reduce(
     (acc, device) => {
@@ -57,15 +49,7 @@ function PoweredByFooter() {
   return (
     <View style={styles.powered}>
       <Text style={styles.poweredText}>Powered by</Text>
-      <View style={styles.idvidaLogo}>
-        <View style={styles.idvidaMark}>
-          <View style={styles.idvidaHead} />
-          <View style={styles.idvidaArms} />
-          <View style={styles.idvidaBody} />
-        </View>
-        <Text style={styles.idvidaId}>ID</Text>
-        <Text style={styles.idvidaVida}>VIDA</Text>
-      </View>
+      <Image source={require('./assets/idvida-logo.png')} style={styles.idvidaLogo} resizeMode="contain" />
     </View>
   );
 }
@@ -95,30 +79,37 @@ function EmptyState({ title, caption }) {
   );
 }
 
-function SummaryTile({ label, value, tone }) {
+function TotalDevicesCard({ total, issueCount }) {
   return (
-    <View style={[styles.summaryTile, tone === 'warn' && styles.summaryWarn, tone === 'crit' && styles.summaryCrit]}>
-      <Text style={styles.summaryValue}>{value}</Text>
-      <Text style={styles.summaryLabel}>{label}</Text>
+    <View style={styles.totalCard}>
+      <View>
+        <Text style={styles.totalValue}>{total}</Text>
+        <Text style={styles.totalLabel}>Total de dispositivos monitorados</Text>
+      </View>
+      <View style={styles.totalBadge}>
+        <Text style={styles.totalBadgeText}>{issueCount ? `${issueCount} em evento` : 'Operacao normal'}</Text>
+      </View>
     </View>
   );
 }
 
-function SummaryGrid({ devices }) {
-  const stats = useMemo(() => buildStats(devices), [devices]);
-
-  return (
-    <View style={styles.summaryGrid}>
-      <SummaryTile label="Total" value={stats.total} />
-      <SummaryTile label="Normais" value={stats.normal} />
-      <SummaryTile label="Atencao" value={stats.warn} tone="warn" />
-      <SummaryTile label="Criticos/offline" value={stats.crit + stats.offline} tone="crit" />
-    </View>
-  );
+function alertTone(alert) {
+  const text = `${alert?.tipo_alerta || ''} ${alert?.mensagem || ''}`.toLowerCase();
+  if (text.includes('offline') || text.includes('comunic') || alert?.severidade === 'critica') return 'crit';
+  return 'warn';
 }
 
-function AlertCard({ alert, onAcknowledge, busy }) {
-  const critical = alert?.severidade === 'critica';
+function alertLabel(alert) {
+  const text = `${alert?.tipo_alerta || ''} ${alert?.mensagem || ''}`.toLowerCase();
+  if (text.includes('offline') || text.includes('comunic')) return 'OFFLINE';
+  if (alert?.severidade === 'critica') return 'CRITICO';
+  return 'ATENCAO';
+}
+
+function AlertCard({ alert, onAcknowledge, busy, showAction = true }) {
+  const tone = alertTone(alert);
+  const critical = tone === 'crit';
+  const canAcknowledge = showAction && alert?.status === 'ativo';
 
   return (
     <View style={[styles.alertCard, critical && styles.alertCardCritical]}>
@@ -128,18 +119,18 @@ function AlertCard({ alert, onAcknowledge, busy }) {
           <Text style={styles.alertMeta}>{alert?.dispositivo?.local || 'Banco de Sangue'}</Text>
         </View>
         <View style={[styles.alertBadge, critical && styles.alertBadgeCritical]}>
-          <Text style={styles.alertBadgeText}>{critical ? 'CRITICO' : 'ATENCAO'}</Text>
+          <Text style={styles.alertBadgeText}>{alertLabel(alert)}</Text>
         </View>
       </View>
       <Text style={styles.alertMessage}>{alert?.mensagem || 'Evento de monitoramento ativo.'}</Text>
       <Text style={styles.alertTime}>{alert?.criado_em ? new Date(alert.criado_em).toLocaleString() : 'Agora'}</Text>
-      {alert?.status === 'ativo' ? (
+      {canAcknowledge ? (
         <Pressable onPress={() => onAcknowledge(alert)} disabled={busy} style={styles.ackButton}>
           <Text style={styles.ackButtonText}>{busy ? 'Registrando...' : 'Estou ciente'}</Text>
         </Pressable>
-      ) : (
+      ) : showAction ? (
         <Text style={styles.acknowledgedText}>Ciencia registrada</Text>
-      )}
+      ) : null}
     </View>
   );
 }
@@ -211,34 +202,20 @@ function Header({ session, loading, onRefresh }) {
   );
 }
 
-function HomeScreen({ devices, alerts, onAcknowledge, acknowledgingId, setTab }) {
-  const issueDevices = useMemo(() => devices.filter(isIssueDevice), [devices]);
-  const criticalDevices = useMemo(() => devices.filter(isCriticalDevice), [devices]);
-  const visibleAlerts = alerts.slice(0, 3);
+function HomeScreen({ devices, alerts, session, onAcknowledge, acknowledgingId, setTab }) {
+  const stats = useMemo(() => buildStats(devices), [devices]);
+  const totalDevices = stats.total || session?.devices_count || 0;
+  const visibleAlerts = alerts.slice(0, 4);
 
   return (
     <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-      <SectionHeader title="Visao geral" caption="Atualizacao automatica a cada 60 segundos" />
-      <SummaryGrid devices={devices} />
-
-      <SectionHeader
-        title="Criticos agora"
-        caption={criticalDevices.length ? `${criticalDevices.length} equipamento(s) exigem acao` : 'Nenhum equipamento critico'}
-      />
-      {criticalDevices.length ? (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} snapToInterval={306} decelerationRate="fast">
-          {criticalDevices.map((device) => (
-            <DeviceCard key={device.backendId || device.id} compact device={device} />
-          ))}
-        </ScrollView>
-      ) : (
-        <EmptyState title="Tudo sob controle" caption="Quando um equipamento ficar critico ou sem comunicacao, ele aparece aqui." />
-      )}
+      <SectionHeader title="Informacoes" caption="Equipamentos vinculados a este setor" />
+      <TotalDevicesCard total={totalDevices} issueCount={stats.warn + stats.crit + stats.offline} />
 
       <SectionHeader
         title="Ultimos alertas"
-        caption={visibleAlerts.length ? 'Eventos vinculados a este celular' : 'Sem alertas ativos para este celular'}
-        actionLabel={alerts.length > 3 ? 'Ver todos' : null}
+        caption={visibleAlerts.length ? 'Eventos mais recentes do cliente' : 'Nenhum alerta pendente'}
+        actionLabel={alerts.length ? 'Ver alertas' : null}
         onAction={() => setTab('alerts')}
       />
       {visibleAlerts.length ? visibleAlerts.map((alert) => (
@@ -247,33 +224,26 @@ function HomeScreen({ devices, alerts, onAcknowledge, acknowledgingId, setTab })
           alert={alert}
           busy={acknowledgingId === alert.id}
           onAcknowledge={onAcknowledge}
+          showAction={false}
         />
       )) : (
-        <EmptyState title="Nenhum alerta pendente" caption="A simulacao do painel criara eventos para teste." />
-      )}
-
-      <SectionHeader title="Equipamentos fora do normal" caption={`${issueDevices.length} fora do normal de ${devices.length} equipamentos`} />
-      {issueDevices.length ? issueDevices.slice(0, 4).map((device) => (
-        <View key={device.backendId || device.id} style={styles.fullCardWrap}>
-          <DeviceCard device={device} />
-        </View>
-      )) : (
-        <EmptyState title="Nenhum equipamento em atencao" caption="Os cards ficam azuis quando tudo esta dentro da faixa segura." />
+        <EmptyState title="Nenhum alerta pendente" caption="Os eventos de atencao, critico ou offline aparecem aqui." />
       )}
     </ScrollView>
   );
 }
 
 function AlertsScreen({ alerts, onAcknowledge, acknowledgingId }) {
+  const visibleAlerts = alerts.slice(0, 24);
   const activeCount = alerts.filter((alert) => alert?.status === 'ativo').length;
 
   return (
     <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       <SectionHeader
         title="Alertas"
-        caption={alerts.length ? `${activeCount} ativo(s) de ${alerts.length} evento(s)` : 'Historico de eventos do cliente'}
+        caption={visibleAlerts.length ? `${activeCount} ativo(s) - ultimos ${visibleAlerts.length} evento(s)` : 'Historico de eventos do cliente'}
       />
-      {alerts.length ? alerts.map((alert) => (
+      {visibleAlerts.length ? visibleAlerts.map((alert) => (
         <AlertCard
           key={alert.id}
           alert={alert}
@@ -291,7 +261,6 @@ function ScanScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const [cameraOpen, setCameraOpen] = useState(false);
   const [scanLocked, setScanLocked] = useState(false);
-  const [manualCode, setManualCode] = useState('DEV-GELADEIRA-02');
   const [device, setDevice] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -345,25 +314,11 @@ function ScanScreen() {
         </View>
       ) : (
         <Pressable onPress={openCamera} style={styles.primaryButton}>
-          <Text style={styles.primaryButtonText}>Abrir camera</Text>
+          <Text style={styles.primaryButtonText}>Escanear equipamento</Text>
         </Pressable>
       )}
 
-      <View style={styles.formBox}>
-        <Text style={styles.inputLabel}>Ou digite o codigo do equipamento</Text>
-        <TextInput
-          autoCapitalize="characters"
-          value={manualCode}
-          onChangeText={setManualCode}
-          placeholder="DEV-GELADEIRA-02"
-          placeholderTextColor="#9aacc1"
-          style={styles.input}
-        />
-        <Pressable onPress={() => lookup(manualCode)} disabled={loading} style={[styles.secondaryButton, loading && styles.disabledButton]}>
-          <Text style={styles.secondaryButtonText}>{loading ? 'Buscando...' : 'Buscar equipamento'}</Text>
-        </Pressable>
-      </View>
-
+      {loading ? <Text style={styles.scanStatus}>Localizando equipamento...</Text> : null}
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
       {device ? (
         <View style={styles.fullCardWrap}>
@@ -448,7 +403,7 @@ export default function App() {
       setDevices(deviceList);
       setAlerts(alertList);
     } catch (err) {
-      setError(err.message || 'Nao foi possivel atualizar o app.');
+      setError('Servidor indisponivel. Toque em Atualizar.');
     } finally {
       setLoading(false);
     }
@@ -490,6 +445,7 @@ export default function App() {
           <HomeScreen
             devices={devices}
             alerts={alerts}
+            session={session}
             onAcknowledge={handleAcknowledge}
             acknowledgingId={acknowledgingId}
             setTab={setTab}
@@ -626,52 +582,8 @@ const styles = StyleSheet.create({
     fontWeight: '700'
   },
   idvidaLogo: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 2
-  },
-  idvidaMark: {
-    height: 28,
-    marginRight: 5,
-    width: 34
-  },
-  idvidaHead: {
-    alignSelf: 'center',
-    backgroundColor: colors.navy,
-    borderRadius: 6,
-    height: 9,
-    width: 9
-  },
-  idvidaArms: {
-    alignSelf: 'center',
-    borderLeftColor: 'transparent',
-    borderLeftWidth: 14,
-    borderRightColor: 'transparent',
-    borderRightWidth: 14,
-    borderTopColor: colors.navy,
-    borderTopWidth: 8,
-    height: 0,
-    marginTop: 4,
-    width: 0
-  },
-  idvidaBody: {
-    alignSelf: 'center',
-    backgroundColor: colors.navy,
-    height: 10,
-    marginTop: -1,
-    width: 8
-  },
-  idvidaId: {
-    color: colors.green,
-    fontSize: 28,
-    fontWeight: '900',
-    letterSpacing: 0
-  },
-  idvidaVida: {
-    color: colors.navy,
-    fontSize: 28,
-    fontWeight: '900',
-    letterSpacing: 0
+    height: 32,
+    width: 96
   },
   header: {
     backgroundColor: colors.panel,
@@ -685,8 +597,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between'
   },
   headerLogo: {
-    height: 58,
-    width: 176
+    height: 54,
+    width: 164
   },
   refreshButton: {
     alignItems: 'center',
@@ -717,12 +629,12 @@ const styles = StyleSheet.create({
     marginTop: 3
   },
   topError: {
-    backgroundColor: '#ffecef',
+    backgroundColor: '#fff3f5',
     color: colors.crit,
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '800',
     paddingHorizontal: 18,
-    paddingVertical: 8
+    paddingVertical: 7
   },
   bodyArea: {
     flex: 1
@@ -765,38 +677,39 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '900'
   },
-  summaryGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10
-  },
-  summaryTile: {
+  totalCard: {
+    alignItems: 'center',
     backgroundColor: colors.white,
     borderColor: colors.border,
+    borderLeftColor: colors.navy,
+    borderLeftWidth: 5,
     borderRadius: 8,
     borderWidth: 1,
-    flexBasis: '47%',
-    flexGrow: 1,
-    padding: 14
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    padding: 18
   },
-  summaryWarn: {
-    borderLeftColor: colors.warn,
-    borderLeftWidth: 5
-  },
-  summaryCrit: {
-    borderLeftColor: colors.crit,
-    borderLeftWidth: 5
-  },
-  summaryValue: {
+  totalValue: {
     color: colors.ink,
-    fontSize: 28,
+    fontSize: 42,
     fontWeight: '900'
   },
-  summaryLabel: {
+  totalLabel: {
     color: colors.muted,
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '900',
-    marginTop: 3
+    marginTop: 2
+  },
+  totalBadge: {
+    backgroundColor: colors.chip,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8
+  },
+  totalBadgeText: {
+    color: colors.navy,
+    fontSize: 12,
+    fontWeight: '900'
   },
   emptyState: {
     backgroundColor: colors.white,
@@ -916,6 +829,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '900'
   },
+  scanStatus: {
+    color: colors.muted,
+    fontSize: 13,
+    fontWeight: '800',
+    marginTop: 12,
+    textAlign: 'center'
+  },
   settingsBox: {
     backgroundColor: colors.white,
     borderColor: colors.border,
@@ -988,7 +908,7 @@ const styles = StyleSheet.create({
   },
   tabBar: {
     backgroundColor: colors.white,
-    borderTopColor: colors.border,
+    borderTopColor: '#cfe0f2',
     borderTopWidth: 1,
     flexDirection: 'row',
     paddingBottom: 8,
@@ -997,6 +917,8 @@ const styles = StyleSheet.create({
   },
   tabItem: {
     alignItems: 'center',
+    borderTopColor: 'transparent',
+    borderTopWidth: 3,
     borderRadius: 8,
     flex: 1,
     justifyContent: 'center',
@@ -1004,7 +926,8 @@ const styles = StyleSheet.create({
     paddingVertical: 6
   },
   tabItemActive: {
-    backgroundColor: colors.chip
+    backgroundColor: colors.chip,
+    borderTopColor: colors.navy
   },
   tabIcon: {
     color: colors.muted,
