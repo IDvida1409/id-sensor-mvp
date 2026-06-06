@@ -49,8 +49,6 @@ export function DeviceCard({ device, compact = false, onPress }) {
         { backgroundColor: meta.start, borderColor: 'rgba(255,255,255,0.12)' }
       ]}
     >
-      <View style={styles.glow} pointerEvents="none" />
-
       <View style={styles.header}>
         <Text style={[styles.deviceName, isWarn && styles.warnText]}>{device?.name || 'Equipamento'}</Text>
         <View style={styles.commBadge}>
@@ -87,8 +85,8 @@ export function DeviceCard({ device, compact = false, onPress }) {
           </View>
           <Text style={[styles.footerText, isWarn && styles.warnText]}>{device?.battery ?? '--'}%</Text>
         </View>
-        <View style={styles.metaItem}>
-          <Ionicons name="water" size={15} color="#70cfff" />
+        <View style={[styles.metaItem, styles.humidityItem]}>
+          <Ionicons name="water" size={18} color="#70cfff" style={styles.humidityIcon} />
           <Text style={[styles.footerText, isWarn && styles.warnText]}>{device?.hum1 ?? '--'}%</Text>
         </View>
       </View>
@@ -120,15 +118,6 @@ const styles = StyleSheet.create({
     marginRight: 14,
     minHeight: 320,
     width: 292
-  },
-  glow: {
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderRadius: 160,
-    height: 220,
-    left: 30,
-    position: 'absolute',
-    top: -88,
-    width: 220
   },
   header: {
     alignItems: 'flex-start',
@@ -213,21 +202,26 @@ const styles = StyleSheet.create({
   },
   thermo: {
     alignItems: 'center',
-    backgroundColor: '#f4f7fb',
-    borderColor: '#bac7d8',
+    backgroundColor: '#f8fafc',
+    borderColor: 'rgba(188,198,212,0.92)',
     borderRadius: 22,
     borderWidth: 3,
-    height: 126,
-    justifyContent: 'flex-end',
+    height: 132,
+    justifyContent: 'flex-start',
+    overflow: 'visible',
+    position: 'relative',
     width: 34
   },
   thermoTrack: {
     alignItems: 'center',
     backgroundColor: '#c6ced8',
     borderRadius: 12,
-    height: 96,
+    bottom: 20,
     justifyContent: 'flex-end',
+    left: 10,
     overflow: 'hidden',
+    position: 'absolute',
+    top: 6,
     width: 8
   },
   thermoFill: {
@@ -238,9 +232,10 @@ const styles = StyleSheet.create({
     borderColor: '#cad7e6',
     borderRadius: 21,
     borderWidth: 3,
+    bottom: -8,
     height: 42,
-    marginBottom: -10,
-    marginTop: -4,
+    left: -4,
+    position: 'absolute',
     width: 42
   },
   footer: {
@@ -256,6 +251,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     gap: 7
+  },
+  humidityItem: {
+    gap: 12
+  },
+  humidityIcon: {
+    marginRight: 2
   },
   batteryIcon: {
     borderColor: 'rgba(255,255,255,0.9)',
