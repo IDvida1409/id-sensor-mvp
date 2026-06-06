@@ -226,9 +226,10 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     borderWidth: 3,
     height: 132,
-    left: 12,
+    left: '50%',
     position: 'absolute',
     top: 0,
+    transform: [{ translateX: -17 }],
     width: 34
   },
   thermoTrack: {
@@ -237,10 +238,11 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     bottom: 38,
     justifyContent: 'flex-end',
-    left: 25,
+    left: '50%',
     overflow: 'hidden',
     position: 'absolute',
     top: 9,
+    transform: [{ translateX: -4 }],
     width: 8
   },
   thermoFill: {
@@ -253,8 +255,9 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     bottom: 0,
     height: 42,
-    left: 8,
+    left: '50%',
     position: 'absolute',
+    transform: [{ translateX: -21 }],
     width: 42
   },
   footer: {

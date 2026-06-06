@@ -622,6 +622,23 @@
           </button>
           <div class="bind-area-menu" id="bindAreaMenu" hidden>
             <button class="bind-area-option active" type="button" data-value="unidade_banco_sangue" data-area-name="Banco de Sangue">Banco de Sangue</button>
+            <button class="bind-area-option" type="button" data-value="unidade_laboratorio" data-area-name="Laboratório">Laboratório</button>
+          </div>
+        </div>
+      </div>
+      <div class="info-field">
+        <label for="bindUserProfile">Perfil de acesso</label>
+        <input id="bindUserProfile" name="perfil" type="hidden" value="area" data-profile-name="Usuário da área">
+        <div class="bind-area-picker" id="bindProfilePicker">
+          <button class="bind-area-trigger" id="bindUserProfileButton" type="button" aria-expanded="false" aria-controls="bindProfileMenu">
+            <span id="bindUserProfileLabel">Usuário da área</span>
+            <span class="bind-area-chevron" aria-hidden="true">⌄</span>
+          </button>
+          <div class="bind-area-menu" id="bindProfileMenu" hidden>
+            <button class="bind-area-option active" type="button" data-profile="area" data-profile-name="Usuário da área">Usuário da área</button>
+            <button class="bind-area-option" type="button" data-profile="admin1" data-profile-name="Admin 1">Admin 1</button>
+            <button class="bind-area-option" type="button" data-profile="admin2" data-profile-name="Admin 2">Admin 2</button>
+            <button class="bind-area-option" type="button" data-profile="master" data-profile-name="Master">Master</button>
           </div>
         </div>
       </div>

@@ -1096,6 +1096,77 @@ document.addEventListener("DOMContentLoaded", () => {
 })();
 
 
+/* ===== SCRIPT BLOCK 44 | app-deep-link-route ===== */
+(function(){
+  const FILTER_MAP = {
+    all: null,
+    normal: 'blue',
+    blue: 'blue',
+    warn: 'warn',
+    atencao: 'warn',
+    attention: 'warn',
+    crit: 'crit',
+    critico: 'crit',
+    critical: 'crit',
+    offline: 'offline'
+  };
+
+  const CHIP_MAP = {
+    blue: 'normal',
+    warn: 'warn',
+    crit: 'crit',
+    offline: 'offline'
+  };
+
+  function normalizeRole(role){
+    const value = String(role || '').toLowerCase();
+    return ['master','admin1','admin2','area'].includes(value) ? value : '';
+  }
+
+  function applyRouteFilter(filter){
+    const normalized = String(filter || 'all').toLowerCase();
+    const nextFilter = Object.prototype.hasOwnProperty.call(FILTER_MAP, normalized)
+      ? FILTER_MAP[normalized]
+      : null;
+
+    activeFilter = nextFilter;
+    nocFilteredIds = null;
+
+    document.querySelectorAll('.filterchip').forEach(el => el.style.outline = 'none');
+    if(nextFilter){
+      const chipKey = CHIP_MAP[nextFilter] || nextFilter;
+      const target = document.querySelector(`.filterchip[data-filter="${chipKey}"]`);
+      if(target) target.style.outline = '2px solid #7c8ea8';
+    }
+
+    if(typeof renderGrid === 'function') renderGrid();
+  }
+
+  function applyPanelRouteParams(){
+    const params = new URLSearchParams(window.location.search || '');
+    const role = normalizeRole(params.get('role'));
+    const filter = params.get('filter');
+    const area = params.get('area');
+
+    if(role && typeof window.applyPanelRole === 'function'){
+      window.applyPanelRole(role);
+    }
+
+    if(area){
+      selectedArea = area;
+    }
+
+    if(filter){
+      applyRouteFilter(filter);
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(applyPanelRouteParams, 120);
+  });
+})();
+
+
 /* ===== BACKEND DATA SOURCE | shared panel and NOC state ===== */
 (function(){
   const DEFAULT_API_BASE_URL = 'http://localhost:4000';
@@ -4369,6 +4440,8 @@ document.getElementById('infoMacOverlay')?.addEventListener('click', ()=> openIn
     if(typeof window.updateBindDeviceVisibility === 'function') window.updateBindDeviceVisibility();
   }
 
+  window.applyPanelRole = applyRole;
+
   userSwitcher.addEventListener('click', function(e){
     e.stopPropagation();
     userMenu.style.display = userMenu.style.display === 'block' ? 'none' : 'block';
@@ -6508,14 +6581,15 @@ document.addEventListener('DOMContentLoaded', function(){
 
     const nameInput = getEl('bindUserName');
     const emailInput = getEl('bindUserEmail');
-    const areaSelect = getEl('bindUserArea');
+    const areaInput = getEl('bindUserArea');
+    const profileInput = getEl('bindUserProfile');
     const submit = getEl('submitBindDevice');
-    const selectedArea = areaSelect?.selectedOptions?.[0];
 
     const usuarioNome = String(nameInput?.value || '').trim();
     const usuarioEmail = String(emailInput?.value || '').trim();
-    const unidadeId = areaSelect?.value || 'unidade_banco_sangue';
-    const areaNome = selectedArea?.dataset?.areaName || selectedArea?.textContent || 'Banco de Sangue';
+    const unidadeId = areaInput?.value || 'unidade_banco_sangue';
+    const areaNome = areaInput?.dataset?.areaName || 'Banco de Sangue';
+    const usuarioPerfil = profileInput?.value || 'area';
 
     if(!usuarioNome || !usuarioEmail){
       setFeedback('Preencha nome e e-mail do usuário.', 'error');
@@ -6536,6 +6610,7 @@ document.addEventListener('DOMContentLoaded', function(){
           usuario_nome:usuarioNome,
           usuario_email:usuarioEmail,
           area_nome:areaNome,
+          usuario_perfil:usuarioPerfil,
           tipo_ativacao:'app_alerta',
           enviar_email:true
         })
@@ -6619,9 +6694,25 @@ document.addEventListener('DOMContentLoaded', function(){
     if(trigger) trigger.setAttribute('aria-expanded','false');
   }
 
+  function closeProfileMenu(){
+    const menu = getEl('bindProfileMenu');
+    const trigger = getEl('bindUserProfileButton');
+    if(menu) menu.hidden = true;
+    if(trigger) trigger.setAttribute('aria-expanded','false');
+  }
+
   function toggleAreaMenu(){
     const menu = getEl('bindAreaMenu');
     const trigger = getEl('bindUserAreaButton');
+    if(!menu || !trigger) return;
+    const open = menu.hidden;
+    menu.hidden = !open;
+    trigger.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+
+  function toggleProfileMenu(){
+    const menu = getEl('bindProfileMenu');
+    const trigger = getEl('bindUserProfileButton');
     if(!menu || !trigger) return;
     const open = menu.hidden;
     menu.hidden = !open;
@@ -6642,6 +6733,20 @@ document.addEventListener('DOMContentLoaded', function(){
     closeAreaMenu();
   }
 
+  function selectProfile(option){
+    const profileInput = getEl('bindUserProfile');
+    const label = getEl('bindUserProfileLabel');
+    const options = document.querySelectorAll('#bindProfileMenu .bind-area-option');
+    const profileName = option?.dataset?.profileName || option?.textContent || 'Usuário da área';
+    if(profileInput){
+      profileInput.value = option?.dataset?.profile || 'area';
+      profileInput.dataset.profileName = profileName;
+    }
+    if(label) label.textContent = profileName;
+    options.forEach(item => item.classList.toggle('active', item === option));
+    closeProfileMenu();
+  }
+
   function setDisableFeedback(message, type){
     const feedback = getEl('disableDeviceFeedback');
     if(!feedback) return;
@@ -6658,6 +6763,7 @@ document.addEventListener('DOMContentLoaded', function(){
   function closeBindModal(){
     getEl('bindDeviceOverlay')?.classList.remove('show');
     closeAreaMenu();
+    closeProfileMenu();
   }
 
   function openDisableModal(){
@@ -6770,6 +6876,18 @@ document.addEventListener('DOMContentLoaded', function(){
       event.stopPropagation();
       selectArea(option);
     });
+    getEl('bindUserProfileButton')?.addEventListener('click', function(event){
+      event.preventDefault();
+      event.stopPropagation();
+      toggleProfileMenu();
+    });
+    getEl('bindProfileMenu')?.addEventListener('click', function(event){
+      const option = event.target?.closest?.('.bind-area-option');
+      if(!option) return;
+      event.preventDefault();
+      event.stopPropagation();
+      selectProfile(option);
+    });
     getEl('openDisableDeviceModal')?.addEventListener('click', function(event){
       event.preventDefault();
       event.stopPropagation();
@@ -6786,7 +6904,10 @@ document.addEventListener('DOMContentLoaded', function(){
       if(!button) return;
       deactivateLinkedDevice(button.dataset.disableDeviceId, button);
     });
-    document.addEventListener('click', closeAreaMenu);
+    document.addEventListener('click', function(){
+      closeAreaMenu();
+      closeProfileMenu();
+    });
   });
 })();
 

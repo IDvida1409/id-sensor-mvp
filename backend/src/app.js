@@ -45,6 +45,18 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+const ADMIN_PROFILES = new Set(['master', 'admin1', 'admin2']);
+
+function normalizeUserProfile(value) {
+  const profile = String(value || 'area').trim().toLowerCase();
+  if (profile === 'area' || ADMIN_PROFILES.has(profile)) return profile;
+  return 'area';
+}
+
+function isAdminProfile(profile) {
+  return ADMIN_PROFILES.has(normalizeUserProfile(profile));
+}
+
 function addRoute(method, pattern, handler) {
   routes.push({ method, pattern, parts: pattern.split('/').filter(Boolean), handler });
 }
@@ -526,6 +538,43 @@ function buildAlert(row) {
   };
 }
 
+function buildAreasSummary(db, clienteId) {
+  const rows = db.prepare(`
+    SELECT
+      u.id,
+      u.nome,
+      u.local,
+      COUNT(d.id) AS devices_count
+    FROM unidades u
+    LEFT JOIN dispositivos d ON d.unidade_id = u.id
+    WHERE u.cliente_id = ?
+    GROUP BY u.id
+    ORDER BY
+      CASE
+        WHEN LOWER(u.nome) LIKE '%banco%' THEN 0
+        WHEN LOWER(u.nome) LIKE '%laboratorio%' THEN 1
+        ELSE 2
+      END,
+      u.nome ASC
+  `).all(clienteId);
+
+  if (clienteId === 'cliente_idvida' && !rows.some((row) => String(row.nome || '').toLowerCase().includes('laboratorio'))) {
+    rows.push({
+      id: 'unidade_laboratorio',
+      nome: 'Laboratorio',
+      local: 'Unidade Bela Vista',
+      devices_count: 0
+    });
+  }
+
+  return rows.map((row) => ({
+    id: row.id,
+    nome: String(row.nome || '').replace('Laboratorio', 'Laboratório'),
+    local: row.local,
+    devices_count: Number(row.devices_count || 0)
+  }));
+}
+
 addRoute('GET', '/health', async ({ res }) => {
   ok(res, {
     status: 'online',
@@ -657,6 +706,7 @@ addRoute('POST', '/activation-code', async ({ body, req, res }) => {
   const usuarioNome = String(body.usuario_nome || '').trim() || null;
   const usuarioEmail = String(body.usuario_email || '').trim().toLowerCase() || null;
   const areaNome = String(body.area_nome || '').trim() || null;
+  const usuarioPerfil = normalizeUserProfile(body.usuario_perfil || body.perfil);
   const enviarEmail = body.enviar_email !== false && body.enviar_email !== 'false';
 
   if (!clienteId || !unidadeId) {
@@ -680,8 +730,8 @@ addRoute('POST', '/activation-code', async ({ body, req, res }) => {
   db.prepare(`
     INSERT INTO activation_codes (
       id, codigo, cliente_id, unidade_id, dispositivo_id, tipo_ativacao, ativo,
-      criado_em, usuario_nome, usuario_email, area_nome
-    ) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
+      criado_em, usuario_nome, usuario_email, area_nome, usuario_perfil
+    ) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)
   `).run(
     activationId,
     code,
@@ -692,7 +742,8 @@ addRoute('POST', '/activation-code', async ({ body, req, res }) => {
     createdAt,
     usuarioNome,
     usuarioEmail,
-    areaNome
+    areaNome,
+    usuarioPerfil
   );
 
   const publicBase = requestPublicBase(req);
@@ -738,6 +789,7 @@ addRoute('POST', '/activation-code', async ({ body, req, res }) => {
     usuario_nome: usuarioNome,
     usuario_email: usuarioEmail,
     area_nome: areaNome,
+    usuario_perfil: usuarioPerfil,
     email_delivery: emailDelivery,
     qr_payload: payload,
     qr_code_data_url: await buildQrDataUrl(payload),
@@ -766,13 +818,14 @@ addRoute('POST', '/activate', async ({ body, res }) => {
 
   const appDeviceId = id('appdev');
   const createdAt = nowIso();
+  const usuarioPerfil = normalizeUserProfile(activation.usuario_perfil);
 
   db.prepare(`
     INSERT INTO app_devices (
       id, activation_code_id, cliente_id, unidade_id, dispositivo_id,
       expo_push_token, plataforma, modelo_aparelho, usuario_nome,
-      usuario_email, area_nome, ativo, criado_em
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+      usuario_email, area_nome, usuario_perfil, ativo, criado_em
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
   `).run(
     appDeviceId,
     activation.id,
@@ -785,17 +838,18 @@ addRoute('POST', '/activate', async ({ body, res }) => {
     activation.usuario_nome,
     activation.usuario_email,
     activation.area_nome,
+    usuarioPerfil,
     createdAt
   );
 
   db.prepare('UPDATE activation_codes SET usado_em = COALESCE(usado_em, ?) WHERE id = ?')
     .run(createdAt, activation.id);
 
-  const devicesCount = db.prepare(`
-    SELECT COUNT(*) AS count
-    FROM dispositivos
-    WHERE cliente_id = ? AND unidade_id = ?
-  `).get(activation.cliente_id, activation.unidade_id).count;
+  const devicesCount = isAdminProfile(usuarioPerfil)
+    ? db.prepare('SELECT COUNT(*) AS count FROM dispositivos WHERE cliente_id = ?')
+      .get(activation.cliente_id).count
+    : db.prepare('SELECT COUNT(*) AS count FROM dispositivos WHERE cliente_id = ? AND unidade_id = ?')
+      .get(activation.cliente_id, activation.unidade_id).count;
 
   ok(res, {
     success: true,
@@ -811,10 +865,12 @@ addRoute('POST', '/activate', async ({ body, res }) => {
     usuario: {
       nome: activation.usuario_nome || null,
       email: activation.usuario_email || null,
-      area: activation.area_nome || activation.unidade_nome
+      area: activation.area_nome || activation.unidade_nome,
+      perfil: usuarioPerfil
     },
     dispositivo_id: activation.dispositivo_id,
-    devices_count: devicesCount
+    devices_count: devicesCount,
+    areas: buildAreasSummary(db, activation.cliente_id)
   }, 201);
 });
 
@@ -845,6 +901,7 @@ addRoute('GET', '/app-devices/search', async ({ query, res }) => {
       COALESCE(ad.usuario_nome, ac.usuario_nome) AS usuario_nome,
       COALESCE(ad.usuario_email, ac.usuario_email) AS usuario_email,
       COALESCE(ad.area_nome, ac.area_nome, u.nome) AS area_nome,
+      COALESCE(ad.usuario_perfil, ac.usuario_perfil, 'area') AS usuario_perfil,
       ad.activation_code_id,
       ac.codigo AS codigo_ativacao,
       ac.ativo AS codigo_ativo,
@@ -876,7 +933,8 @@ addRoute('POST', '/app-devices/:id/deactivate', async ({ params, res }) => {
       ac.codigo AS codigo_ativacao,
       COALESCE(ad.usuario_nome, ac.usuario_nome) AS usuario_nome,
       COALESCE(ad.usuario_email, ac.usuario_email) AS usuario_email,
-      COALESCE(ad.area_nome, ac.area_nome) AS area_nome
+      COALESCE(ad.area_nome, ac.area_nome) AS area_nome,
+      COALESCE(ad.usuario_perfil, ac.usuario_perfil, 'area') AS usuario_perfil
     FROM app_devices ad
     JOIN activation_codes ac ON ac.id = ad.activation_code_id
     WHERE ad.id = ? AND ad.ativo = 1
@@ -946,7 +1004,7 @@ addRoute('POST', '/alerts', async ({ body, res }) => {
     FROM app_devices
     WHERE ativo = 1
       AND cliente_id = ?
-      AND unidade_id = ?
+      AND (unidade_id = ? OR usuario_perfil IN ('master', 'admin1', 'admin2'))
       AND (dispositivo_id IS NULL OR dispositivo_id = ?)
   `).all(device.cliente_id, device.unidade_id, device.id);
 
@@ -1002,14 +1060,20 @@ addRoute('GET', '/alerts/history', async ({ res }) => {
 });
 
 addRoute('GET', '/app/alerts/:app_device_id', async ({ params, res }) => {
-  const appDevice = getDb().prepare('SELECT * FROM app_devices WHERE id = ? AND ativo = 1').get(params.app_device_id);
+  const db = getDb();
+  const appDevice = db.prepare('SELECT * FROM app_devices WHERE id = ? AND ativo = 1').get(params.app_device_id);
   if (!appDevice) return fail(res, 404, 'Celular habilitado nao encontrado.');
 
-  const rows = getDb().prepare(alertSelectSql(`
-    WHERE a.cliente_id = ?
-      AND a.unidade_id = ?
-      AND (? IS NULL OR a.dispositivo_id = ?)
-  `)).all(appDevice.cliente_id, appDevice.unidade_id, appDevice.dispositivo_id, appDevice.dispositivo_id);
+  const rows = isAdminProfile(appDevice.usuario_perfil)
+    ? db.prepare(alertSelectSql(`
+      WHERE a.cliente_id = ?
+        AND (? IS NULL OR a.dispositivo_id = ?)
+    `)).all(appDevice.cliente_id, appDevice.dispositivo_id, appDevice.dispositivo_id)
+    : db.prepare(alertSelectSql(`
+      WHERE a.cliente_id = ?
+        AND a.unidade_id = ?
+        AND (? IS NULL OR a.dispositivo_id = ?)
+    `)).all(appDevice.cliente_id, appDevice.unidade_id, appDevice.dispositivo_id, appDevice.dispositivo_id);
 
   ok(res, rows.map(buildAlert));
 });

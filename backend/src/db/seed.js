@@ -65,8 +65,9 @@ function seedDatabase() {
     db.prepare('INSERT INTO clientes (id, nome, criado_em) VALUES (?, ?, ?)')
       .run('cliente_idvida', 'Laboratorio IDvida', createdAt);
 
-    db.prepare('INSERT INTO unidades (id, cliente_id, nome, local, criado_em) VALUES (?, ?, ?, ?, ?)')
-      .run('unidade_banco_sangue', 'cliente_idvida', 'Unidade Banco de Sangue', 'Sao Paulo - SP', createdAt);
+    const insertUnit = db.prepare('INSERT INTO unidades (id, cliente_id, nome, local, criado_em) VALUES (?, ?, ?, ?, ?)');
+    insertUnit.run('unidade_banco_sangue', 'cliente_idvida', 'Banco de Sangue', 'Unidade Bela Vista', createdAt);
+    insertUnit.run('unidade_laboratorio', 'cliente_idvida', 'Laboratorio', 'Unidade Bela Vista', createdAt);
 
     const insertDevice = db.prepare(`
       INSERT INTO dispositivos (
@@ -97,8 +98,9 @@ function seedDatabase() {
 
     db.prepare(`
       INSERT INTO activation_codes (
-        id, codigo, cliente_id, unidade_id, dispositivo_id, tipo_ativacao, ativo, criado_em
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        id, codigo, cliente_id, unidade_id, dispositivo_id, tipo_ativacao, ativo,
+        criado_em, usuario_nome, usuario_email, area_nome, usuario_perfil
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       'act_demo_app',
       'APP-DEMO-11',
@@ -107,7 +109,11 @@ function seedDatabase() {
       null,
       'app_alerta',
       1,
-      createdAt
+      createdAt,
+      'IDvida',
+      null,
+      'Banco de Sangue',
+      'area'
     );
 
     db.prepare(`
@@ -135,6 +141,7 @@ function seedDatabaseIfEmpty() {
   const row = db.prepare('SELECT COUNT(*) AS count FROM dispositivos').get();
 
   if (row.count > 0) {
+    ensureDemoReferenceData(db);
     return {
       seeded: false,
       devices_count: row.count
@@ -147,7 +154,32 @@ function seedDatabaseIfEmpty() {
   };
 }
 
+function ensureDemoReferenceData(db = getDb()) {
+  const createdAt = nowIso();
+  const client = db.prepare('SELECT id FROM clientes WHERE id = ?').get('cliente_idvida');
+  if (!client) return;
+
+  const lab = db.prepare('SELECT id FROM unidades WHERE id = ?').get('unidade_laboratorio');
+  if (!lab) {
+    db.prepare('INSERT INTO unidades (id, cliente_id, nome, local, criado_em) VALUES (?, ?, ?, ?, ?)')
+      .run('unidade_laboratorio', 'cliente_idvida', 'Laboratorio', 'Unidade Bela Vista', createdAt);
+  }
+
+  const demo = db.prepare('SELECT id FROM activation_codes WHERE codigo = ?').get('APP-DEMO-11');
+  if (demo) {
+    db.prepare(`
+      UPDATE activation_codes
+      SET
+        usuario_nome = COALESCE(usuario_nome, 'IDvida'),
+        area_nome = COALESCE(area_nome, 'Banco de Sangue'),
+        usuario_perfil = COALESCE(usuario_perfil, 'area')
+      WHERE id = ?
+    `).run(demo.id);
+  }
+}
+
 module.exports = {
   seedDatabase,
-  seedDatabaseIfEmpty
+  seedDatabaseIfEmpty,
+  ensureDemoReferenceData
 };

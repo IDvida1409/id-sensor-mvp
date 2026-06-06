@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Image,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   Pressable,
   SafeAreaView,
@@ -17,6 +18,7 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { DeviceCard } from './src/components/DeviceCard';
 import {
+  API_BASE_URL,
   acknowledgeAlert,
   activateApp,
   getAppAlerts,
@@ -32,16 +34,68 @@ const tabs = [
   { id: 'settings', icon: 'options-outline', label: 'Config.', tone: 'blue' }
 ];
 
+const ADMIN_PROFILES = new Set(['master', 'admin1', 'admin2']);
+
+const fallbackAreas = [
+  { id: 'unidade_banco_sangue', nome: 'Banco de Sangue', devices_count: 24 },
+  { id: 'unidade_laboratorio', nome: 'Laboratório', devices_count: 0 }
+];
+
 function clientDisplayName(session) {
   return (session?.cliente?.nome || 'Laboratório IDvida').replace('Laboratorio', 'Laboratório');
 }
 
-function unitDisplayName() {
-  return 'Unidade Bela Vista - Banco de Sangue';
+function userProfile(session) {
+  return String(session?.usuario?.perfil || 'area').toLowerCase();
+}
+
+function isAdminSession(session) {
+  return ADMIN_PROFILES.has(userProfile(session));
+}
+
+function unitDisplayName(session) {
+  return isAdminSession(session)
+    ? 'Unidade Bela Vista - Administrativo'
+    : 'Unidade Bela Vista - Banco de Sangue';
 }
 
 function userDisplayName(session) {
   return session?.usuario?.nome || 'IDvida';
+}
+
+function sessionAreas(session) {
+  const areas = Array.isArray(session?.areas) && session.areas.length ? session.areas : fallbackAreas;
+  const hasLaboratorio = areas.some((area) => String(area?.nome || '').toLowerCase().includes('laborat'));
+  const merged = hasLaboratorio ? areas : [...areas, fallbackAreas[1]];
+  return merged.map((area) => ({
+    ...area,
+    nome: String(area?.nome || '').replace('Laboratorio', 'Laboratório'),
+    devices_count: Number(area?.devices_count || 0)
+  }));
+}
+
+function filterDevicesByArea(devices, areaId) {
+  if (!areaId) return devices;
+  return devices.filter((device) => device?.unitId === areaId || device?.unit_id === areaId);
+}
+
+function panelFilterValue(kind) {
+  if (kind === 'all') return 'all';
+  if (kind === 'crit') return 'crit';
+  if (kind === 'warn') return 'warn';
+  if (kind === 'offline') return 'offline';
+  return 'all';
+}
+
+function openPanel(session, kind, areaName) {
+  const role = isAdminSession(session) ? userProfile(session) : 'area';
+  const filter = panelFilterValue(kind);
+  const query = [
+    `role=${encodeURIComponent(role)}`,
+    `filter=${encodeURIComponent(filter)}`,
+    `area=${encodeURIComponent(areaName || 'Banco de Sangue')}`
+  ].join('&');
+  Linking.openURL(`${API_BASE_URL}/?${query}`);
 }
 
 function buildStats(devices) {
@@ -92,11 +146,89 @@ function EmptyState({ title, caption }) {
   );
 }
 
-function TotalDevicesCard({ total }) {
+function OverviewCard({ label, value, icon, tone, disabled, onPress }) {
+  const toneStyle = styles[`overviewCard${tone}`] || styles.overviewCardGreen;
+  const iconStyle = styles[`overviewIcon${tone}`] || styles.overviewIconGreen;
+  const valueStyle = styles[`overviewValue${tone}`] || styles.overviewValueGreen;
+
   return (
-    <View style={styles.totalCard}>
-      <Text style={styles.totalValue}>{total}</Text>
-      <Text style={styles.totalSuffix}>dispositivos</Text>
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      style={[styles.overviewCard, toneStyle, disabled && styles.overviewCardDisabled]}
+    >
+      <View style={[styles.overviewIcon, iconStyle]}>
+        <Ionicons name={icon} size={25} color={colors.white} />
+      </View>
+      <Text style={[styles.overviewValue, valueStyle]}>{value}</Text>
+      <Text style={styles.overviewLabel}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function AreaSelector({ areas, selectedAreaId, onSelect }) {
+  const [open, setOpen] = useState(false);
+  const selected = areas.find((area) => area.id === selectedAreaId) || areas[0] || fallbackAreas[0];
+
+  return (
+    <View style={styles.areaPickerWrap}>
+      <Pressable onPress={() => setOpen((current) => !current)} style={styles.areaPicker}>
+        <View style={styles.areaIconBox}>
+          <Ionicons name="business-outline" size={25} color={colors.greenDark} />
+        </View>
+        <View style={styles.areaTextBlock}>
+          <Text style={styles.areaLabel}>Área selecionada</Text>
+          <Text style={styles.areaName}>{selected?.nome || 'Banco de Sangue'}</Text>
+        </View>
+        <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={24} color={colors.navy} />
+      </Pressable>
+      {open ? (
+        <View style={styles.areaOptions}>
+          {areas.map((area) => {
+            const active = area.id === selected?.id;
+            return (
+              <Pressable
+                key={area.id}
+                onPress={() => {
+                  onSelect(area.id);
+                  setOpen(false);
+                }}
+                style={[styles.areaOption, active && styles.areaOptionActive]}
+              >
+                <View>
+                  <Text style={[styles.areaOptionName, active && styles.areaOptionNameActive]}>{area.nome}</Text>
+                  <Text style={styles.areaOptionCount}>{area.devices_count} dispositivos</Text>
+                </View>
+                {active ? <Ionicons name="checkmark-circle" size={21} color={colors.green} /> : null}
+              </Pressable>
+            );
+          })}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function LastAlertsBox({ alerts, setTab }) {
+  if (alerts.length) {
+    return (
+      <Pressable onPress={() => setTab('alerts')} style={styles.lastAlertBox}>
+        <View style={[styles.lastAlertIcon, styles.lastAlertIconWarn]}>
+          <Ionicons name="notifications-outline" size={24} color={colors.white} />
+        </View>
+        <Text style={styles.lastAlertTitle}>{alerts.length} alerta(s) recente(s)</Text>
+        <Text style={styles.lastAlertCaption}>Toque para ver o histórico de eventos.</Text>
+      </Pressable>
+    );
+  }
+
+  return (
+    <View style={styles.lastAlertBox}>
+      <View style={styles.lastAlertIcon}>
+        <Ionicons name="checkmark" size={27} color={colors.greenDark} />
+      </View>
+      <Text style={styles.lastAlertTitle}>Nenhum alerta recente</Text>
+      <Text style={styles.lastAlertCaption}>Tudo está dentro dos parâmetros.</Text>
     </View>
   );
 }
@@ -198,17 +330,23 @@ function ActivationScreen({ onActivated }) {
 function Header({ session, loading, onRefresh }) {
   return (
     <View style={styles.header}>
-      <View style={styles.headerLogoRow}>
-        <Image source={require('./assets/idsensor-logo.png')} style={styles.headerLogo} resizeMode="contain" />
+      <View style={styles.headerTopSurface}>
+        <View style={styles.brandRow}>
+          <View style={styles.brandIconTile}>
+            <Image source={require('./assets/icon.png')} style={styles.brandIcon} resizeMode="contain" />
+          </View>
+          <View style={styles.brandTextBlock}>
+            <Text style={styles.brandName}><Text style={styles.brandNameGreen}>ID</Text>Sensor</Text>
+            <Text style={styles.clientName}>{clientDisplayName(session)}</Text>
+            <Text style={styles.unitName}>{unitDisplayName(session)}</Text>
+          </View>
+        </View>
         <Pressable onPress={onRefresh} style={styles.refreshButton}>
           {loading ? <ActivityIndicator size="small" color={colors.navy} /> : <Text style={styles.refreshText}>Atualizar</Text>}
         </Pressable>
       </View>
-      <Text style={styles.clientName}>{clientDisplayName(session)}</Text>
-      <Text style={styles.unitName}>{unitDisplayName(session)}</Text>
-      <View style={styles.userRow}>
-        <Ionicons name="person-circle-outline" size={28} color={colors.green} />
-        <Text style={styles.userLabel}>Usuário: </Text>
+      <View style={styles.greetingRow}>
+        <Text style={styles.greetingText}>Olá, </Text>
         <Text style={styles.userName}>{userDisplayName(session)}</Text>
       </View>
     </View>
@@ -216,22 +354,84 @@ function Header({ session, loading, onRefresh }) {
 }
 
 function HomeScreen({ devices, alerts, session, onAcknowledge, acknowledgingId, setTab }) {
-  const stats = useMemo(() => buildStats(devices), [devices]);
-  const totalDevices = stats.total || session?.devices_count || 0;
+  const areas = useMemo(() => sessionAreas(session), [session]);
+  const [selectedAreaId, setSelectedAreaId] = useState(areas[0]?.id || 'unidade_banco_sangue');
+  const admin = isAdminSession(session);
+  const selectedArea = areas.find((area) => area.id === selectedAreaId) || areas[0] || fallbackAreas[0];
+  const scopedDevices = admin ? filterDevicesByArea(devices, selectedArea?.id) : devices;
+  const stats = useMemo(() => buildStats(scopedDevices), [scopedDevices]);
+  const totalDevices = stats.total || (admin ? selectedArea?.devices_count : session?.devices_count) || 0;
   const visibleAlerts = alerts.slice(0, 4);
+  const areaName = selectedArea?.nome || 'Banco de Sangue';
+  const overviewCards = [
+    {
+      key: 'all',
+      label: 'Dispositivos',
+      value: totalDevices,
+      icon: 'thermometer-outline',
+      tone: 'Green',
+      disabled: false
+    },
+    {
+      key: 'crit',
+      label: 'Críticos',
+      value: stats.crit,
+      icon: 'alert-circle-outline',
+      tone: 'Red',
+      disabled: stats.crit <= 0
+    },
+    {
+      key: 'warn',
+      label: 'Atenção',
+      value: stats.warn,
+      icon: 'notifications-outline',
+      tone: 'Orange',
+      disabled: stats.warn <= 0
+    },
+    ...(admin ? [{
+      key: 'offline',
+      label: 'Sem comunicação',
+      value: stats.offline,
+      icon: 'cloud-offline-outline',
+      tone: 'Gray',
+      disabled: stats.offline <= 0
+    }] : [])
+  ];
 
   return (
     <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-      <SectionHeader title="Informações" caption="Total de dispositivos monitorados nesta área." />
-      <TotalDevicesCard total={totalDevices} />
+      {admin ? (
+        <AreaSelector
+          areas={areas}
+          selectedAreaId={selectedAreaId}
+          onSelect={setSelectedAreaId}
+        />
+      ) : null}
+
+      <SectionHeader title="Visão geral" />
+      <View style={styles.overviewGrid}>
+        {overviewCards.map((card) => (
+          <OverviewCard
+            key={card.key}
+            label={card.label}
+            value={card.value}
+            icon={card.icon}
+            tone={card.tone}
+            disabled={card.disabled}
+            onPress={() => openPanel(session, card.key, areaName)}
+          />
+        ))}
+      </View>
 
       <SectionHeader
         title="Últimos alertas"
-        caption={visibleAlerts.length ? 'Eventos mais recentes do cliente' : 'Nenhum alerta pendente'}
         actionLabel={alerts.length ? 'Ver alertas' : null}
         onAction={() => setTab('alerts')}
       />
-      {visibleAlerts.length ? visibleAlerts.map((alert) => (
+      {visibleAlerts.length ? (
+        <>
+          <LastAlertsBox alerts={visibleAlerts} setTab={setTab} />
+          {visibleAlerts.slice(0, 2).map((alert) => (
         <AlertCard
           key={alert.id}
           alert={alert}
@@ -239,8 +439,10 @@ function HomeScreen({ devices, alerts, session, onAcknowledge, acknowledgingId, 
           onAcknowledge={onAcknowledge}
           showAction={false}
         />
-      )) : (
-        <EmptyState title="Nenhum alerta pendente" caption="Os eventos gerados pelos alertas aparecerão aqui." />
+          ))}
+        </>
+      ) : (
+        <LastAlertsBox alerts={[]} setTab={setTab} />
       )}
     </ScrollView>
   );
@@ -606,10 +808,56 @@ const styles = StyleSheet.create({
     width: 96
   },
   header: {
-    backgroundColor: colors.panel,
-    paddingBottom: 16,
+    backgroundColor: '#eef5fc',
+    borderBottomColor: '#d7e5f4',
+    borderBottomWidth: 1,
+    paddingBottom: 22,
     paddingHorizontal: 18,
     paddingTop: 16
+  },
+  headerTopSurface: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between'
+  },
+  brandRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flex: 1,
+    paddingRight: 12
+  },
+  brandIconTile: {
+    alignItems: 'center',
+    backgroundColor: colors.white,
+    borderColor: '#d9e8f5',
+    borderRadius: 18,
+    borderWidth: 1,
+    elevation: 3,
+    height: 74,
+    justifyContent: 'center',
+    marginRight: 14,
+    shadowColor: '#0b2f55',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.10,
+    shadowRadius: 14,
+    width: 74
+  },
+  brandIcon: {
+    height: 58,
+    width: 58
+  },
+  brandTextBlock: {
+    flex: 1
+  },
+  brandName: {
+    color: '#34312d',
+    fontSize: 25,
+    fontWeight: '900',
+    letterSpacing: 0,
+    lineHeight: 29
+  },
+  brandNameGreen: {
+    color: colors.greenDark
   },
   headerLogoRow: {
     alignItems: 'center',
@@ -626,9 +874,9 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: 8,
     borderWidth: 1,
-    height: 38,
+    height: 42,
     justifyContent: 'center',
-    minWidth: 86,
+    minWidth: 96,
     paddingHorizontal: 12
   },
   refreshText: {
@@ -638,15 +886,25 @@ const styles = StyleSheet.create({
   },
   clientName: {
     color: colors.ink,
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '900',
-    marginTop: 8
+    marginTop: 6
   },
   unitName: {
     color: colors.muted,
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
     marginTop: 3
+  },
+  greetingRow: {
+    alignItems: 'baseline',
+    flexDirection: 'row',
+    marginTop: 22
+  },
+  greetingText: {
+    color: colors.ink,
+    fontSize: 22,
+    fontWeight: '800'
   },
   userRow: {
     alignItems: 'center',
@@ -660,8 +918,8 @@ const styles = StyleSheet.create({
     marginLeft: 8
   },
   userName: {
-    color: colors.navy,
-    fontSize: 14,
+    color: colors.greenDark,
+    fontSize: 22,
     fontWeight: '900'
   },
   topError: {
@@ -712,6 +970,199 @@ const styles = StyleSheet.create({
     color: colors.navy,
     fontSize: 12,
     fontWeight: '900'
+  },
+  areaPickerWrap: {
+    marginTop: 18
+  },
+  areaPicker: {
+    alignItems: 'center',
+    backgroundColor: colors.white,
+    borderColor: '#dce8f4',
+    borderRadius: 18,
+    borderWidth: 1,
+    elevation: 3,
+    flexDirection: 'row',
+    minHeight: 78,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    shadowColor: '#0b2f55',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16
+  },
+  areaIconBox: {
+    alignItems: 'center',
+    backgroundColor: '#eef9f3',
+    borderRadius: 12,
+    height: 48,
+    justifyContent: 'center',
+    marginRight: 14,
+    width: 48
+  },
+  areaTextBlock: {
+    flex: 1
+  },
+  areaLabel: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '800'
+  },
+  areaName: {
+    color: colors.ink,
+    fontSize: 20,
+    fontWeight: '900',
+    marginTop: 3
+  },
+  areaOptions: {
+    backgroundColor: colors.white,
+    borderColor: '#dce8f4',
+    borderRadius: 14,
+    borderWidth: 1,
+    marginTop: 8,
+    overflow: 'hidden'
+  },
+  areaOption: {
+    alignItems: 'center',
+    borderBottomColor: '#edf3f9',
+    borderBottomWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingVertical: 12
+  },
+  areaOptionActive: {
+    backgroundColor: '#eef9f3'
+  },
+  areaOptionName: {
+    color: colors.ink,
+    fontSize: 15,
+    fontWeight: '900'
+  },
+  areaOptionNameActive: {
+    color: colors.greenDark
+  },
+  areaOptionCount: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '700',
+    marginTop: 2
+  },
+  overviewGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12
+  },
+  overviewCard: {
+    backgroundColor: colors.white,
+    borderRadius: 18,
+    borderWidth: 1,
+    elevation: 2,
+    minHeight: 136,
+    padding: 16,
+    shadowColor: '#0b2f55',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    width: '48%'
+  },
+  overviewCardDisabled: {
+    opacity: 0.78
+  },
+  overviewCardGreen: {
+    borderColor: '#cdeedd'
+  },
+  overviewCardRed: {
+    borderColor: '#ffd2d7'
+  },
+  overviewCardOrange: {
+    borderColor: '#ffdcb7'
+  },
+  overviewCardGray: {
+    borderColor: '#d9e0ea'
+  },
+  overviewIcon: {
+    alignItems: 'center',
+    borderRadius: 25,
+    height: 50,
+    justifyContent: 'center',
+    width: 50
+  },
+  overviewIconGreen: {
+    backgroundColor: colors.green
+  },
+  overviewIconRed: {
+    backgroundColor: '#ff413c'
+  },
+  overviewIconOrange: {
+    backgroundColor: '#ff7a1a'
+  },
+  overviewIconGray: {
+    backgroundColor: '#798394'
+  },
+  overviewValue: {
+    fontSize: 42,
+    fontWeight: '900',
+    letterSpacing: 0,
+    marginTop: 14
+  },
+  overviewValueGreen: {
+    color: colors.greenDark
+  },
+  overviewValueRed: {
+    color: '#ef3430'
+  },
+  overviewValueOrange: {
+    color: '#ef6c13'
+  },
+  overviewValueGray: {
+    color: '#626b7a'
+  },
+  overviewLabel: {
+    color: colors.ink,
+    fontSize: 14,
+    fontWeight: '900',
+    marginTop: 2
+  },
+  lastAlertBox: {
+    alignItems: 'center',
+    backgroundColor: colors.white,
+    borderColor: '#dce8f4',
+    borderRadius: 18,
+    borderWidth: 1,
+    elevation: 2,
+    marginBottom: 12,
+    minHeight: 128,
+    padding: 18,
+    shadowColor: '#0b2f55',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12
+  },
+  lastAlertIcon: {
+    alignItems: 'center',
+    backgroundColor: '#e9f8ef',
+    borderRadius: 24,
+    height: 48,
+    justifyContent: 'center',
+    marginBottom: 13,
+    width: 48
+  },
+  lastAlertIconWarn: {
+    backgroundColor: colors.warn
+  },
+  lastAlertTitle: {
+    color: colors.ink,
+    fontSize: 17,
+    fontWeight: '900',
+    textAlign: 'center'
+  },
+  lastAlertCaption: {
+    color: colors.muted,
+    fontSize: 14,
+    fontWeight: '700',
+    lineHeight: 20,
+    marginTop: 5,
+    textAlign: 'center'
   },
   totalCard: {
     alignItems: 'center',
