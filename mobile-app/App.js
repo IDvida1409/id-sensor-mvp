@@ -648,13 +648,13 @@ const styles = StyleSheet.create({
   },
   userLabel: {
     color: colors.muted,
-    fontSize: 19,
-    fontWeight: '900',
+    fontSize: 14,
+    fontWeight: '700',
     marginLeft: 8
   },
   userName: {
     color: colors.navy,
-    fontSize: 19,
+    fontSize: 14,
     fontWeight: '900'
   },
   topError: {
