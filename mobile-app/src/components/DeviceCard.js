@@ -70,7 +70,8 @@ export function DeviceCard({ device, compact = false, onPress }) {
           </View>
         </View>
 
-        <View style={styles.thermo}>
+        <View style={styles.thermoWrap}>
+          <View style={styles.thermoStem} />
           <View style={styles.thermoTrack}>
             <View style={[styles.thermoFill, { height: `${level}%`, backgroundColor: meta.accent }]} />
           </View>
@@ -210,30 +211,34 @@ const styles = StyleSheet.create({
   warnMetricText: {
     color: '#4f5869'
   },
-  thermo: {
+  thermoWrap: {
     alignItems: 'center',
+    height: 140,
+    overflow: 'visible',
+    position: 'absolute',
+    right: -12,
+    top: -44,
+    width: 58
+  },
+  thermoStem: {
     backgroundColor: '#f8fafc',
     borderColor: 'rgba(188,198,212,0.92)',
     borderRadius: 22,
     borderWidth: 3,
     height: 132,
-    justifyContent: 'flex-start',
-    overflow: 'visible',
     position: 'absolute',
-    right: 0,
-    top: -44,
+    top: 0,
     width: 34
   },
   thermoTrack: {
     alignItems: 'center',
     backgroundColor: '#c6ced8',
     borderRadius: 12,
-    bottom: 20,
+    bottom: 38,
     justifyContent: 'flex-end',
-    left: 13,
     overflow: 'hidden',
     position: 'absolute',
-    top: 6,
+    top: 9,
     width: 8
   },
   thermoFill: {
@@ -244,9 +249,8 @@ const styles = StyleSheet.create({
     borderColor: '#cad7e6',
     borderRadius: 21,
     borderWidth: 3,
-    bottom: -8,
+    bottom: 0,
     height: 42,
-    left: -4,
     position: 'absolute',
     width: 42
   },
