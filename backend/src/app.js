@@ -830,10 +830,74 @@ addRoute('GET', '/app-devices', async ({ res }) => {
   ok(res, rows);
 });
 
+addRoute('GET', '/app-devices/search', async ({ query, res }) => {
+  const q = String(query.q || '').trim().toLowerCase();
+  if (q.length < 2) return ok(res, []);
+
+  const like = `%${q}%`;
+  const rows = getDb().prepare(`
+    SELECT
+      ad.id,
+      ad.ativo,
+      ad.criado_em,
+      ad.plataforma,
+      ad.modelo_aparelho,
+      COALESCE(ad.usuario_nome, ac.usuario_nome) AS usuario_nome,
+      COALESCE(ad.usuario_email, ac.usuario_email) AS usuario_email,
+      COALESCE(ad.area_nome, ac.area_nome, u.nome) AS area_nome,
+      ad.activation_code_id,
+      ac.codigo AS codigo_ativacao,
+      ac.ativo AS codigo_ativo,
+      ac.usado_em,
+      c.nome AS cliente_nome,
+      u.nome AS unidade_nome
+    FROM app_devices ad
+    JOIN activation_codes ac ON ac.id = ad.activation_code_id
+    JOIN clientes c ON c.id = ad.cliente_id
+    JOIN unidades u ON u.id = ad.unidade_id
+    WHERE ad.ativo = 1
+      AND (
+        LOWER(COALESCE(ad.usuario_nome, ac.usuario_nome, '')) LIKE ?
+        OR LOWER(COALESCE(ad.usuario_email, ac.usuario_email, '')) LIKE ?
+        OR LOWER(ac.codigo) LIKE ?
+      )
+    ORDER BY ad.criado_em DESC
+    LIMIT 12
+  `).all(like, like, like);
+
+  ok(res, rows);
+});
+
 addRoute('POST', '/app-devices/:id/deactivate', async ({ params, res }) => {
-  const result = getDb().prepare('UPDATE app_devices SET ativo = 0 WHERE id = ?').run(params.id);
-  if (!result.changes) return fail(res, 404, 'Celular habilitado nao encontrado.');
-  ok(res, { id: params.id, ativo: false });
+  const db = getDb();
+  const appDevice = db.prepare(`
+    SELECT
+      ad.*,
+      ac.codigo AS codigo_ativacao,
+      COALESCE(ad.usuario_nome, ac.usuario_nome) AS usuario_nome,
+      COALESCE(ad.usuario_email, ac.usuario_email) AS usuario_email,
+      COALESCE(ad.area_nome, ac.area_nome) AS area_nome
+    FROM app_devices ad
+    JOIN activation_codes ac ON ac.id = ad.activation_code_id
+    WHERE ad.id = ? AND ad.ativo = 1
+  `).get(params.id);
+
+  if (!appDevice) return fail(res, 404, 'Celular habilitado nao encontrado.');
+
+  db.prepare('UPDATE app_devices SET ativo = 0 WHERE id = ?').run(params.id);
+  db.prepare('UPDATE activation_codes SET ativo = 0 WHERE id = ?').run(appDevice.activation_code_id);
+
+  ok(res, {
+    id: params.id,
+    ativo: false,
+    activation_code_id: appDevice.activation_code_id,
+    codigo_ativacao: appDevice.codigo_ativacao,
+    usuario: {
+      nome: appDevice.usuario_nome || null,
+      email: appDevice.usuario_email || null,
+      area: appDevice.area_nome || null
+    }
+  });
 });
 
 addRoute('POST', '/alerts', async ({ body, res }) => {

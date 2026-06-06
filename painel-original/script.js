@@ -6586,6 +6586,210 @@ document.addEventListener('DOMContentLoaded', function(){
   });
 })();
 
+/* ===== SCRIPT BLOCK 37C | disable-linked-device-modal ===== */
+(function(){
+  const allowedRoles = new Set(['master', 'admin1', 'admin2']);
+
+  function getEl(id){ return document.getElementById(id); }
+
+  function escapeHtml(value){
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function canBindDevice(){
+    return allowedRoles.has(String(window.currentRole || 'master').toLowerCase());
+  }
+
+  function getApiBase(){
+    if(typeof window.getPanelApiBaseUrl === 'function'){
+      return window.getPanelApiBaseUrl().replace(/\/+$/, '');
+    }
+    return 'http://localhost:4000';
+  }
+
+  function closeAreaMenu(){
+    const menu = getEl('bindAreaMenu');
+    const trigger = getEl('bindUserAreaButton');
+    if(menu) menu.hidden = true;
+    if(trigger) trigger.setAttribute('aria-expanded','false');
+  }
+
+  function toggleAreaMenu(){
+    const menu = getEl('bindAreaMenu');
+    const trigger = getEl('bindUserAreaButton');
+    if(!menu || !trigger) return;
+    const open = menu.hidden;
+    menu.hidden = !open;
+    trigger.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+
+  function selectArea(option){
+    const areaInput = getEl('bindUserArea');
+    const label = getEl('bindUserAreaLabel');
+    const options = document.querySelectorAll('.bind-area-option');
+    const areaName = option?.dataset?.areaName || option?.textContent || 'Banco de Sangue';
+    if(areaInput){
+      areaInput.value = option?.dataset?.value || 'unidade_banco_sangue';
+      areaInput.dataset.areaName = areaName;
+    }
+    if(label) label.textContent = areaName;
+    options.forEach(item => item.classList.toggle('active', item === option));
+    closeAreaMenu();
+  }
+
+  function setDisableFeedback(message, type){
+    const feedback = getEl('disableDeviceFeedback');
+    if(!feedback) return;
+    feedback.textContent = message || '';
+    feedback.classList.toggle('show', !!message);
+    feedback.classList.toggle('error', type === 'error');
+  }
+
+  function resetDisableResults(){
+    const results = getEl('disableDeviceResults');
+    if(results) results.innerHTML = '';
+  }
+
+  function closeBindModal(){
+    getEl('bindDeviceOverlay')?.classList.remove('show');
+    closeAreaMenu();
+  }
+
+  function openDisableModal(){
+    if(!canBindDevice()) return;
+    closeBindModal();
+    setDisableFeedback('');
+    resetDisableResults();
+    const input = getEl('disableDeviceSearch');
+    if(input) input.value = '';
+    getEl('disableDeviceOverlay')?.classList.add('show');
+    setTimeout(() => input?.focus(), 40);
+  }
+
+  function closeDisableModal(){
+    getEl('disableDeviceOverlay')?.classList.remove('show');
+  }
+
+  function renderDisableResults(rows){
+    const results = getEl('disableDeviceResults');
+    if(!results) return;
+    if(!rows || !rows.length){
+      results.innerHTML = '<div class="disable-device-empty">Nenhum dispositivo vinculado ativo encontrado para essa busca.</div>';
+      return;
+    }
+
+    results.innerHTML = rows.map(row => `
+      <div class="disable-device-card" data-app-device-id="${escapeHtml(row.id)}">
+        <div class="disable-device-card-top">
+          <div>
+            <div class="disable-device-name">${escapeHtml(row.usuario_nome || 'Usuário sem nome')}</div>
+            <div class="disable-device-meta">${escapeHtml(row.usuario_email || 'E-mail não informado')}</div>
+            <div class="disable-device-meta">${escapeHtml(row.cliente_nome || 'Cliente')} · ${escapeHtml(row.area_nome || row.unidade_nome || 'Área vinculada')}</div>
+            <div class="disable-device-code">${escapeHtml(row.codigo_ativacao || 'Sem código')}</div>
+          </div>
+          <button class="disable-device-action" type="button" data-disable-device-id="${escapeHtml(row.id)}">Desabilitar</button>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  async function searchDisableDevice(event){
+    event.preventDefault();
+    if(!canBindDevice()) return;
+
+    const input = getEl('disableDeviceSearch');
+    const submit = getEl('submitDisableSearch');
+    const query = String(input?.value || '').trim();
+    if(query.length < 2){
+      setDisableFeedback('Digite pelo menos 2 caracteres para pesquisar.', 'error');
+      resetDisableResults();
+      return;
+    }
+
+    setDisableFeedback('Pesquisando dispositivo vinculado...');
+    resetDisableResults();
+    if(submit) submit.disabled = true;
+
+    try {
+      const response = await fetch(`${getApiBase()}/app-devices/search?q=${encodeURIComponent(query)}`, { cache:'no-store' });
+      const json = await response.json();
+      if(!response.ok || !json.ok){
+        throw new Error(json.message || 'Não foi possível pesquisar.');
+      }
+      renderDisableResults(json.data || []);
+      setDisableFeedback((json.data || []).length ? 'Selecione o vínculo que deseja desabilitar.' : '');
+    } catch(error) {
+      setDisableFeedback(error.message || 'Erro ao pesquisar dispositivo vinculado.', 'error');
+    } finally {
+      if(submit) submit.disabled = false;
+    }
+  }
+
+  async function deactivateLinkedDevice(id, button){
+    if(!id || !canBindDevice()) return;
+    const card = button?.closest?.('.disable-device-card');
+    const name = card?.querySelector?.('.disable-device-name')?.textContent || 'este usuário';
+    const confirmed = window.confirm(`Desabilitar o acesso de ${name}? O app deixará de receber alertas e o código não poderá ser reutilizado.`);
+    if(!confirmed) return;
+
+    setDisableFeedback('Desabilitando vínculo...');
+    if(button) button.disabled = true;
+
+    try {
+      const response = await fetch(`${getApiBase()}/app-devices/${encodeURIComponent(id)}/deactivate`, { method:'POST' });
+      const json = await response.json();
+      if(!response.ok || !json.ok){
+        throw new Error(json.message || 'Não foi possível desabilitar o vínculo.');
+      }
+      if(card) card.remove();
+      if(!getEl('disableDeviceResults')?.querySelector('.disable-device-card')){
+        resetDisableResults();
+      }
+      setDisableFeedback('Dispositivo vinculado desabilitado.');
+    } catch(error) {
+      if(button) button.disabled = false;
+      setDisableFeedback(error.message || 'Erro ao desabilitar dispositivo vinculado.', 'error');
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', function(){
+    getEl('bindUserAreaButton')?.addEventListener('click', function(event){
+      event.preventDefault();
+      event.stopPropagation();
+      toggleAreaMenu();
+    });
+    getEl('bindAreaMenu')?.addEventListener('click', function(event){
+      const option = event.target?.closest?.('.bind-area-option');
+      if(!option) return;
+      event.preventDefault();
+      event.stopPropagation();
+      selectArea(option);
+    });
+    getEl('openDisableDeviceModal')?.addEventListener('click', function(event){
+      event.preventDefault();
+      event.stopPropagation();
+      openDisableModal();
+    });
+    getEl('closeDisableDeviceModal')?.addEventListener('click', closeDisableModal);
+    getEl('cancelDisableDevice')?.addEventListener('click', closeDisableModal);
+    getEl('disableDeviceOverlay')?.addEventListener('click', function(event){
+      if(event.target === event.currentTarget) closeDisableModal();
+    });
+    getEl('disableDeviceForm')?.addEventListener('submit', searchDisableDevice);
+    getEl('disableDeviceResults')?.addEventListener('click', function(event){
+      const button = event.target?.closest?.('[data-disable-device-id]');
+      if(!button) return;
+      deactivateLinkedDevice(button.dataset.disableDeviceId, button);
+    });
+    document.addEventListener('click', closeAreaMenu);
+  });
+})();
+
 /* ===== SCRIPT BLOCK 38 | v22-device-search-script ===== */
 (function(){
   let searchDeviceId = null;
