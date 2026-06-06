@@ -230,7 +230,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     bottom: 20,
     justifyContent: 'flex-end',
-    left: 10,
+    left: 13,
     overflow: 'hidden',
     position: 'absolute',
     top: 6,
