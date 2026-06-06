@@ -280,6 +280,7 @@ function ScanScreen() {
 
     setLoading(true);
     setError('');
+    setDevice(null);
     try {
       const result = await getDeviceByCode(cleanCode);
       setDevice(result.card || result.device);
@@ -297,6 +298,7 @@ function ScanScreen() {
       const result = await requestPermission();
       if (!result.granted) return;
     }
+    setDevice(null);
     setError('');
     setScanLocked(false);
     setCameraOpen(true);
@@ -330,7 +332,7 @@ function ScanScreen() {
       {loading ? <Text style={styles.scanStatus}>Localizando equipamento...</Text> : null}
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
       {device ? (
-        <View style={styles.fullCardWrap}>
+        <View style={styles.scannedCardWrap}>
           <DeviceCard device={device} />
         </View>
       ) : null}
@@ -745,8 +747,9 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginTop: 5
   },
-  fullCardWrap: {
-    marginBottom: 14
+  scannedCardWrap: {
+    marginBottom: 18,
+    marginTop: 14
   },
   alertCard: {
     backgroundColor: colors.white,

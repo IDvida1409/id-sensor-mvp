@@ -1,5 +1,6 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { colors, stateColors } from '../theme/colors';
 
 function getVisualState(device) {
@@ -30,6 +31,12 @@ export function DeviceCard({ device, compact = false, onPress }) {
   const level = thermometerLevel(device);
   const minReading = Number.isFinite(Number(device?.dailyMin)) ? Number(device.dailyMin) : Number(device?.temp);
   const maxReading = Number.isFinite(Number(device?.dailyMax)) ? Number(device.dailyMax) : Number(device?.temp);
+  const batteryValue = Number(device?.battery);
+  const batteryWidth = Number.isFinite(batteryValue) ? Math.max(6, Math.min(100, batteryValue)) : 6;
+  const isWarn = visualState === 'warn';
+  const commIcon = device?.online === false
+    ? require('../../assets/comm-offline.png')
+    : require('../../assets/comm-online.png');
 
   return (
     <Pressable
@@ -37,22 +44,31 @@ export function DeviceCard({ device, compact = false, onPress }) {
       style={[
         styles.card,
         compact && styles.compactCard,
-        { backgroundColor: meta.start, borderColor: `${meta.accent}55` }
+        visualState === 'crit' || visualState === 'offline' ? styles.criticalCard : null,
+        isWarn ? styles.warnCard : null,
+        { backgroundColor: meta.start, borderColor: 'rgba(255,255,255,0.12)' }
       ]}
     >
+      <View style={styles.glow} pointerEvents="none" />
+
       <View style={styles.header}>
-        <View style={styles.titleBlock}>
-          <Text style={styles.deviceName}>{device?.name || 'Equipamento'}</Text>
-          <Text style={styles.sector}>{device?.sector || device?.local || 'Banco de Sangue'}</Text>
+        <Text style={[styles.deviceName, isWarn && styles.warnText]}>{device?.name || 'Equipamento'}</Text>
+        <View style={styles.commBadge}>
+          <Image source={commIcon} style={styles.commIcon} resizeMode="cover" />
         </View>
-        <View style={[styles.statusDot, { backgroundColor: meta.accent }]} />
       </View>
 
-      <View style={styles.body}>
-        <View style={styles.readingArea}>
-          <Text style={styles.temperature}>{formatTemp(device?.temp)}</Text>
-          <View style={styles.statusPill}>
-            <Text style={styles.statusText}>{device?.online === false ? 'SEM COMUNICACAO' : meta.label.toUpperCase()}</Text>
+      <Text style={[styles.temperature, isWarn && styles.warnText]}>{formatTemp(device?.temp)}</Text>
+
+      <View style={styles.middle}>
+        <View style={styles.metrics}>
+          <View style={[styles.metricBox, isWarn && styles.warnMetricBox]}>
+            <Text style={[styles.metricLabel, isWarn && styles.warnMetricText]}>MIN</Text>
+            <Text style={[styles.metricValue, isWarn && styles.warnMetricText]}>{formatTemp(minReading)}</Text>
+          </View>
+          <View style={[styles.metricBox, isWarn && styles.warnMetricBox]}>
+            <Text style={[styles.metricLabel, isWarn && styles.warnMetricText]}>MAX</Text>
+            <Text style={[styles.metricValue, isWarn && styles.warnMetricText]}>{formatTemp(maxReading)}</Text>
           </View>
         </View>
 
@@ -64,20 +80,17 @@ export function DeviceCard({ device, compact = false, onPress }) {
         </View>
       </View>
 
-      <View style={styles.metrics}>
-        <View style={styles.metricBox}>
-          <Text style={styles.metricLabel}>MIN</Text>
-          <Text style={styles.metricValue}>{formatTemp(minReading)}</Text>
-        </View>
-        <View style={styles.metricBox}>
-          <Text style={styles.metricLabel}>MAX</Text>
-          <Text style={styles.metricValue}>{formatTemp(maxReading)}</Text>
-        </View>
-      </View>
-
       <View style={styles.footer}>
-        <Text style={styles.footerText}>Bateria {device?.battery ?? '--'}%</Text>
-        <Text style={styles.footerText}>Umidade {device?.hum1 ?? '--'}%</Text>
+        <View style={styles.metaItem}>
+          <View style={styles.batteryIcon}>
+            <View style={[styles.batteryLevel, { width: `${batteryWidth}%` }]} />
+          </View>
+          <Text style={[styles.footerText, isWarn && styles.warnText]}>{device?.battery ?? '--'}%</Text>
+        </View>
+        <View style={styles.metaItem}>
+          <Ionicons name="water" size={15} color="#70cfff" />
+          <Text style={[styles.footerText, isWarn && styles.warnText]}>{device?.hum1 ?? '--'}%</Text>
+        </View>
       </View>
     </Pressable>
   );
@@ -85,138 +98,183 @@ export function DeviceCard({ device, compact = false, onPress }) {
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 8,
+    borderRadius: 20,
     borderWidth: 1,
     elevation: 6,
-    minHeight: 268,
-    padding: 18,
+    minHeight: 342,
+    overflow: 'hidden',
+    padding: 16,
+    position: 'relative',
     shadowColor: '#092343',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.18,
-    shadowRadius: 14
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12
+  },
+  warnCard: {
+    backgroundColor: colors.warn
+  },
+  criticalCard: {
+    backgroundColor: colors.crit
   },
   compactCard: {
     marginRight: 14,
-    minHeight: 238,
+    minHeight: 320,
     width: 292
+  },
+  glow: {
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderRadius: 160,
+    height: 220,
+    left: 30,
+    position: 'absolute',
+    top: -88,
+    width: 220
   },
   header: {
     alignItems: 'flex-start',
     flexDirection: 'row',
-    gap: 12,
     justifyContent: 'space-between'
-  },
-  titleBlock: {
-    flex: 1
   },
   deviceName: {
     color: colors.white,
+    flex: 1,
     fontSize: 20,
-    fontWeight: '800'
+    fontWeight: '900',
+    lineHeight: 24,
+    paddingRight: 50
   },
-  sector: {
-    color: '#d7e6ff',
-    fontSize: 13,
-    fontWeight: '600',
-    marginTop: 2
-  },
-  statusDot: {
-    borderColor: 'rgba(255,255,255,0.65)',
-    borderRadius: 10,
-    borderWidth: 2,
-    height: 20,
-    width: 20
-  },
-  body: {
+  commBadge: {
     alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 24
+    backgroundColor: colors.white,
+    borderRadius: 19,
+    height: 38,
+    justifyContent: 'center',
+    overflow: 'hidden',
+    position: 'absolute',
+    right: -2,
+    top: -2,
+    width: 38
   },
-  readingArea: {
-    flex: 1
+  commIcon: {
+    height: 38,
+    width: 38
+  },
+  warnText: {
+    color: '#4f5869'
   },
   temperature: {
     color: colors.white,
-    fontSize: 64,
+    fontSize: 66,
     fontWeight: '300',
-    letterSpacing: 0
+    letterSpacing: 0,
+    lineHeight: 76,
+    marginRight: 58,
+    marginTop: 32,
+    textAlign: 'center'
   },
-  statusPill: {
-    alignSelf: 'flex-start',
-    backgroundColor: 'rgba(255,255,255,0.16)',
-    borderRadius: 6,
-    marginTop: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6
-  },
-  statusText: {
-    color: colors.white,
-    fontSize: 11,
-    fontWeight: '800'
-  },
-  thermo: {
+  middle: {
     alignItems: 'center',
-    justifyContent: 'flex-end',
-    marginLeft: 14,
-    width: 46
-  },
-  thermoTrack: {
-    alignItems: 'center',
-    backgroundColor: '#e9edf4',
-    borderColor: '#bac7d8',
-    borderRadius: 16,
-    borderWidth: 4,
-    height: 102,
-    justifyContent: 'flex-end',
-    overflow: 'hidden',
-    width: 28
-  },
-  thermoFill: {
-    borderRadius: 10,
-    width: 12
-  },
-  thermoBulb: {
-    borderColor: '#cad7e6',
-    borderRadius: 21,
-    borderWidth: 4,
-    height: 42,
-    marginTop: -8,
-    width: 42
-  },
-  metrics: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 12,
     marginTop: 22
   },
+  metrics: {
+    flex: 1,
+    flexDirection: 'row',
+    gap: 10
+  },
   metricBox: {
-    backgroundColor: 'rgba(255,255,255,0.14)',
-    borderColor: 'rgba(255,255,255,0.12)',
-    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.10)',
+    borderColor: 'rgba(255,255,255,0.10)',
+    borderRadius: 10,
     borderWidth: 1,
     flex: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 10
+    minHeight: 64,
+    paddingHorizontal: 10,
+    paddingVertical: 9
+  },
+  warnMetricBox: {
+    backgroundColor: 'rgba(255,255,255,0.16)',
+    borderColor: 'rgba(255,255,255,0.08)'
   },
   metricLabel: {
     color: '#d5e3f6',
     fontSize: 11,
-    fontWeight: '900'
+    fontWeight: '900',
+    marginBottom: 7
   },
   metricValue: {
     color: colors.white,
-    fontSize: 19,
-    fontWeight: '900',
-    marginTop: 3
+    fontSize: 18,
+    fontWeight: '900'
+  },
+  warnMetricText: {
+    color: '#4f5869'
+  },
+  thermo: {
+    alignItems: 'center',
+    backgroundColor: '#f4f7fb',
+    borderColor: '#bac7d8',
+    borderRadius: 22,
+    borderWidth: 3,
+    height: 126,
+    justifyContent: 'flex-end',
+    width: 34
+  },
+  thermoTrack: {
+    alignItems: 'center',
+    backgroundColor: '#c6ced8',
+    borderRadius: 12,
+    height: 96,
+    justifyContent: 'flex-end',
+    overflow: 'hidden',
+    width: 8
+  },
+  thermoFill: {
+    borderRadius: 10,
+    width: 8
+  },
+  thermoBulb: {
+    borderColor: '#cad7e6',
+    borderRadius: 21,
+    borderWidth: 3,
+    height: 42,
+    marginBottom: -10,
+    marginTop: -4,
+    width: 42
   },
   footer: {
+    alignItems: 'center',
+    bottom: 16,
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 14
+    left: 16,
+    position: 'absolute',
+    right: 16
+  },
+  metaItem: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 7
+  },
+  batteryIcon: {
+    borderColor: 'rgba(255,255,255,0.9)',
+    borderRadius: 4,
+    borderWidth: 2,
+    height: 12,
+    justifyContent: 'center',
+    padding: 2,
+    position: 'relative',
+    width: 22
+  },
+  batteryLevel: {
+    backgroundColor: '#53d769',
+    borderRadius: 2,
+    height: 4
   },
   footerText: {
     color: '#f1f7ff',
-    fontSize: 14,
-    fontWeight: '700'
+    fontSize: 20,
+    fontWeight: '800'
   }
 });
