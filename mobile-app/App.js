@@ -98,6 +98,21 @@ function openPanel(session, kind, areaName) {
   Linking.openURL(`${API_BASE_URL}/?${query}`);
 }
 
+function extractActivationCode(input) {
+  const raw = decodeURIComponent(String(input || '').trim());
+  const direct = raw.match(/APP-[A-Z0-9]+/i);
+  if (direct) return direct[0].toUpperCase();
+
+  try {
+    const url = new URL(raw);
+    const fromQuery = url.searchParams.get('codigo') || url.searchParams.get('code');
+    if (fromQuery) return extractActivationCode(fromQuery);
+    return extractActivationCode(url.pathname);
+  } catch {
+    return raw.toUpperCase();
+  }
+}
+
 function buildStats(devices) {
   return devices.reduce(
     (acc, device) => {
@@ -279,18 +294,47 @@ function ActivationScreen({ onActivated }) {
   const [code, setCode] = useState('APP-DEMO-11');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [permission, requestPermission] = useCameraPermissions();
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [scanLocked, setScanLocked] = useState(false);
 
-  async function submit() {
+  async function activateWithCode(rawCode) {
+    const activationCode = extractActivationCode(rawCode);
+    if (!activationCode) {
+      setError('QR de ativação inválido.');
+      return;
+    }
+
+    setCode(activationCode);
     setLoading(true);
     setError('');
     try {
-      const result = await activateApp(code.trim());
+      const result = await activateApp(activationCode);
+      setCameraOpen(false);
       onActivated(result);
     } catch (err) {
       setError(err.message || 'Não foi possível ativar este aparelho.');
     } finally {
       setLoading(false);
+      setTimeout(() => setScanLocked(false), 900);
     }
+  }
+
+  async function submit() {
+    await activateWithCode(code);
+  }
+
+  async function openActivationCamera() {
+    if (!permission?.granted) {
+      const result = await requestPermission();
+      if (!result.granted) {
+        setError('Permita o uso da câmera para escanear o QR de ativação.');
+        return;
+      }
+    }
+    setError('');
+    setScanLocked(false);
+    setCameraOpen(true);
   }
 
   return (
@@ -319,6 +363,25 @@ function ActivationScreen({ onActivated }) {
           <Pressable onPress={submit} disabled={loading} style={[styles.primaryButton, loading && styles.disabledButton]}>
             {loading ? <ActivityIndicator color={colors.white} /> : <Text style={styles.primaryButtonText}>Entrar no IDsensor</Text>}
           </Pressable>
+          <Pressable onPress={openActivationCamera} disabled={loading} style={styles.secondaryButton}>
+            <Text style={styles.secondaryButtonText}>Escanear QR de ativação</Text>
+          </Pressable>
+          {cameraOpen ? (
+            <View style={styles.activationCameraBox}>
+              <CameraView
+                style={styles.camera}
+                facing="back"
+                barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
+                onBarcodeScanned={scanLocked ? undefined : ({ data }) => {
+                  setScanLocked(true);
+                  activateWithCode(data);
+                }}
+              />
+              <Pressable onPress={() => setCameraOpen(false)} style={styles.closeCameraButton}>
+                <Text style={styles.closeCameraText}>Fechar câmera</Text>
+              </Pressable>
+            </View>
+          ) : null}
         </View>
 
         <PoweredByFooter />
@@ -1289,6 +1352,13 @@ const styles = StyleSheet.create({
     backgroundColor: colors.ink,
     borderRadius: 8,
     height: 420,
+    overflow: 'hidden'
+  },
+  activationCameraBox: {
+    backgroundColor: colors.ink,
+    borderRadius: 8,
+    height: 280,
+    marginTop: 6,
     overflow: 'hidden'
   },
   camera: {
