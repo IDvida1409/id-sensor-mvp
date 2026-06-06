@@ -86,7 +86,7 @@ export function DeviceCard({ device, compact = false, onPress }) {
           <Text style={[styles.footerText, isWarn && styles.warnText]}>{device?.battery ?? '--'}%</Text>
         </View>
         <View style={[styles.metaItem, styles.humidityItem]}>
-          <Ionicons name="water" size={18} color="#70cfff" style={styles.humidityIcon} />
+          <Ionicons name="water" size={17} color="#70cfff" style={styles.humidityIcon} />
           <Text style={[styles.footerText, isWarn && styles.warnText]}>{device?.hum1 ?? '--'}%</Text>
         </View>
       </View>
@@ -221,7 +221,7 @@ const styles = StyleSheet.create({
     overflow: 'visible',
     position: 'absolute',
     right: 0,
-    top: -16,
+    top: -44,
     width: 34
   },
   thermoTrack: {
@@ -265,10 +265,11 @@ const styles = StyleSheet.create({
     gap: 7
   },
   humidityItem: {
-    gap: 12
+    gap: 9,
+    marginRight: 36
   },
   humidityIcon: {
-    marginRight: 2
+    marginRight: 0
   },
   batteryIcon: {
     borderColor: 'rgba(255,255,255,0.9)',
