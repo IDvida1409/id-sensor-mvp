@@ -14,6 +14,7 @@ import {
   View
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { DeviceCard } from './src/components/DeviceCard';
 import {
   acknowledgeAlert,
@@ -25,11 +26,19 @@ import {
 import { colors } from './src/theme/colors';
 
 const tabs = [
-  { id: 'home', icon: 'IN', label: 'Inicio' },
-  { id: 'alerts', icon: '!', label: 'Alertas' },
-  { id: 'scan', icon: 'QR', label: 'Escanear' },
-  { id: 'settings', icon: 'CFG', label: 'Config.' }
+  { id: 'home', icon: 'information-circle-outline', label: 'Informação', tone: 'green' },
+  { id: 'alerts', icon: 'notifications-outline', label: 'Alertas', tone: 'red' },
+  { id: 'scan', icon: 'qr-code-outline', label: 'Escanear', tone: 'green' },
+  { id: 'settings', icon: 'options-outline', label: 'Config.', tone: 'blue' }
 ];
+
+function clientDisplayName(session) {
+  return (session?.cliente?.nome || 'Laboratório IDvida').replace('Laboratorio', 'Laboratório');
+}
+
+function unitDisplayName() {
+  return 'Unidade Bela Vista - Banco de Sangue';
+}
 
 function buildStats(devices) {
   return devices.reduce(
@@ -79,15 +88,13 @@ function EmptyState({ title, caption }) {
   );
 }
 
-function TotalDevicesCard({ total, issueCount }) {
+function TotalDevicesCard({ total }) {
   return (
     <View style={styles.totalCard}>
-      <View>
+      <Text style={styles.totalLabel}>Total de equipamentos monitorados vinculados a este setor</Text>
+      <View style={styles.totalValueRow}>
         <Text style={styles.totalValue}>{total}</Text>
-        <Text style={styles.totalLabel}>Total de dispositivos monitorados</Text>
-      </View>
-      <View style={styles.totalBadge}>
-        <Text style={styles.totalBadgeText}>{issueCount ? `${issueCount} em evento` : 'Operacao normal'}</Text>
+        <Text style={styles.totalSuffix}>dispositivos</Text>
       </View>
     </View>
   );
@@ -102,8 +109,8 @@ function alertTone(alert) {
 function alertLabel(alert) {
   const text = `${alert?.tipo_alerta || ''} ${alert?.mensagem || ''}`.toLowerCase();
   if (text.includes('offline') || text.includes('comunic')) return 'OFFLINE';
-  if (alert?.severidade === 'critica') return 'CRITICO';
-  return 'ATENCAO';
+  if (alert?.severidade === 'critica') return 'CRÍTICO';
+  return 'ATENÇÃO';
 }
 
 function AlertCard({ alert, onAcknowledge, busy, showAction = true }) {
@@ -147,7 +154,7 @@ function ActivationScreen({ onActivated }) {
       const result = await activateApp(code.trim());
       onActivated(result);
     } catch (err) {
-      setError(err.message || 'Nao foi possivel ativar este aparelho.');
+      setError(err.message || 'Não foi possível ativar este aparelho.');
     } finally {
       setLoading(false);
     }
@@ -161,12 +168,12 @@ function ActivationScreen({ onActivated }) {
           <Image source={require('./assets/idsensor-logo.png')} style={styles.logo} resizeMode="contain" />
           <Text style={styles.activationTitle}>Ativar aparelho celular</Text>
           <Text style={styles.activationCopy}>
-            Digite o codigo enviado pelo painel ou escaneie o QR de ativacao para vincular este celular ao cliente.
+            Digite o código enviado pelo painel ou escaneie o QR de ativação para vincular este celular ao cliente.
           </Text>
         </View>
 
         <View style={styles.formBox}>
-          <Text style={styles.inputLabel}>Codigo de ativacao</Text>
+          <Text style={styles.inputLabel}>Código de ativação</Text>
           <TextInput
             autoCapitalize="characters"
             value={code}
@@ -196,8 +203,8 @@ function Header({ session, loading, onRefresh }) {
           {loading ? <ActivityIndicator size="small" color={colors.navy} /> : <Text style={styles.refreshText}>Atualizar</Text>}
         </Pressable>
       </View>
-      <Text style={styles.clientName}>{session?.cliente?.nome || 'Laboratorio IDvida'}</Text>
-      <Text style={styles.unitName}>{session?.unidade?.nome || 'Banco de Sangue'} - Banco de Sangue</Text>
+      <Text style={styles.clientName}>{clientDisplayName(session)}</Text>
+      <Text style={styles.unitName}>{unitDisplayName(session)}</Text>
     </View>
   );
 }
@@ -209,11 +216,11 @@ function HomeScreen({ devices, alerts, session, onAcknowledge, acknowledgingId, 
 
   return (
     <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-      <SectionHeader title="Informacoes" caption="Equipamentos vinculados a este setor" />
-      <TotalDevicesCard total={totalDevices} issueCount={stats.warn + stats.crit + stats.offline} />
+      <SectionHeader title="Informações" />
+      <TotalDevicesCard total={totalDevices} />
 
       <SectionHeader
-        title="Ultimos alertas"
+        title="Últimos alertas"
         caption={visibleAlerts.length ? 'Eventos mais recentes do cliente' : 'Nenhum alerta pendente'}
         actionLabel={alerts.length ? 'Ver alertas' : null}
         onAction={() => setTab('alerts')}
@@ -227,7 +234,7 @@ function HomeScreen({ devices, alerts, session, onAcknowledge, acknowledgingId, 
           showAction={false}
         />
       )) : (
-        <EmptyState title="Nenhum alerta pendente" caption="Os eventos de atencao, critico ou offline aparecem aqui." />
+        <EmptyState title="Nenhum alerta pendente" caption="Os eventos de atenção, crítico ou offline aparecem aqui." />
       )}
     </ScrollView>
   );
@@ -241,7 +248,7 @@ function AlertsScreen({ alerts, onAcknowledge, acknowledgingId }) {
     <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       <SectionHeader
         title="Alertas"
-        caption={visibleAlerts.length ? `${activeCount} ativo(s) - ultimos ${visibleAlerts.length} evento(s)` : 'Historico de eventos do cliente'}
+        caption={visibleAlerts.length ? `${activeCount} ativo(s) - últimos ${visibleAlerts.length} evento(s)` : 'Histórico de eventos do cliente'}
       />
       {visibleAlerts.length ? visibleAlerts.map((alert) => (
         <AlertCard
@@ -251,7 +258,7 @@ function AlertsScreen({ alerts, onAcknowledge, acknowledgingId }) {
           onAcknowledge={onAcknowledge}
         />
       )) : (
-        <EmptyState title="Sem alertas" caption="Quando o simulador gerar atencao, critico ou offline, os eventos aparecem aqui." />
+        <EmptyState title="Sem alertas" caption="Quando o simulador gerar atenção, crítico ou offline, os eventos aparecem aqui." />
       )}
     </ScrollView>
   );
@@ -276,7 +283,7 @@ function ScanScreen() {
       setDevice(result.card || result.device);
       setCameraOpen(false);
     } catch (err) {
-      setError(err.message || 'Nao foi possivel localizar este equipamento.');
+      setError(err.message || 'Não foi possível localizar este equipamento.');
     } finally {
       setLoading(false);
       setTimeout(() => setScanLocked(false), 900);
@@ -295,7 +302,7 @@ function ScanScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-      <SectionHeader title="Escanear equipamento" caption="O mesmo QR abre no app ou no navegador do celular" />
+      <SectionHeader title="Escanear equipamento" />
 
       {cameraOpen ? (
         <View style={styles.cameraBox}>
@@ -309,7 +316,7 @@ function ScanScreen() {
             }}
           />
           <Pressable onPress={() => setCameraOpen(false)} style={styles.closeCameraButton}>
-            <Text style={styles.closeCameraText}>Fechar camera</Text>
+            <Text style={styles.closeCameraText}>Fechar câmera</Text>
           </Pressable>
         </View>
       ) : (
@@ -346,10 +353,10 @@ function SettingsRow({ label, value, onToggle }) {
 function SettingsScreen({ settings, setSettings, session }) {
   return (
     <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-      <SectionHeader title="Configuracoes" caption="Alertas e dados deste aparelho vinculado" />
+      <SectionHeader title="Configurações" caption="Alertas e dados deste aparelho vinculado" />
       <View style={styles.settingsBox}>
         <SettingsRow
-          label="Notificacoes"
+          label="Notificações"
           value={settings.push}
           onToggle={() => setSettings((current) => ({ ...current, push: !current.push }))}
         />
@@ -359,7 +366,7 @@ function SettingsScreen({ settings, setSettings, session }) {
           onToggle={() => setSettings((current) => ({ ...current, sound: !current.sound }))}
         />
         <SettingsRow
-          label="Atualizacao automatica"
+          label="Atualização automática"
           value={settings.autoRefresh}
           onToggle={() => setSettings((current) => ({ ...current, autoRefresh: !current.autoRefresh }))}
         />
@@ -367,8 +374,8 @@ function SettingsScreen({ settings, setSettings, session }) {
 
       <View style={styles.linkedBox}>
         <Text style={styles.linkedTitle}>Aparelho vinculado</Text>
-        <Text style={styles.linkedLine}>{session?.cliente?.nome || 'Laboratorio IDvida'}</Text>
-        <Text style={styles.linkedLine}>{session?.unidade?.nome || 'Unidade Banco de Sangue'}</Text>
+        <Text style={styles.linkedLine}>{clientDisplayName(session)}</Text>
+        <Text style={styles.linkedLine}>{unitDisplayName(session)}</Text>
         <Text style={styles.linkedCode}>{session?.app_device_id || 'APP-DEMO-11'}</Text>
       </View>
 
@@ -403,7 +410,7 @@ export default function App() {
       setDevices(deviceList);
       setAlerts(alertList);
     } catch (err) {
-      setError('Servidor indisponivel. Toque em Atualizar.');
+      setError('Servidor indisponível. Toque em Atualizar.');
     } finally {
       setLoading(false);
     }
@@ -426,7 +433,7 @@ export default function App() {
       await acknowledgeAlert(alert.id, session.app_device_id);
       await loadData();
     } catch (err) {
-      setError(err.message || 'Nao foi possivel registrar ciencia.');
+      setError(err.message || 'Não foi possível registrar ciência.');
     } finally {
       setAcknowledgingId('');
     }
@@ -461,7 +468,11 @@ export default function App() {
       <View style={styles.tabBar}>
         {tabs.map((item) => (
           <Pressable key={item.id} onPress={() => setTab(item.id)} style={[styles.tabItem, tab === item.id && styles.tabItemActive]}>
-            <Text style={[styles.tabIcon, tab === item.id && styles.tabTextActive]}>{item.icon}</Text>
+            <Ionicons
+              name={item.icon}
+              size={25}
+              color={item.tone === 'red' ? colors.crit : item.tone === 'green' ? colors.green : colors.navy}
+            />
             <Text style={[styles.tabLabel, tab === item.id && styles.tabTextActive]}>{item.label}</Text>
           </Pressable>
         ))}
@@ -678,16 +689,18 @@ const styles = StyleSheet.create({
     fontWeight: '900'
   },
   totalCard: {
-    alignItems: 'center',
+    alignItems: 'flex-start',
     backgroundColor: colors.white,
-    borderColor: colors.border,
-    borderLeftColor: colors.navy,
-    borderLeftWidth: 5,
+    borderColor: '#c9ecd8',
     borderRadius: 8,
     borderWidth: 1,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
     padding: 18
+  },
+  totalValueRow: {
+    alignItems: 'baseline',
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 8
   },
   totalValue: {
     color: colors.ink,
@@ -698,22 +711,16 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontSize: 14,
     fontWeight: '900',
-    marginTop: 2
+    lineHeight: 19
   },
-  totalBadge: {
-    backgroundColor: colors.chip,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8
-  },
-  totalBadgeText: {
-    color: colors.navy,
-    fontSize: 12,
+  totalSuffix: {
+    color: colors.ink,
+    fontSize: 18,
     fontWeight: '900'
   },
   emptyState: {
     backgroundColor: colors.white,
-    borderColor: colors.border,
+    borderColor: '#c9ecd8',
     borderRadius: 8,
     borderWidth: 1,
     padding: 18
@@ -734,7 +741,7 @@ const styles = StyleSheet.create({
   },
   alertCard: {
     backgroundColor: colors.white,
-    borderColor: colors.border,
+    borderColor: '#d8e4f2',
     borderLeftColor: colors.warn,
     borderLeftWidth: 5,
     borderRadius: 8,
@@ -911,9 +918,9 @@ const styles = StyleSheet.create({
     borderTopColor: '#cfe0f2',
     borderTopWidth: 1,
     flexDirection: 'row',
-    paddingBottom: 8,
+    paddingBottom: 16,
     paddingHorizontal: 10,
-    paddingTop: 8
+    paddingTop: 10
   },
   tabItem: {
     alignItems: 'center',
@@ -922,12 +929,12 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     flex: 1,
     justifyContent: 'center',
-    minHeight: 54,
+    minHeight: 64,
     paddingVertical: 6
   },
   tabItemActive: {
     backgroundColor: colors.chip,
-    borderTopColor: colors.navy
+    borderTopColor: colors.green
   },
   tabIcon: {
     color: colors.muted,

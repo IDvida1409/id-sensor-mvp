@@ -30,18 +30,18 @@ export const stateColors = {
     start: '#df9b3f',
     end: colors.warnDark,
     accent: '#ffcf79',
-    label: 'Atencao'
+    label: 'Atenção'
   },
   crit: {
     start: colors.crit,
     end: colors.critDark,
     accent: '#ff7480',
-    label: 'Critico'
+    label: 'Crítico'
   },
   offline: {
     start: colors.crit,
     end: colors.critDark,
     accent: '#ff7480',
-    label: 'Sem comunicacao'
+    label: 'Sem comunicação'
   }
 };
