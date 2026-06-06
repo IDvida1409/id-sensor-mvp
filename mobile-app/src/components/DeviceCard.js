@@ -99,9 +99,8 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 1,
     elevation: 6,
-    minHeight: 342,
+    height: 322,
     overflow: 'hidden',
-    padding: 16,
     position: 'relative',
     shadowColor: '#092343',
     shadowOffset: { width: 0, height: 6 },
@@ -115,14 +114,19 @@ const styles = StyleSheet.create({
     backgroundColor: colors.crit
   },
   compactCard: {
+    height: 306,
     marginRight: 14,
-    minHeight: 320,
     width: 292
   },
   header: {
     alignItems: 'flex-start',
     flexDirection: 'row',
-    justifyContent: 'space-between'
+    height: 42,
+    justifyContent: 'space-between',
+    left: 18,
+    position: 'absolute',
+    right: 14,
+    top: 18
   },
   deviceName: {
     color: colors.white,
@@ -140,8 +144,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     overflow: 'hidden',
     position: 'absolute',
-    right: -2,
-    top: -2,
+    right: 0,
+    top: -4,
     width: 38
   },
   commIcon: {
@@ -157,20 +161,26 @@ const styles = StyleSheet.create({
     fontWeight: '300',
     letterSpacing: 0,
     lineHeight: 76,
-    marginRight: 58,
-    marginTop: 32,
-    textAlign: 'center'
+    left: 0,
+    position: 'absolute',
+    right: 66,
+    textAlign: 'center',
+    top: 76
   },
   middle: {
     alignItems: 'center',
     flexDirection: 'row',
     gap: 12,
-    marginTop: 22
+    left: 38,
+    position: 'absolute',
+    right: 28,
+    top: 176
   },
   metrics: {
     flex: 1,
     flexDirection: 'row',
-    gap: 10
+    gap: 10,
+    marginRight: 88
   },
   metricBox: {
     backgroundColor: 'rgba(255,255,255,0.10)',
@@ -209,7 +219,9 @@ const styles = StyleSheet.create({
     height: 132,
     justifyContent: 'flex-start',
     overflow: 'visible',
-    position: 'relative',
+    position: 'absolute',
+    right: 0,
+    top: -16,
     width: 34
   },
   thermoTrack: {
@@ -243,9 +255,9 @@ const styles = StyleSheet.create({
     bottom: 16,
     flexDirection: 'row',
     justifyContent: 'space-between',
-    left: 16,
+    left: 18,
     position: 'absolute',
-    right: 16
+    right: 18
   },
   metaItem: {
     alignItems: 'center',
