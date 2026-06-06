@@ -91,11 +91,8 @@ function EmptyState({ title, caption }) {
 function TotalDevicesCard({ total }) {
   return (
     <View style={styles.totalCard}>
-      <Text style={styles.totalLabel}>Total de equipamentos monitorados vinculados a este setor</Text>
-      <View style={styles.totalValueRow}>
-        <Text style={styles.totalValue}>{total}</Text>
-        <Text style={styles.totalSuffix}>dispositivos</Text>
-      </View>
+      <Text style={styles.totalValue}>{total}</Text>
+      <Text style={styles.totalSuffix}>dispositivos</Text>
     </View>
   );
 }
@@ -205,6 +202,10 @@ function Header({ session, loading, onRefresh }) {
       </View>
       <Text style={styles.clientName}>{clientDisplayName(session)}</Text>
       <Text style={styles.unitName}>{unitDisplayName(session)}</Text>
+      <View style={styles.userRow}>
+        <Ionicons name="person-circle-outline" size={18} color={colors.green} />
+        <Text style={styles.userText}>Usuário: IDvida</Text>
+      </View>
     </View>
   );
 }
@@ -216,7 +217,7 @@ function HomeScreen({ devices, alerts, session, onAcknowledge, acknowledgingId, 
 
   return (
     <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-      <SectionHeader title="Informações" />
+      <SectionHeader title="Informações" caption="Total de dispositivos monitorados nesta área." />
       <TotalDevicesCard total={totalDevices} />
 
       <SectionHeader
@@ -234,7 +235,7 @@ function HomeScreen({ devices, alerts, session, onAcknowledge, acknowledgingId, 
           showAction={false}
         />
       )) : (
-        <EmptyState title="Nenhum alerta pendente" caption="Os eventos de atenção, crítico ou offline aparecem aqui." />
+        <EmptyState title="Nenhum alerta pendente" caption="Os eventos gerados pelos alertas aparecerão aqui." />
       )}
     </ScrollView>
   );
@@ -598,9 +599,9 @@ const styles = StyleSheet.create({
   },
   header: {
     backgroundColor: colors.panel,
-    paddingBottom: 10,
+    paddingBottom: 16,
     paddingHorizontal: 18,
-    paddingTop: 14
+    paddingTop: 16
   },
   headerLogoRow: {
     alignItems: 'center',
@@ -638,6 +639,17 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     marginTop: 3
+  },
+  userRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 6,
+    marginTop: 8
+  },
+  userText: {
+    color: colors.muted,
+    fontSize: 13,
+    fontWeight: '800'
   },
   topError: {
     backgroundColor: '#fff3f5',
@@ -689,34 +701,25 @@ const styles = StyleSheet.create({
     fontWeight: '900'
   },
   totalCard: {
-    alignItems: 'flex-start',
+    alignItems: 'center',
     backgroundColor: colors.white,
     borderColor: '#c9ecd8',
     borderRadius: 8,
     borderWidth: 1,
-    padding: 18
-  },
-  totalValueRow: {
-    alignItems: 'baseline',
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 8
+    justifyContent: 'center',
+    minHeight: 132,
+    padding: 22
   },
   totalValue: {
     color: colors.ink,
-    fontSize: 42,
+    fontSize: 48,
     fontWeight: '900'
-  },
-  totalLabel: {
-    color: colors.muted,
-    fontSize: 14,
-    fontWeight: '900',
-    lineHeight: 19
   },
   totalSuffix: {
-    color: colors.ink,
-    fontSize: 18,
-    fontWeight: '900'
+    color: colors.muted,
+    fontSize: 16,
+    fontWeight: '900',
+    marginTop: 2
   },
   emptyState: {
     backgroundColor: colors.white,
