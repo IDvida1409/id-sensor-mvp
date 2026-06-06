@@ -40,6 +40,10 @@ function unitDisplayName() {
   return 'Unidade Bela Vista - Banco de Sangue';
 }
 
+function userDisplayName(session) {
+  return session?.usuario?.nome || 'IDvida';
+}
+
 function buildStats(devices) {
   return devices.reduce(
     (acc, device) => {
@@ -205,7 +209,7 @@ function Header({ session, loading, onRefresh }) {
       <View style={styles.userRow}>
         <Ionicons name="person-circle-outline" size={28} color={colors.green} />
         <Text style={styles.userLabel}>Usuário: </Text>
-        <Text style={styles.userName}>IDvida</Text>
+        <Text style={styles.userName}>{userDisplayName(session)}</Text>
       </View>
     </View>
   );
@@ -380,6 +384,7 @@ function SettingsScreen({ settings, setSettings, session }) {
         <Text style={styles.linkedTitle}>Aparelho vinculado</Text>
         <Text style={styles.linkedLine}>{clientDisplayName(session)}</Text>
         <Text style={styles.linkedLine}>{unitDisplayName(session)}</Text>
+        <Text style={styles.linkedLine}>Usuário: {userDisplayName(session)}</Text>
         <Text style={styles.linkedCode}>{session?.app_device_id || 'APP-DEMO-11'}</Text>
       </View>
 

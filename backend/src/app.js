@@ -11,6 +11,7 @@ const { getDb } = require('./db/database');
 const { seedDatabase } = require('./db/seed');
 const { id, activationCode } = require('./utils/ids');
 const { buildDeviceCard } = require('./services/deviceCard');
+const { sendActivationEmail } = require('./services/emailService');
 const { sendExpoPush } = require('./services/pushService');
 const {
   advanceSimulationIfNeeded,
@@ -653,10 +654,23 @@ addRoute('POST', '/activation-code', async ({ body, req, res }) => {
   const unidadeId = body.unidade_id;
   const dispositivoId = body.dispositivo_id || null;
   const tipoAtivacao = body.tipo_ativacao || 'app_alerta';
+  const usuarioNome = String(body.usuario_nome || '').trim() || null;
+  const usuarioEmail = String(body.usuario_email || '').trim().toLowerCase() || null;
+  const areaNome = String(body.area_nome || '').trim() || null;
+  const enviarEmail = body.enviar_email !== false && body.enviar_email !== 'false';
 
   if (!clienteId || !unidadeId) {
     return fail(res, 400, 'cliente_id e unidade_id sao obrigatorios.');
   }
+
+  const target = db.prepare(`
+    SELECT c.nome AS cliente_nome, u.nome AS unidade_nome
+    FROM clientes c
+    JOIN unidades u ON u.cliente_id = c.id
+    WHERE c.id = ? AND u.id = ?
+  `).get(clienteId, unidadeId);
+
+  if (!target) return fail(res, 404, 'Cliente ou unidade nao encontrados.');
 
   const prefix = tipoAtivacao === 'dispositivo_qrcode' ? 'DEV' : 'APP';
   const code = activationCode(prefix);
@@ -665,14 +679,54 @@ addRoute('POST', '/activation-code', async ({ body, req, res }) => {
 
   db.prepare(`
     INSERT INTO activation_codes (
-      id, codigo, cliente_id, unidade_id, dispositivo_id, tipo_ativacao, ativo, criado_em
-    ) VALUES (?, ?, ?, ?, ?, ?, 1, ?)
-  `).run(activationId, code, clienteId, unidadeId, dispositivoId, tipoAtivacao, createdAt);
+      id, codigo, cliente_id, unidade_id, dispositivo_id, tipo_ativacao, ativo,
+      criado_em, usuario_nome, usuario_email, area_nome
+    ) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
+  `).run(
+    activationId,
+    code,
+    clienteId,
+    unidadeId,
+    dispositivoId,
+    tipoAtivacao,
+    createdAt,
+    usuarioNome,
+    usuarioEmail,
+    areaNome
+  );
 
   const publicBase = requestPublicBase(req);
   const payload = tipoAtivacao === 'dispositivo_qrcode'
     ? buildDevicePayload(code, publicBase)
     : buildActivationPayload(code, publicBase);
+
+  let emailDelivery = { status_envio: 'skipped', message: 'Envio nao solicitado para este tipo de ativacao.' };
+  if (tipoAtivacao === 'app_alerta' && enviarEmail) {
+    try {
+      emailDelivery = await sendActivationEmail({
+        usuarioNome,
+        usuarioEmail,
+        codigo: code,
+        activationUrl: payload,
+        clienteNome: target.cliente_nome,
+        unidadeNome: target.unidade_nome,
+        areaNome
+      });
+    } catch (error) {
+      emailDelivery = {
+        status_envio: 'failed',
+        provider: 'resend',
+        message: error.message
+      };
+    }
+
+    db.prepare('UPDATE activation_codes SET email_status = ?, email_erro = ? WHERE id = ?')
+      .run(
+        emailDelivery.status_envio || null,
+        emailDelivery.status_envio === 'sent' ? null : (emailDelivery.message || null),
+        activationId
+      );
+  }
 
   ok(res, {
     id: activationId,
@@ -681,6 +735,10 @@ addRoute('POST', '/activation-code', async ({ body, req, res }) => {
     unidade_id: unidadeId,
     dispositivo_id: dispositivoId,
     tipo_ativacao: tipoAtivacao,
+    usuario_nome: usuarioNome,
+    usuario_email: usuarioEmail,
+    area_nome: areaNome,
+    email_delivery: emailDelivery,
     qr_payload: payload,
     qr_code_data_url: await buildQrDataUrl(payload),
     qr_image_url: buildQrImageUrl(payload)
@@ -712,8 +770,9 @@ addRoute('POST', '/activate', async ({ body, res }) => {
   db.prepare(`
     INSERT INTO app_devices (
       id, activation_code_id, cliente_id, unidade_id, dispositivo_id,
-      expo_push_token, plataforma, modelo_aparelho, ativo, criado_em
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+      expo_push_token, plataforma, modelo_aparelho, usuario_nome,
+      usuario_email, area_nome, ativo, criado_em
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
   `).run(
     appDeviceId,
     activation.id,
@@ -723,6 +782,9 @@ addRoute('POST', '/activate', async ({ body, res }) => {
     token,
     plataforma,
     modelo,
+    activation.usuario_nome,
+    activation.usuario_email,
+    activation.area_nome,
     createdAt
   );
 
@@ -745,6 +807,11 @@ addRoute('POST', '/activate', async ({ body, res }) => {
     unidade: {
       id: activation.unidade_id,
       nome: activation.unidade_nome
+    },
+    usuario: {
+      nome: activation.usuario_nome || null,
+      email: activation.usuario_email || null,
+      area: activation.area_nome || activation.unidade_nome
     },
     dispositivo_id: activation.dispositivo_id,
     devices_count: devicesCount

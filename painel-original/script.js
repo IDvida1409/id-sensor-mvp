@@ -4366,6 +4366,7 @@ document.getElementById('infoMacOverlay')?.addEventListener('click', ()=> openIn
 
     if(typeof renderGrid === 'function') renderGrid();
     if(typeof syncCloneButtonVisibility === 'function') syncCloneButtonVisibility();
+    if(typeof window.updateBindDeviceVisibility === 'function') window.updateBindDeviceVisibility();
   }
 
   userSwitcher.addEventListener('click', function(e){
@@ -6416,6 +6417,173 @@ document.addEventListener('DOMContentLoaded', function(){
       pushAuditEntry(d, {scope:'painel', field:label, description});
     });
   };
+})();
+
+/* ===== SCRIPT BLOCK 37B | bind-device-modal ===== */
+(function(){
+  const allowedRoles = new Set(['master', 'admin1', 'admin2']);
+
+  function getEl(id){ return document.getElementById(id); }
+
+  function escapeHtml(value){
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function canBindDevice(){
+    return allowedRoles.has(String(window.currentRole || 'master').toLowerCase());
+  }
+
+  function getApiBase(){
+    if(typeof window.getPanelApiBaseUrl === 'function'){
+      return window.getPanelApiBaseUrl().replace(/\/+$/, '');
+    }
+    return 'http://localhost:4000';
+  }
+
+  function setFeedback(message, type){
+    const feedback = getEl('bindDeviceFeedback');
+    if(!feedback) return;
+    feedback.textContent = message || '';
+    feedback.classList.toggle('show', !!message);
+    feedback.classList.toggle('error', type === 'error');
+  }
+
+  function resetResult(){
+    const result = getEl('bindDeviceResult');
+    if(!result) return;
+    result.hidden = true;
+    result.innerHTML = '';
+  }
+
+  function openModal(){
+    if(!canBindDevice()) return;
+    const overlay = getEl('bindDeviceOverlay');
+    const menu = getEl('panelConfigMenu');
+    const btn = getEl('panelConfigBtn');
+    if(menu) menu.classList.remove('show');
+    if(btn) btn.setAttribute('aria-expanded','false');
+    setFeedback('');
+    resetResult();
+    if(overlay) overlay.classList.add('show');
+    setTimeout(() => getEl('bindUserName')?.focus(), 40);
+  }
+
+  function closeModal(){
+    const overlay = getEl('bindDeviceOverlay');
+    if(overlay) overlay.classList.remove('show');
+  }
+
+  function emailStatusLabel(delivery){
+    const status = delivery?.status_envio || 'skipped';
+    if(status === 'sent') return 'E-mail enviado com sucesso.';
+    if(status === 'not_configured') return 'Código gerado. Envio de e-mail ainda não configurado no servidor.';
+    if(status === 'disabled') return 'Código gerado. Envio de e-mail desativado no servidor.';
+    if(status === 'failed') return `Código gerado. Falha no envio do e-mail: ${delivery?.message || 'verifique o provedor.'}`;
+    return 'Código gerado para ativação manual.';
+  }
+
+  function showResult(data){
+    const result = getEl('bindDeviceResult');
+    if(!result) return;
+    const payload = data?.qr_payload || '';
+    const delivery = data?.email_delivery || {};
+    result.innerHTML = `
+      <div class="bind-device-result-line">Código de ativação</div>
+      <div class="bind-device-result-code">${escapeHtml(data?.codigo || '')}</div>
+      <div class="bind-device-result-line">${escapeHtml(emailStatusLabel(delivery))}</div>
+      ${payload ? `<div class="bind-device-result-line">Link: ${escapeHtml(payload)}</div>` : ''}
+      <button class="bind-device-copy" id="copyBindDeviceCode" type="button">Copiar código</button>
+    `;
+    result.hidden = false;
+  }
+
+  async function submitForm(event){
+    event.preventDefault();
+    if(!canBindDevice()) return;
+
+    const nameInput = getEl('bindUserName');
+    const emailInput = getEl('bindUserEmail');
+    const areaSelect = getEl('bindUserArea');
+    const submit = getEl('submitBindDevice');
+    const selectedArea = areaSelect?.selectedOptions?.[0];
+
+    const usuarioNome = String(nameInput?.value || '').trim();
+    const usuarioEmail = String(emailInput?.value || '').trim();
+    const unidadeId = areaSelect?.value || 'unidade_banco_sangue';
+    const areaNome = selectedArea?.dataset?.areaName || selectedArea?.textContent || 'Banco de Sangue';
+
+    if(!usuarioNome || !usuarioEmail){
+      setFeedback('Preencha nome e e-mail do usuário.', 'error');
+      return;
+    }
+
+    setFeedback('Gerando código de ativação...');
+    resetResult();
+    if(submit) submit.disabled = true;
+
+    try {
+      const response = await fetch(`${getApiBase()}/activation-code`, {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          cliente_id:'cliente_idvida',
+          unidade_id:unidadeId,
+          usuario_nome:usuarioNome,
+          usuario_email:usuarioEmail,
+          area_nome:areaNome,
+          tipo_ativacao:'app_alerta',
+          enviar_email:true
+        })
+      });
+      const json = await response.json();
+      if(!response.ok || !json.ok){
+        throw new Error(json.message || 'Não foi possível gerar o código.');
+      }
+      showResult(json.data);
+      setFeedback('Código pronto para vínculo do smartphone.');
+    } catch(error) {
+      setFeedback(error.message || 'Erro ao gerar código de ativação.', 'error');
+    } finally {
+      if(submit) submit.disabled = false;
+    }
+  }
+
+  function updateBindDeviceVisibility(){
+    const entry = getEl('bindDeviceEntry');
+    if(entry) entry.hidden = !canBindDevice();
+  }
+
+  window.updateBindDeviceVisibility = updateBindDeviceVisibility;
+
+  document.addEventListener('DOMContentLoaded', function(){
+    getEl('openBindDeviceModal')?.addEventListener('click', function(event){
+      event.preventDefault();
+      event.stopPropagation();
+      openModal();
+    });
+    getEl('closeBindDeviceModal')?.addEventListener('click', closeModal);
+    getEl('cancelBindDevice')?.addEventListener('click', closeModal);
+    getEl('bindDeviceOverlay')?.addEventListener('click', function(event){
+      if(event.target === event.currentTarget) closeModal();
+    });
+    getEl('bindDeviceForm')?.addEventListener('submit', submitForm);
+    getEl('bindDeviceResult')?.addEventListener('click', async function(event){
+      if(event.target?.id !== 'copyBindDeviceCode') return;
+      const code = getEl('bindDeviceResult')?.querySelector('.bind-device-result-code')?.textContent || '';
+      try {
+        await navigator.clipboard.writeText(code);
+        setFeedback('Código copiado.');
+      } catch(e) {
+        setFeedback('Não foi possível copiar automaticamente. Copie o código manualmente.', 'error');
+      }
+    });
+    updateBindDeviceVisibility();
+  });
 })();
 
 /* ===== SCRIPT BLOCK 38 | v22-device-search-script ===== */

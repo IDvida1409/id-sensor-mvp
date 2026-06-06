@@ -226,6 +226,7 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     borderWidth: 3,
     height: 132,
+    left: 12,
     position: 'absolute',
     top: 0,
     width: 34
@@ -236,6 +237,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     bottom: 38,
     justifyContent: 'flex-end',
+    left: 25,
     overflow: 'hidden',
     position: 'absolute',
     top: 9,
@@ -251,6 +253,7 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     bottom: 0,
     height: 42,
+    left: 8,
     position: 'absolute',
     width: 42
   },

@@ -272,6 +272,10 @@
                 <button class="switch" id="toggleAutoRefresh" aria-label="Ativar atualização automática"></button>
               </div>
               <div class="acc-mini-status" id="autoRefreshMiniStatus"></div>
+              <div class="acc-option bind-device-entry" id="bindDeviceEntry">
+                <div class="acc-option-copy"><strong>Vincular dispositivo</strong><span>Gera um código para vincular um smartphone aos alertas da área selecionada.</span></div>
+                <button class="bind-device-plus" id="openBindDeviceModal" type="button" aria-label="Vincular dispositivo">+</button>
+              </div>
             </div>
           </div>
         </div>
@@ -590,6 +594,37 @@
     <button class="drill-back" type="button" onclick="voltarResumoDrill()">← Voltar ao resumo</button>
     <div class="drill-hint" id="drillHint">Clique nos cards da gestão para explorar os detalhes.</div>
     <div id="drillContent"></div>
+  </div>
+</div>
+
+
+<div class="info-overlay bind-device-overlay" id="bindDeviceOverlay">
+  <div class="info-modal bind-device-modal" role="dialog" aria-modal="true" aria-labelledby="bindDeviceTitle">
+    <button class="info-modal-close" id="closeBindDeviceModal" type="button" aria-label="Fechar">×</button>
+    <h2 id="bindDeviceTitle">Vincular dispositivo</h2>
+    <p class="bind-device-subtitle">Gere um código para o usuário ativar o app e receber alertas da área vinculada.</p>
+    <form id="bindDeviceForm">
+      <div class="info-field">
+        <label for="bindUserName">Nome do usuário</label>
+        <input id="bindUserName" name="usuario_nome" autocomplete="name" placeholder="Ex.: Maria Silva" required>
+      </div>
+      <div class="info-field">
+        <label for="bindUserEmail">E-mail do usuário</label>
+        <input id="bindUserEmail" name="usuario_email" type="email" autocomplete="email" placeholder="usuario@empresa.com" required>
+      </div>
+      <div class="info-field">
+        <label for="bindUserArea">Área</label>
+        <select id="bindUserArea" name="area">
+          <option value="unidade_banco_sangue" data-area-name="Banco de Sangue">Banco de Sangue</option>
+        </select>
+      </div>
+      <div class="bind-device-result" id="bindDeviceResult" hidden></div>
+      <div class="info-feedback bind-device-feedback" id="bindDeviceFeedback"></div>
+      <div class="info-actions">
+        <button class="info-btn secondary" id="cancelBindDevice" type="button">Cancelar</button>
+        <button class="info-btn primary bind-device-submit" id="submitBindDevice" type="submit">Gerar código e enviar</button>
+      </div>
+    </form>
   </div>
 </div>
 

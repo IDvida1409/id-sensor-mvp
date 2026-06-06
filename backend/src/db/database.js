@@ -140,6 +140,21 @@ function initDb() {
       updated_em TEXT NOT NULL
     );
   `);
+
+  ensureColumn(database, 'activation_codes', 'usuario_nome', 'TEXT');
+  ensureColumn(database, 'activation_codes', 'usuario_email', 'TEXT');
+  ensureColumn(database, 'activation_codes', 'area_nome', 'TEXT');
+  ensureColumn(database, 'activation_codes', 'email_status', 'TEXT');
+  ensureColumn(database, 'activation_codes', 'email_erro', 'TEXT');
+  ensureColumn(database, 'app_devices', 'usuario_nome', 'TEXT');
+  ensureColumn(database, 'app_devices', 'usuario_email', 'TEXT');
+  ensureColumn(database, 'app_devices', 'area_nome', 'TEXT');
+}
+
+function ensureColumn(database, table, column, definition) {
+  const columns = database.prepare(`PRAGMA table_info(${table})`).all();
+  if (columns.some((item) => item.name === column)) return;
+  database.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
 }
 
 module.exports = {
