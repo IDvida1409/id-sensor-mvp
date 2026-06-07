@@ -18,7 +18,6 @@ import {
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import Constants from 'expo-constants';
 import * as Device from 'expo-device';
-import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { DeviceCard } from './src/components/DeviceCard';
@@ -62,16 +61,7 @@ const ADMIN_PROFILES = new Set(['master', 'admin1', 'admin2']);
 const SESSION_STORAGE_KEY = 'idsensor.activeSession.v1';
 const DAY_MS = 24 * 60 * 60 * 1000;
 const PUSH_CHANNEL_ID = 'idsensor-alerts';
-
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-    shouldShowAlert: true,
-    shouldShowBanner: true,
-    shouldShowList: true
-  })
-});
+let notificationsModule = null;
 
 const fallbackAreas = [
   { id: 'unidade_banco_sangue', nome: 'Banco de Sangue', devices_count: 24 },
@@ -160,10 +150,29 @@ function expoProjectId() {
   return Constants.expoConfig?.extra?.eas?.projectId || Constants.easConfig?.projectId || null;
 }
 
+function getNotificationsModule() {
+  if (isExpoGoRuntime()) return null;
+  if (notificationsModule) return notificationsModule;
+
+  notificationsModule = require('expo-notifications');
+  notificationsModule.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+      shouldShowAlert: true,
+      shouldShowBanner: true,
+      shouldShowList: true
+    })
+  });
+  return notificationsModule;
+}
+
 async function registerForPushNotificationsAsync() {
   if (Platform.OS === 'web') return { token: null, status: 'unsupported_web' };
   if (isExpoGoRuntime()) return { token: null, status: 'expo_go_unsupported' };
   if (!Device.isDevice) return { token: null, status: 'physical_device_required' };
+  const Notifications = getNotificationsModule();
+  if (!Notifications) return { token: null, status: 'notifications_unavailable' };
 
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync(PUSH_CHANNEL_ID, {
