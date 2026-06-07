@@ -1,8 +1,4 @@
-const fs = require('node:fs');
-const path = require('node:path');
 const { emailEnabled, emailFrom, publicApiUrl, resendApiKey } = require('../config');
-
-const assetDir = path.resolve(__dirname, '../../../painel-original/assets');
 
 function plainTextFromHtml(html) {
   return String(html || '')
@@ -25,29 +21,6 @@ function escapeHtml(value) {
 
 function publicAssetUrl(path) {
   return `${String(publicApiUrl || '').replace(/\/+$/, '')}${path}`;
-}
-
-function inlinePngAttachment(filename, contentId) {
-  const filePath = path.join(assetDir, filename);
-  if (!fs.existsSync(filePath)) return null;
-
-  return {
-    content: fs.readFileSync(filePath).toString('base64'),
-    filename,
-    contentId
-  };
-}
-
-function buildInlineLogoAssets() {
-  const idsensor = inlinePngAttachment('idsensor-logo.png', 'idsensor-logo');
-  const idvida = inlinePngAttachment('idvida-logo.png', 'idvida-logo');
-  const attachments = [idsensor, idvida].filter(Boolean);
-
-  return {
-    attachments,
-    idsensorLogoSrc: idsensor ? 'cid:idsensor-logo' : publicAssetUrl('/assets/idsensor-logo.png'),
-    idvidaLogoSrc: idvida ? 'cid:idvida-logo' : publicAssetUrl('/assets/idvida-logo.png')
-  };
 }
 
 function formatExpiration(value) {
@@ -78,9 +51,8 @@ function buildActivationEmail({
   const safeCode = escapeHtml(codigo);
   const safeQrUrl = escapeHtml(qrImageUrl || '');
   const safeExpiration = escapeHtml(formatExpiration(expiraEm));
-  const logoAssets = buildInlineLogoAssets();
-  const idsensorLogo = escapeHtml(logoAssets.idsensorLogoSrc);
-  const idvidaLogo = escapeHtml(logoAssets.idvidaLogoSrc);
+  const idsensorLogo = escapeHtml(publicAssetUrl('/assets/idsensor-logo.png'));
+  const idvidaLogo = escapeHtml(publicAssetUrl('/assets/idvida-logo.png'));
 
   const html = `
     <div style="margin:0;background:#f4f8fc;padding:24px 0;font-family:Arial,sans-serif;color:#0f2238;line-height:1.5">
@@ -130,8 +102,7 @@ function buildActivationEmail({
   return {
     subject: 'Seu código de ativação do IDsensor',
     html,
-    text: plainTextFromHtml(html),
-    attachments: logoAssets.attachments
+    text: plainTextFromHtml(html)
   };
 }
 
@@ -161,8 +132,7 @@ async function sendActivationEmail(payload) {
       to,
       subject: content.subject,
       html: content.html,
-      text: content.text,
-      ...(content.attachments?.length ? { attachments: content.attachments } : {})
+      text: content.text
     })
   });
 
