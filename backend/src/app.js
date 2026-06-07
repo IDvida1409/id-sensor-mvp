@@ -953,6 +953,7 @@ addRoute('POST', '/activation-code', async ({ body, req, res }) => {
         usuarioEmail,
         codigo: code,
         activationUrl: payload,
+        qrImageUrl: buildQrImageUrl(payload),
         clienteNome: target.cliente_nome,
         unidadeNome: target.unidade_nome,
         areaNome,

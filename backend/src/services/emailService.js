@@ -1,9 +1,10 @@
-const { emailEnabled, emailFrom, resendApiKey } = require('../config');
+const { emailEnabled, emailFrom, publicApiUrl, resendApiKey } = require('../config');
 
 function plainTextFromHtml(html) {
   return String(html || '')
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/p>/gi, '\n\n')
+    .replace(/<\/div>/gi, '\n')
     .replace(/<[^>]+>/g, '')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
@@ -18,25 +19,88 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
-function buildActivationEmail({ usuarioNome, codigo, activationUrl, clienteNome, unidadeNome, areaNome }) {
+function publicAssetUrl(path) {
+  return `${String(publicApiUrl || '').replace(/\/+$/, '')}${path}`;
+}
+
+function formatExpiration(value) {
+  if (!value) return '24 horas após a geração';
+  return new Date(value).toLocaleString('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+}
+
+function buildActivationEmail({
+  usuarioNome,
+  codigo,
+  activationUrl,
+  qrImageUrl,
+  clienteNome,
+  unidadeNome,
+  areaNome,
+  expiraEm
+}) {
   const safeName = escapeHtml(usuarioNome || 'usuário');
   const safeArea = escapeHtml(areaNome || unidadeNome || 'área vinculada');
   const safeClient = escapeHtml(clienteNome || 'cliente');
   const safeCode = escapeHtml(codigo);
-  const safeUrl = escapeHtml(activationUrl);
+  const safeQrUrl = escapeHtml(qrImageUrl || '');
+  const safeExpiration = escapeHtml(formatExpiration(expiraEm));
+  const idsensorLogo = escapeHtml(publicAssetUrl('/assets/idsensor-logo.png'));
+  const idvidaLogo = escapeHtml(publicAssetUrl('/assets/idvida-logo.png'));
+
   const html = `
-    <div style="font-family:Arial,sans-serif;color:#0f2238;line-height:1.5">
-      <h2 style="margin:0 0 12px">Vincular aparelho ao IDsensor</h2>
-      <p>Olá, ${safeName}.</p>
-      <p>Use o código abaixo para vincular o celular aos alertas do ${safeClient} - ${safeArea}.</p>
-      <p style="font-size:28px;font-weight:800;letter-spacing:2px;margin:22px 0;color:#0d3b66">${safeCode}</p>
-      <p>Link de ativação: <a href="${safeUrl}">${safeUrl}</a></p>
-      <p>Depois da ativação, este aparelho receberá os alertas da área vinculada.</p>
+    <div style="margin:0;background:#f4f8fc;padding:24px 0;font-family:Arial,sans-serif;color:#0f2238;line-height:1.5">
+      <div style="max-width:560px;margin:0 auto;background:#ffffff;border:1px solid #dbe6f3;border-radius:18px;padding:28px">
+        <div style="margin-bottom:24px">
+          <img src="${idsensorLogo}" alt="IDsensor" style="display:block;width:150px;max-width:48%;height:auto">
+        </div>
+
+        <p style="margin:0 0 14px;font-size:16px">Olá, <strong>${safeName}</strong>.</p>
+        <p style="margin:0 0 14px;font-size:15px;color:#344963">
+          Você recebeu um código para ativar o app IDsensor e acompanhar os alertas de
+          <strong>${safeClient} - ${safeArea}</strong>.
+        </p>
+        <p style="margin:0 0 18px;font-size:15px;color:#344963">
+          Abra o app no celular ou tablet, escaneie o QR Code abaixo ou digite o código de ativação.
+        </p>
+
+        <div style="border:1px solid #dbe6f3;border-radius:16px;background:#f8fbff;padding:20px;text-align:center;margin:20px 0">
+          ${safeQrUrl ? `<img src="${safeQrUrl}" alt="QR Code de ativação" style="display:block;width:190px;height:190px;margin:0 auto 16px">` : ''}
+          <div style="font-size:12px;font-weight:700;color:#667892;text-transform:uppercase;letter-spacing:.08em">Código de ativação</div>
+          <div style="font-size:30px;font-weight:800;letter-spacing:2px;margin-top:6px;color:#0d3b66">${safeCode}</div>
+        </div>
+
+        <div style="background:#fff8e8;border:1px solid #f1d9a9;border-radius:14px;padding:14px 16px;margin:18px 0;color:#604515;font-size:14px">
+          Este código vale até <strong>${safeExpiration}</strong> e só pode ser usado uma vez.
+        </div>
+
+        <p style="margin:0 0 10px;font-size:14px;color:#344963">
+          Se o código expirar, solicite um novo código à área responsável.
+        </p>
+        <p style="margin:0 0 18px;font-size:14px;color:#344963">
+          Se o app for desinstalado ou o aparelho for trocado, também será necessário solicitar uma nova ativação.
+        </p>
+
+        <p style="margin:20px 0 0;font-size:12px;color:#7a8ba3">
+          Este e-mail foi enviado automaticamente. Não responda esta mensagem.
+        </p>
+
+        <div style="border-top:1px solid #e6edf5;margin-top:24px;padding-top:18px;text-align:center">
+          <span style="display:block;font-size:11px;color:#7a8ba3;font-weight:700;margin-bottom:8px">Powered by</span>
+          <img src="${idvidaLogo}" alt="IDvida" style="display:inline-block;height:32px;width:auto">
+        </div>
+      </div>
     </div>
   `;
 
   return {
-    subject: `Código de ativação IDsensor - ${safeArea}`,
+    subject: 'Seu código de ativação do IDsensor',
     html,
     text: plainTextFromHtml(html)
   };
