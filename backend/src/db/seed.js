@@ -44,24 +44,15 @@ function geladeira(index) {
   };
 }
 
-const DEMO_APP_ACTIVATION_CODES = [
-  {
-    id: 'act_vinicius_admin',
-    codigo: 'APP-430E091F',
-    usuario_nome: 'Vinicius',
-    area_nome: 'Administrativo',
-    usuario_perfil: 'admin1'
-  },
-  {
-    id: 'act_idvida_banco_sangue',
-    codigo: 'APP-2131C465',
-    usuario_nome: 'IDvida',
-    area_nome: 'Banco de Sangue',
-    usuario_perfil: 'area'
-  }
-];
+const DEMO_APP_ACTIVATION_CODES = [];
 
-const DEACTIVATED_DEMO_CODES = ['APP-DEMO-11', 'APP-850A76B2', 'APP-607A8643'];
+const DEACTIVATED_DEMO_CODES = [
+  'APP-DEMO-11',
+  'APP-850A76B2',
+  'APP-607A8643',
+  'APP-430E091F',
+  'APP-2131C465'
+];
 
 function ensureAppActivationCode(db, activation, createdAt) {
   const current = db.prepare('SELECT id FROM activation_codes WHERE codigo = ?').get(activation.codigo);
@@ -169,7 +160,7 @@ function seedDatabase() {
   return {
     cliente_id: 'cliente_idvida',
     unidade_id: 'unidade_banco_sangue',
-    activation_code: 'APP-DEMO-11',
+    activation_code: null,
     devices_count: 24
   };
 }

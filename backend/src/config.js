@@ -31,6 +31,7 @@ module.exports = {
   emailEnabled: String(process.env.EMAIL_ENABLED || 'true') === 'true',
   emailFrom: process.env.EMAIL_FROM || '',
   resendApiKey: process.env.RESEND_API_KEY || '',
+  appDeviceTokenSecret: process.env.APP_DEVICE_TOKEN_SECRET || 'idsensor-mvp-local-device-token-secret',
   autoSeedDemoData: String(process.env.AUTO_SEED_DEMO_DATA || 'true') === 'true',
   version: '0.1.0'
 };

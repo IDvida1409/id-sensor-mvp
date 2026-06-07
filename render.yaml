@@ -12,5 +12,7 @@ services:
         value: true
       - key: EXPO_PUSH_ENABLED
         value: false
+      - key: APP_DEVICE_TOKEN_SECRET
+        value: idsensor-mvp-test-device-token-secret
       - key: PUBLIC_API_URL
         value: https://id-sensor-mvp.onrender.com

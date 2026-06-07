@@ -65,6 +65,7 @@ function initDb() {
       tipo_ativacao TEXT NOT NULL,
       ativo INTEGER NOT NULL DEFAULT 1,
       criado_em TEXT NOT NULL,
+      expira_em TEXT,
       usado_em TEXT,
       FOREIGN KEY (cliente_id) REFERENCES clientes(id),
       FOREIGN KEY (unidade_id) REFERENCES unidades(id),
@@ -147,6 +148,7 @@ function initDb() {
   ensureColumn(database, 'activation_codes', 'usuario_perfil', 'TEXT');
   ensureColumn(database, 'activation_codes', 'email_status', 'TEXT');
   ensureColumn(database, 'activation_codes', 'email_erro', 'TEXT');
+  ensureColumn(database, 'activation_codes', 'expira_em', 'TEXT');
   ensureColumn(database, 'app_devices', 'usuario_nome', 'TEXT');
   ensureColumn(database, 'app_devices', 'usuario_email', 'TEXT');
   ensureColumn(database, 'app_devices', 'area_nome', 'TEXT');

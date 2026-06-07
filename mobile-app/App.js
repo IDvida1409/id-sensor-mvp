@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   AppState,
@@ -135,6 +135,20 @@ function extractActivationCode(input) {
   } catch {
     return raw.toUpperCase();
   }
+}
+
+async function activateMobileSession(rawCode) {
+  const activationCode = extractActivationCode(rawCode);
+  if (!activationCode) {
+    throw new Error('QR de ativação inválido.');
+  }
+
+  const result = await activateApp(activationCode);
+
+  return {
+    ...result,
+    activation_code: activationCode
+  };
 }
 
 function buildStats(devices) {
@@ -430,7 +444,7 @@ function ActivationScreen({ onActivated }) {
     setLoading(true);
     setError('');
     try {
-      const result = await activateApp(activationCode);
+      const result = await activateMobileSession(activationCode);
       setCameraOpen(false);
       await onActivated(result);
     } catch (err) {
@@ -832,12 +846,15 @@ export default function App() {
   const [alerts, setAlerts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [inAppNotification, setInAppNotification] = useState(null);
   const [acknowledgingId, setAcknowledgingId] = useState('');
   const [settings, setSettings] = useState({
     push: true,
     sound: true,
     autoRefresh: true
   });
+  const notifiedAlertIdsRef = useRef(new Set());
+  const alertNotificationReadyRef = useRef(false);
 
   useEffect(() => {
     let mounted = true;
@@ -870,6 +887,8 @@ export default function App() {
   }, []);
 
   const handleActivated = useCallback(async (activatedSession) => {
+    notifiedAlertIdsRef.current = new Set();
+    alertNotificationReadyRef.current = false;
     setSession(activatedSession);
     try {
       await AsyncStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(activatedSession));
@@ -878,6 +897,19 @@ export default function App() {
     }
   }, []);
 
+  const recoverStoredSession = useCallback(async () => {
+    const activationCode = session?.activation_code;
+    if (!activationCode) return null;
+
+    try {
+      const recoveredSession = await activateMobileSession(activationCode);
+      await handleActivated(recoveredSession);
+      return recoveredSession;
+    } catch {
+      return null;
+    }
+  }, [handleActivated, session?.activation_code]);
+
   const loadData = useCallback(async () => {
     if (!session) return;
     setLoading(true);
@@ -885,12 +917,15 @@ export default function App() {
     try {
       const [deviceList, alertList] = await Promise.all([
         getDevices(),
-        getAppAlerts(session.app_device_id)
+        getAppAlerts(session.app_device_id, session.app_device_token)
       ]);
       setDevices(deviceList);
       setAlerts(alertList);
     } catch (err) {
       if (String(err.message || '').toLowerCase().includes('celular habilitado')) {
+        const recoveredSession = await recoverStoredSession();
+        if (recoveredSession) return;
+
         await AsyncStorage.removeItem(SESSION_STORAGE_KEY);
         setSession(null);
         setDevices([]);
@@ -902,7 +937,7 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, [session]);
+  }, [recoverStoredSession, session]);
 
   const openAlertsView = useCallback((mode = 'latest') => {
     setAlertViewMode(mode);
@@ -927,7 +962,7 @@ export default function App() {
     if (!pendingAlerts.length || !session?.app_device_id) return;
 
     setAcknowledgingId('bulk');
-    Promise.all(pendingAlerts.map((alert) => acknowledgeAlert(alert.id, session.app_device_id)
+    Promise.all(pendingAlerts.map((alert) => acknowledgeAlert(alert.id, session.app_device_id, session.app_device_token)
       .then(() => true)
       .catch(() => false)))
       .then((results) => {
@@ -959,11 +994,51 @@ export default function App() {
     return () => subscription.remove();
   }, [loadData, session]);
 
+  useEffect(() => {
+    notifiedAlertIdsRef.current = new Set();
+    alertNotificationReadyRef.current = false;
+  }, [session?.app_device_id]);
+
+  useEffect(() => {
+    if (!session?.app_device_id) return;
+
+    const now = Date.now();
+    const unseenAlerts = alerts.filter((alert) => (
+      alert?.id && isAlertFromLast24Hours(alert, now) && !isAlertViewed(alert)
+    ));
+
+    if (!alertNotificationReadyRef.current) {
+      unseenAlerts.forEach((alert) => notifiedAlertIdsRef.current.add(alert.id));
+      alertNotificationReadyRef.current = true;
+      return;
+    }
+
+    if (!settings.push) return;
+
+    unseenAlerts
+      .filter((alert) => !notifiedAlertIdsRef.current.has(alert.id))
+      .slice(0, 4)
+      .forEach((alert) => {
+        notifiedAlertIdsRef.current.add(alert.id);
+        setInAppNotification({
+          id: alert.id,
+          title: alert?.dispositivo?.nome || 'Alerta IDsensor',
+          message: alertDisplayMessage(alert)
+        });
+      });
+  }, [alerts, session?.app_device_id, settings.push, settings.sound]);
+
+  useEffect(() => {
+    if (!inAppNotification) return undefined;
+    const timeout = setTimeout(() => setInAppNotification(null), 5500);
+    return () => clearTimeout(timeout);
+  }, [inAppNotification]);
+
   async function handleAcknowledge(alert) {
     setAcknowledgingId(alert.id);
     setError('');
     try {
-      await acknowledgeAlert(alert.id, session.app_device_id);
+      await acknowledgeAlert(alert.id, session.app_device_id, session.app_device_token);
       await loadData();
     } catch (err) {
       setError(err.message || 'Não foi possível registrar ciência.');
@@ -996,6 +1071,23 @@ export default function App() {
       <StatusBar barStyle="dark-content" backgroundColor={colors.panel} />
       <Header session={session} loading={loading} onRefresh={loadData} />
       {error ? <Text style={styles.topError}>{error}</Text> : null}
+      {inAppNotification ? (
+        <Pressable
+          onPress={() => {
+            setInAppNotification(null);
+            openAlertsView('latest');
+          }}
+          style={styles.inAppNotification}
+        >
+          <View style={styles.inAppNotificationIcon}>
+            <Ionicons name="notifications-outline" size={20} color={colors.white} />
+          </View>
+          <View style={styles.inAppNotificationText}>
+            <Text style={styles.inAppNotificationTitle}>{inAppNotification.title}</Text>
+            <Text style={styles.inAppNotificationMessage}>{inAppNotification.message}</Text>
+          </View>
+        </Pressable>
+      ) : null}
 
       <View style={styles.bodyArea}>
         {tab === 'home' ? (
@@ -1290,6 +1382,39 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     paddingHorizontal: 18,
     paddingVertical: 7
+  },
+  inAppNotification: {
+    alignItems: 'center',
+    backgroundColor: colors.navy,
+    flexDirection: 'row',
+    gap: 10,
+    marginHorizontal: 18,
+    marginTop: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 8
+  },
+  inAppNotificationIcon: {
+    alignItems: 'center',
+    backgroundColor: colors.crit,
+    borderRadius: 18,
+    height: 36,
+    justifyContent: 'center',
+    width: 36
+  },
+  inAppNotificationText: {
+    flex: 1
+  },
+  inAppNotificationTitle: {
+    color: colors.white,
+    fontSize: 13,
+    fontWeight: '900'
+  },
+  inAppNotificationMessage: {
+    color: '#d9e6f5',
+    fontSize: 12,
+    fontWeight: '700',
+    marginTop: 2
   },
   bodyArea: {
     flex: 1

@@ -37,6 +37,7 @@ async function sendExpoPush({ token, alert, device }) {
     title: 'Alerta IDsensor',
     body,
     sound: 'default',
+    channelId: 'idsensor-alerts',
     priority: 'high',
     data: {
       alert_id: alert.id,

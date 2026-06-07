@@ -5,6 +5,7 @@ const {
   buildQrImageUrl,
   extractScannedCode
 } = require('./utils/qr');
+const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const { getDb } = require('./db/database');
@@ -23,7 +24,7 @@ const {
   startSimulation,
   stopSimulation
 } = require('./services/simulationService');
-const { publicApiUrl, version } = require('./config');
+const { appDeviceTokenSecret, publicApiUrl, version } = require('./config');
 
 const routes = [];
 const panelDir = path.resolve(__dirname, '../../painel-original');
@@ -44,6 +45,146 @@ const staticMimeTypes = {
 
 function nowIso() {
   return new Date().toISOString();
+}
+
+const ACTIVATION_CODE_TTL_MS = 24 * 60 * 60 * 1000;
+
+function activationExpiresAt(createdAt = Date.now()) {
+  return new Date(new Date(createdAt).getTime() + ACTIVATION_CODE_TTL_MS).toISOString();
+}
+
+function isExpiredIso(value) {
+  if (!value) return false;
+  const timestamp = new Date(value).getTime();
+  return Number.isFinite(timestamp) && timestamp <= Date.now();
+}
+
+function encodeTokenPayload(payload) {
+  return Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
+}
+
+function signTokenPayload(encodedPayload) {
+  return crypto.createHmac('sha256', appDeviceTokenSecret)
+    .update(encodedPayload)
+    .digest('base64url');
+}
+
+function createAppDeviceToken(appDevice, activation) {
+  const payload = {
+    v: 1,
+    app_device_id: appDevice.id,
+    activation_code_id: appDevice.activation_code_id,
+    activation_codigo: activation.codigo,
+    cliente_id: appDevice.cliente_id,
+    unidade_id: appDevice.unidade_id,
+    dispositivo_id: appDevice.dispositivo_id || null,
+    usuario_nome: appDevice.usuario_nome || null,
+    usuario_email: appDevice.usuario_email || null,
+    area_nome: appDevice.area_nome || null,
+    usuario_perfil: normalizeUserProfile(appDevice.usuario_perfil),
+    criado_em: appDevice.criado_em,
+    expira_em: activation.expira_em || null
+  };
+  const encodedPayload = encodeTokenPayload(payload);
+  return `${encodedPayload}.${signTokenPayload(encodedPayload)}`;
+}
+
+function verifyAppDeviceToken(token) {
+  const raw = String(token || '').trim();
+  const [encodedPayload, signature] = raw.split('.');
+  if (!encodedPayload || !signature) return null;
+
+  const expected = signTokenPayload(encodedPayload);
+  const expectedBuffer = Buffer.from(expected);
+  const receivedBuffer = Buffer.from(signature);
+  if (expectedBuffer.length !== receivedBuffer.length) return null;
+  if (!crypto.timingSafeEqual(expectedBuffer, receivedBuffer)) return null;
+
+  try {
+    const payload = JSON.parse(Buffer.from(encodedPayload, 'base64url').toString('utf8'));
+    return payload?.v === 1 && payload?.app_device_id ? payload : null;
+  } catch {
+    return null;
+  }
+}
+
+function appDeviceTokenFromRequest(req, body = {}) {
+  const authorization = req?.headers?.authorization || '';
+  if (authorization.toLowerCase().startsWith('bearer ')) return authorization.slice(7).trim();
+  return body.app_device_token || '';
+}
+
+function ensureRecoveredAppDevice(db, payload) {
+  if (!payload?.app_device_id || !payload?.cliente_id || !payload?.unidade_id) return null;
+
+  const existing = db.prepare('SELECT * FROM app_devices WHERE id = ?').get(payload.app_device_id);
+  if (existing) return existing.ativo ? existing : null;
+
+  const client = db.prepare('SELECT id FROM clientes WHERE id = ?').get(payload.cliente_id);
+  const unit = db.prepare('SELECT id FROM unidades WHERE id = ?').get(payload.unidade_id);
+  if (!client || !unit) return null;
+
+  const createdAt = payload.criado_em || nowIso();
+  const activationCode = payload.activation_codigo || `RECOVERED-${String(payload.app_device_id).slice(-8).toUpperCase()}`;
+  let activationId = payload.activation_code_id || id('act_recovered');
+  const activationById = db.prepare('SELECT id FROM activation_codes WHERE id = ?').get(activationId);
+  const activationByCode = db.prepare('SELECT id FROM activation_codes WHERE codigo = ?').get(activationCode);
+
+  if (activationById) {
+    activationId = activationById.id;
+  } else if (activationByCode) {
+    activationId = activationByCode.id;
+  } else {
+    db.prepare(`
+      INSERT INTO activation_codes (
+        id, codigo, cliente_id, unidade_id, dispositivo_id, tipo_ativacao, ativo,
+        criado_em, expira_em, usado_em, usuario_nome, usuario_email, area_nome, usuario_perfil
+      ) VALUES (?, ?, ?, ?, ?, 'app_alerta', 0, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      activationId,
+      activationCode,
+      payload.cliente_id,
+      payload.unidade_id,
+      payload.dispositivo_id || null,
+      createdAt,
+      payload.expira_em || createdAt,
+      createdAt,
+      payload.usuario_nome || null,
+      payload.usuario_email || null,
+      payload.area_nome || null,
+      normalizeUserProfile(payload.usuario_perfil)
+    );
+  }
+
+  db.prepare(`
+    INSERT INTO app_devices (
+      id, activation_code_id, cliente_id, unidade_id, dispositivo_id,
+      expo_push_token, plataforma, modelo_aparelho, usuario_nome,
+      usuario_email, area_nome, usuario_perfil, ativo, criado_em
+    ) VALUES (?, ?, ?, ?, ?, NULL, 'restored', 'Sessão restaurada', ?, ?, ?, ?, 1, ?)
+  `).run(
+    payload.app_device_id,
+    activationId,
+    payload.cliente_id,
+    payload.unidade_id,
+    payload.dispositivo_id || null,
+    payload.usuario_nome || null,
+    payload.usuario_email || null,
+    payload.area_nome || null,
+    normalizeUserProfile(payload.usuario_perfil),
+    createdAt
+  );
+
+  return db.prepare('SELECT * FROM app_devices WHERE id = ? AND ativo = 1').get(payload.app_device_id);
+}
+
+function getAuthorizedAppDevice(db, appDeviceId, req, body = {}) {
+  const current = db.prepare('SELECT * FROM app_devices WHERE id = ? AND ativo = 1').get(appDeviceId);
+  if (current) return current;
+
+  const payload = verifyAppDeviceToken(appDeviceTokenFromRequest(req, body));
+  if (!payload || payload.app_device_id !== appDeviceId) return null;
+  return ensureRecoveredAppDevice(db, payload);
 }
 
 const ADMIN_PROFILES = new Set(['master', 'admin1', 'admin2']);
@@ -648,8 +789,12 @@ addRoute('GET', '/a/:codigo', async ({ params, req, res }) => {
     FROM activation_codes ac
     JOIN clientes c ON c.id = ac.cliente_id
     JOIN unidades u ON u.id = ac.unidade_id
-    WHERE ac.codigo = ? AND ac.ativo = 1 AND ac.tipo_ativacao = 'app_alerta'
-  `).get(code);
+    WHERE ac.codigo = ?
+      AND ac.ativo = 1
+      AND ac.tipo_ativacao = 'app_alerta'
+      AND ac.usado_em IS NULL
+      AND (ac.expira_em IS NULL OR ac.expira_em > ?)
+  `).get(code, nowIso());
 
   return html(res, activation ? 200 : 404, renderActivationQrPage(
     activation,
@@ -757,12 +902,29 @@ addRoute('POST', '/activation-code', async ({ body, req, res }) => {
   const code = activationCode(prefix);
   const activationId = id('act');
   const createdAt = nowIso();
+  const expiresAt = activationExpiresAt(createdAt);
+
+  if (tipoAtivacao === 'app_alerta') {
+    db.prepare(`
+      UPDATE activation_codes
+      SET ativo = 0
+      WHERE cliente_id = ?
+        AND unidade_id = ?
+        AND tipo_ativacao = 'app_alerta'
+        AND ativo = 1
+        AND usado_em IS NULL
+        AND COALESCE(usuario_email, '') = COALESCE(?, '')
+        AND COALESCE(usuario_nome, '') = COALESCE(?, '')
+        AND COALESCE(area_nome, '') = COALESCE(?, '')
+        AND COALESCE(usuario_perfil, '') = COALESCE(?, '')
+    `).run(clienteId, unidadeId, usuarioEmail, usuarioNome, areaNome, usuarioPerfil);
+  }
 
   db.prepare(`
     INSERT INTO activation_codes (
       id, codigo, cliente_id, unidade_id, dispositivo_id, tipo_ativacao, ativo,
-      criado_em, usuario_nome, usuario_email, area_nome, usuario_perfil
-    ) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)
+      criado_em, expira_em, usuario_nome, usuario_email, area_nome, usuario_perfil
+    ) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)
   `).run(
     activationId,
     code,
@@ -771,6 +933,7 @@ addRoute('POST', '/activation-code', async ({ body, req, res }) => {
     dispositivoId,
     tipoAtivacao,
     createdAt,
+    expiresAt,
     usuarioNome,
     usuarioEmail,
     areaNome,
@@ -792,7 +955,8 @@ addRoute('POST', '/activation-code', async ({ body, req, res }) => {
         activationUrl: payload,
         clienteNome: target.cliente_nome,
         unidadeNome: target.unidade_nome,
-        areaNome
+        areaNome,
+        expiraEm: expiresAt
       });
     } catch (error) {
       emailDelivery = {
@@ -821,6 +985,7 @@ addRoute('POST', '/activation-code', async ({ body, req, res }) => {
     usuario_email: usuarioEmail,
     area_nome: areaNome,
     usuario_perfil: usuarioPerfil,
+    expira_em: expiresAt,
     email_delivery: emailDelivery,
     qr_payload: payload,
     qr_code_data_url: await buildQrDataUrl(payload),
@@ -842,10 +1007,16 @@ addRoute('POST', '/activate', async ({ body, res }) => {
     FROM activation_codes ac
     JOIN clientes c ON c.id = ac.cliente_id
     JOIN unidades u ON u.id = ac.unidade_id
-    WHERE ac.codigo = ? AND ac.ativo = 1 AND ac.tipo_ativacao = 'app_alerta'
+    WHERE ac.codigo = ? AND ac.tipo_ativacao = 'app_alerta'
   `).get(codigo);
 
   if (!activation) return fail(res, 404, 'Código inválido ou inativo.');
+  if (activation.usado_em) return fail(res, 409, 'Código de ativação já utilizado.');
+  if (!activation.ativo) return fail(res, 404, 'Código inválido ou inativo.');
+  if (isExpiredIso(activation.expira_em)) {
+    db.prepare('UPDATE activation_codes SET ativo = 0 WHERE id = ?').run(activation.id);
+    return fail(res, 410, 'Código de ativação expirado. Gere um novo código no painel.');
+  }
 
   const appDeviceId = id('appdev');
   const createdAt = nowIso();
@@ -873,7 +1044,7 @@ addRoute('POST', '/activate', async ({ body, res }) => {
     createdAt
   );
 
-  db.prepare('UPDATE activation_codes SET usado_em = COALESCE(usado_em, ?) WHERE id = ?')
+  db.prepare('UPDATE activation_codes SET usado_em = COALESCE(usado_em, ?), ativo = 0 WHERE id = ?')
     .run(createdAt, activation.id);
 
   const devicesCount = isAdminProfile(usuarioPerfil)
@@ -882,9 +1053,23 @@ addRoute('POST', '/activate', async ({ body, res }) => {
     : db.prepare('SELECT COUNT(*) AS count FROM dispositivos WHERE cliente_id = ? AND unidade_id = ?')
       .get(activation.cliente_id, activation.unidade_id).count;
 
+  const appDeviceSession = {
+    id: appDeviceId,
+    activation_code_id: activation.id,
+    cliente_id: activation.cliente_id,
+    unidade_id: activation.unidade_id,
+    dispositivo_id: activation.dispositivo_id,
+    usuario_nome: activation.usuario_nome,
+    usuario_email: activation.usuario_email,
+    area_nome: activation.area_nome,
+    usuario_perfil: usuarioPerfil,
+    criado_em: createdAt
+  };
+
   ok(res, {
     success: true,
     app_device_id: appDeviceId,
+    app_device_token: createAppDeviceToken(appDeviceSession, activation),
     cliente: {
       id: activation.cliente_id,
       nome: activation.cliente_nome
@@ -954,6 +1139,29 @@ addRoute('GET', '/app-devices/search', async ({ query, res }) => {
   `).all(like, like, like);
 
   ok(res, rows);
+});
+
+addRoute('POST', '/app-devices/:id/push-token', async ({ params, body, res }) => {
+  const db = getDb();
+  const token = String(body.expo_push_token || '').trim() || null;
+  const plataforma = String(body.plataforma || '').trim() || 'desconhecida';
+  const modelo = String(body.modelo_aparelho || '').trim() || 'Aparelho IDsensor';
+
+  const appDevice = db.prepare('SELECT id FROM app_devices WHERE id = ? AND ativo = 1').get(params.id);
+  if (!appDevice) return fail(res, 404, 'Celular habilitado não encontrado.');
+
+  db.prepare(`
+    UPDATE app_devices
+    SET expo_push_token = ?, plataforma = ?, modelo_aparelho = ?
+    WHERE id = ?
+  `).run(token, plataforma, modelo, params.id);
+
+  ok(res, {
+    id: params.id,
+    expo_push_token: token,
+    plataforma,
+    modelo_aparelho: modelo
+  });
 });
 
 addRoute('POST', '/app-devices/:id/deactivate', async ({ params, res }) => {
@@ -1094,9 +1302,9 @@ addRoute('GET', '/alerts/history', async ({ res }) => {
   ok(res, rows.map(buildAlert));
 });
 
-addRoute('GET', '/app/alerts/:app_device_id', async ({ params, res }) => {
+addRoute('GET', '/app/alerts/:app_device_id', async ({ params, req, res }) => {
   const db = getDb();
-  const appDevice = db.prepare('SELECT * FROM app_devices WHERE id = ? AND ativo = 1').get(params.app_device_id);
+  const appDevice = getAuthorizedAppDevice(db, params.app_device_id, req);
   if (!appDevice) return fail(res, 404, 'Celular habilitado não encontrado.');
 
   const rows = isAdminProfile(appDevice.usuario_perfil)
@@ -1119,13 +1327,13 @@ addRoute('GET', '/alerts/:id', async ({ params, res }) => {
   ok(res, buildAlert(row));
 });
 
-addRoute('POST', '/alerts/:id/acknowledge', async ({ params, body, res }) => {
+addRoute('POST', '/alerts/:id/acknowledge', async ({ params, body, req, res }) => {
   const db = getDb();
   const alert = db.prepare('SELECT * FROM alerts WHERE id = ?').get(params.id);
   if (!alert) return fail(res, 404, 'Alerta não encontrado.');
 
   const appDeviceId = body.app_device_id;
-  const appDevice = db.prepare('SELECT * FROM app_devices WHERE id = ? AND ativo = 1').get(appDeviceId);
+  const appDevice = getAuthorizedAppDevice(db, appDeviceId, req, body);
   if (!appDevice) return fail(res, 404, 'Celular habilitado não encontrado.');
 
   const createdAt = nowIso();

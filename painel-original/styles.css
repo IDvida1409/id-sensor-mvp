@@ -7766,6 +7766,14 @@ svg defs #cbWarnPattern rect, svg defs #cbCritPattern rect { shape-rendering:cri
   color:#0d3b66;
 }
 
+.bind-device-help{
+  color:#6c7d92;
+  font-size:12px;
+  font-weight:700;
+  line-height:1.35;
+  margin-top:7px;
+}
+
 .bind-device-actions{
   align-items:center;
 }
