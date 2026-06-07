@@ -61,6 +61,8 @@ const DEMO_APP_ACTIVATION_CODES = [
   }
 ];
 
+const DEACTIVATED_DEMO_CODES = ['APP-DEMO-11', 'APP-850A76B2', 'APP-607A8643'];
+
 function ensureAppActivationCode(db, activation, createdAt) {
   const current = db.prepare('SELECT id FROM activation_codes WHERE codigo = ?').get(activation.codigo);
   if (current) {
@@ -147,14 +149,10 @@ function seedDatabase() {
       });
     });
 
-    ensureAppActivationCode(db, {
-      id: 'act_demo_app',
-      codigo: 'APP-DEMO-11',
-      usuario_nome: 'IDvida',
-      area_nome: 'Banco de Sangue',
-      usuario_perfil: 'area'
-    }, createdAt);
     DEMO_APP_ACTIVATION_CODES.forEach((activation) => ensureAppActivationCode(db, activation, createdAt));
+    DEACTIVATED_DEMO_CODES.forEach((code) => {
+      db.prepare('UPDATE activation_codes SET ativo = 0 WHERE codigo = ?').run(code);
+    });
 
     db.prepare(`
       INSERT INTO simulation_state (
@@ -205,19 +203,10 @@ function ensureDemoReferenceData(db = getDb()) {
       .run('unidade_laboratorio', 'cliente_idvida', 'Laboratorio', 'Unidade Bela Vista', createdAt);
   }
 
-  const demo = db.prepare('SELECT id FROM activation_codes WHERE codigo = ?').get('APP-DEMO-11');
-  if (demo) {
-    db.prepare(`
-      UPDATE activation_codes
-      SET
-        usuario_nome = COALESCE(usuario_nome, 'IDvida'),
-        area_nome = COALESCE(area_nome, 'Banco de Sangue'),
-        usuario_perfil = COALESCE(usuario_perfil, 'area')
-      WHERE id = ?
-    `).run(demo.id);
-  }
-
   DEMO_APP_ACTIVATION_CODES.forEach((activation) => ensureAppActivationCode(db, activation, createdAt));
+  DEACTIVATED_DEMO_CODES.forEach((code) => {
+    db.prepare('UPDATE activation_codes SET ativo = 0 WHERE codigo = ?').run(code);
+  });
 }
 
 module.exports = {
