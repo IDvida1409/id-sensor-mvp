@@ -33,7 +33,8 @@
           "recordAudioAndroid": false,
           "barcodeScannerEnabled": true
         }
-      ]
+      ],
+      "expo-notifications"
     ],
     "extra": {
       "apiBaseUrl": "https://id-sensor-mvp.onrender.com"

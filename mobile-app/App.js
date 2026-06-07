@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   AppState,
@@ -16,6 +16,9 @@ import {
   View
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import Constants from 'expo-constants';
+import * as Device from 'expo-device';
+import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { DeviceCard } from './src/components/DeviceCard';
@@ -25,7 +28,8 @@ import {
   activateApp,
   getAppAlerts,
   getDeviceByCode,
-  getDevices
+  getDevices,
+  updateAppDevicePushToken
 } from './src/services/api';
 import { colors } from './src/theme/colors';
 
@@ -57,6 +61,17 @@ const tabs = [
 const ADMIN_PROFILES = new Set(['master', 'admin1', 'admin2']);
 const SESSION_STORAGE_KEY = 'idsensor.activeSession.v1';
 const DAY_MS = 24 * 60 * 60 * 1000;
+const PUSH_CHANNEL_ID = 'idsensor-alerts';
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+    shouldShowAlert: true,
+    shouldShowBanner: true,
+    shouldShowList: true
+  })
+});
 
 const fallbackAreas = [
   { id: 'unidade_banco_sangue', nome: 'Banco de Sangue', devices_count: 24 },
@@ -137,17 +152,63 @@ function extractActivationCode(input) {
   }
 }
 
+function isExpoGoRuntime() {
+  return Constants.appOwnership === 'expo' || Constants.executionEnvironment === 'storeClient';
+}
+
+function expoProjectId() {
+  return Constants.expoConfig?.extra?.eas?.projectId || Constants.easConfig?.projectId || null;
+}
+
+async function registerForPushNotificationsAsync() {
+  if (Platform.OS === 'web') return { token: null, status: 'unsupported_web' };
+  if (isExpoGoRuntime()) return { token: null, status: 'expo_go_unsupported' };
+  if (!Device.isDevice) return { token: null, status: 'physical_device_required' };
+
+  if (Platform.OS === 'android') {
+    await Notifications.setNotificationChannelAsync(PUSH_CHANNEL_ID, {
+      name: 'Alertas IDsensor',
+      importance: Notifications.AndroidImportance.MAX,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: '#ef4444',
+      sound: 'default',
+      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC
+    });
+  }
+
+  const currentPermissions = await Notifications.getPermissionsAsync();
+  const finalPermissions = currentPermissions.granted
+    ? currentPermissions
+    : await Notifications.requestPermissionsAsync();
+
+  if (!finalPermissions.granted) return { token: null, status: 'permission_denied' };
+
+  const projectId = expoProjectId();
+  const tokenResult = await Notifications.getExpoPushTokenAsync(projectId ? { projectId } : undefined);
+  return { token: tokenResult.data, status: 'registered' };
+}
+
 async function activateMobileSession(rawCode) {
   const activationCode = extractActivationCode(rawCode);
   if (!activationCode) {
     throw new Error('QR de ativação inválido.');
   }
 
-  const result = await activateApp(activationCode);
+  const push = await registerForPushNotificationsAsync().catch((error) => ({
+    token: null,
+    status: error.message || 'push_registration_failed'
+  }));
+  const result = await activateApp(activationCode, {
+    expoPushToken: push.token,
+    plataforma: Platform.OS,
+    modeloAparelho: Device.modelName || Device.deviceName || 'IDsensor Mobile'
+  });
 
   return {
     ...result,
-    activation_code: activationCode
+    activation_code: activationCode,
+    push_status: push.status,
+    expo_push_token: push.token
   };
 }
 
@@ -846,15 +907,12 @@ export default function App() {
   const [alerts, setAlerts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [inAppNotification, setInAppNotification] = useState(null);
   const [acknowledgingId, setAcknowledgingId] = useState('');
   const [settings, setSettings] = useState({
     push: true,
     sound: true,
     autoRefresh: true
   });
-  const notifiedAlertIdsRef = useRef(new Set());
-  const alertNotificationReadyRef = useRef(false);
 
   useEffect(() => {
     let mounted = true;
@@ -887,8 +945,6 @@ export default function App() {
   }, []);
 
   const handleActivated = useCallback(async (activatedSession) => {
-    notifiedAlertIdsRef.current = new Set();
-    alertNotificationReadyRef.current = false;
     setSession(activatedSession);
     try {
       await AsyncStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(activatedSession));
@@ -995,44 +1051,43 @@ export default function App() {
   }, [loadData, session]);
 
   useEffect(() => {
-    notifiedAlertIdsRef.current = new Set();
-    alertNotificationReadyRef.current = false;
-  }, [session?.app_device_id]);
+    if (!session?.app_device_id || !settings.push) return undefined;
+    let cancelled = false;
 
-  useEffect(() => {
-    if (!session?.app_device_id) return;
+    async function syncPushToken() {
+      const push = await registerForPushNotificationsAsync().catch((error) => ({
+        token: null,
+        status: error.message || 'push_registration_failed'
+      }));
 
-    const now = Date.now();
-    const unseenAlerts = alerts.filter((alert) => (
-      alert?.id && isAlertFromLast24Hours(alert, now) && !isAlertViewed(alert)
-    ));
+      if (cancelled || !push.token) return;
 
-    if (!alertNotificationReadyRef.current) {
-      unseenAlerts.forEach((alert) => notifiedAlertIdsRef.current.add(alert.id));
-      alertNotificationReadyRef.current = true;
-      return;
+      await updateAppDevicePushToken(session.app_device_id, {
+        expoPushToken: push.token,
+        plataforma: Platform.OS,
+        modeloAparelho: Device.modelName || Device.deviceName || 'IDsensor Mobile'
+      });
+
+      if (cancelled) return;
+
+      setSession((current) => {
+        if (!current?.app_device_id) return current;
+        const next = {
+          ...current,
+          expo_push_token: push.token,
+          push_status: push.status
+        };
+        AsyncStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(next)).catch(() => {});
+        return next;
+      });
     }
 
-    if (!settings.push) return;
+    syncPushToken();
 
-    unseenAlerts
-      .filter((alert) => !notifiedAlertIdsRef.current.has(alert.id))
-      .slice(0, 4)
-      .forEach((alert) => {
-        notifiedAlertIdsRef.current.add(alert.id);
-        setInAppNotification({
-          id: alert.id,
-          title: alert?.dispositivo?.nome || 'Alerta IDsensor',
-          message: alertDisplayMessage(alert)
-        });
-      });
-  }, [alerts, session?.app_device_id, settings.push, settings.sound]);
-
-  useEffect(() => {
-    if (!inAppNotification) return undefined;
-    const timeout = setTimeout(() => setInAppNotification(null), 5500);
-    return () => clearTimeout(timeout);
-  }, [inAppNotification]);
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.app_device_id, settings.push]);
 
   async function handleAcknowledge(alert) {
     setAcknowledgingId(alert.id);
@@ -1071,23 +1126,6 @@ export default function App() {
       <StatusBar barStyle="dark-content" backgroundColor={colors.panel} />
       <Header session={session} loading={loading} onRefresh={loadData} />
       {error ? <Text style={styles.topError}>{error}</Text> : null}
-      {inAppNotification ? (
-        <Pressable
-          onPress={() => {
-            setInAppNotification(null);
-            openAlertsView('latest');
-          }}
-          style={styles.inAppNotification}
-        >
-          <View style={styles.inAppNotificationIcon}>
-            <Ionicons name="notifications-outline" size={20} color={colors.white} />
-          </View>
-          <View style={styles.inAppNotificationText}>
-            <Text style={styles.inAppNotificationTitle}>{inAppNotification.title}</Text>
-            <Text style={styles.inAppNotificationMessage}>{inAppNotification.message}</Text>
-          </View>
-        </Pressable>
-      ) : null}
 
       <View style={styles.bodyArea}>
         {tab === 'home' ? (
@@ -1382,39 +1420,6 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     paddingHorizontal: 18,
     paddingVertical: 7
-  },
-  inAppNotification: {
-    alignItems: 'center',
-    backgroundColor: colors.navy,
-    flexDirection: 'row',
-    gap: 10,
-    marginHorizontal: 18,
-    marginTop: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 8
-  },
-  inAppNotificationIcon: {
-    alignItems: 'center',
-    backgroundColor: colors.crit,
-    borderRadius: 18,
-    height: 36,
-    justifyContent: 'center',
-    width: 36
-  },
-  inAppNotificationText: {
-    flex: 1
-  },
-  inAppNotificationTitle: {
-    color: colors.white,
-    fontSize: 13,
-    fontWeight: '900'
-  },
-  inAppNotificationMessage: {
-    color: '#d9e6f5',
-    fontSize: 12,
-    fontWeight: '700',
-    marginTop: 2
   },
   bodyArea: {
     flex: 1

@@ -1,6 +1,7 @@
 const { id } = require('../utils/ids');
 const { buildDeviceCard } = require('./deviceCard');
 const { alertMessageForStatus } = require('./alertText');
+const { sendExpoPush } = require('./pushService');
 
 const DEFAULT_INTERVAL_MS = 10000;
 const FIRST_EVENT_AFTER_MS = 2 * 60 * 1000;
@@ -80,6 +81,7 @@ function ensureSimulationState(db) {
   if (current) return current;
 
   const createdAt = nowIso();
+
   db.prepare(`
     INSERT INTO simulation_state (
       id, enabled, step, interval_ms, started_at, last_tick_at, updated_em
@@ -185,6 +187,59 @@ function closeSimulationAlertsForDevice(db, deviceId) {
   `).run(nowIso(), deviceId);
 }
 
+function logSimulationPush(db, alertId, recipient, pushResult) {
+  db.prepare(`
+    INSERT INTO notification_logs (
+      id, alert_id, app_device_id, expo_push_token, status_envio, resposta, criado_em
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    id('notif'),
+    alertId,
+    recipient?.id || null,
+    recipient?.expo_push_token || null,
+    pushResult.status_envio,
+    pushResult.resposta,
+    nowIso()
+  );
+}
+
+function dispatchSimulationPush(db, alertId, row) {
+  const alert = db.prepare('SELECT * FROM alerts WHERE id = ?').get(alertId);
+  if (!alert) return;
+
+  const recipients = db.prepare(`
+    SELECT *
+    FROM app_devices
+    WHERE ativo = 1
+      AND cliente_id = ?
+      AND (unidade_id = ? OR usuario_perfil IN ('master', 'admin1', 'admin2'))
+      AND (dispositivo_id IS NULL OR dispositivo_id = ?)
+  `).all(row.cliente_id, row.unidade_id, row.id);
+
+  if (!recipients.length) {
+    logSimulationPush(db, alertId, null, {
+      status_envio: 'no_recipients',
+      resposta: 'Nenhum celular habilitado para esta unidade/dispositivo.'
+    });
+    return;
+  }
+
+  recipients.forEach((recipient) => {
+    sendExpoPush({
+      token: recipient.expo_push_token,
+      alert,
+      device: row
+    }).then((pushResult) => {
+      logSimulationPush(db, alertId, recipient, pushResult);
+    }).catch((error) => {
+      logSimulationPush(db, alertId, recipient, {
+        status_envio: 'failed',
+        resposta: error.message
+      });
+    });
+  });
+}
+
 function createSimulationAlert(db, row, next) {
   const tipo = `simulacao_${next.status}`;
   const existing = db.prepare(`
@@ -233,6 +288,7 @@ function createSimulationAlert(db, row, next) {
     createdAt
   );
 
+  dispatchSimulationPush(db, alertId, row);
   return alertId;
 }
 
