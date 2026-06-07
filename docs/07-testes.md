@@ -114,6 +114,20 @@ Validado:
 
 ## Teste futuro em celular real
 
+Em 2026-06-06, a correcao de persistencia da ativacao foi validada localmente:
+
+- `@react-native-async-storage/async-storage@2.2.0` instalado no app Expo;
+- `App.js` compila com Babel usando `babel-preset-expo`;
+- campo de ativacao nao inicia mais com `APP-DEMO-11`;
+- sessao ativada passa a ser carregada/salva por `AsyncStorage`.
+
+Tambem em 2026-06-06, a API publica do Render foi conferida:
+
+- `POST /activate` retornou `404 Codigo invalido ou inativo` para `APP-9A0806A8` e `APP-7B551AC5`;
+- novos codigos foram criados por `POST /activation-code`;
+- `APP-430E091F` validou com perfil `admin1` para Vinicius;
+- `APP-2131C465` validou com perfil `area` para Banco de Sangue.
+
 1. Subir backend online.
 2. Configurar app com a URL online.
 3. Abrir app no Expo Go ou build de teste.

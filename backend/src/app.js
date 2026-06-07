@@ -13,6 +13,7 @@ const { id, activationCode } = require('./utils/ids');
 const { buildDeviceCard } = require('./services/deviceCard');
 const { sendActivationEmail } = require('./services/emailService');
 const { sendExpoPush } = require('./services/pushService');
+const { alertMessageForAlert } = require('./services/alertText');
 const {
   advanceSimulationIfNeeded,
   getNocOccurrences,
@@ -292,7 +293,7 @@ function renderDeviceQrPage(card, code) {
         const payload = await response.json();
         if (payload.ok && payload.data && payload.data.card) render(payload.data.card);
       } catch (error) {
-        console.warn('Nao foi possivel atualizar o card', error);
+        console.warn('Não foi possível atualizar o card', error);
       }
     }
 
@@ -312,7 +313,7 @@ function renderActivationQrPage(activation, code, appUrl = publicApiUrl) {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>IDsensor - Ativacao</title>
+  <title>IDsensor - Ativação</title>
   <style>
     :root { font-family: Inter, Arial, sans-serif; }
     body { background: #f4f8fc; color: #14243b; margin: 0; }
@@ -332,7 +333,7 @@ function renderActivationQrPage(activation, code, appUrl = publicApiUrl) {
     <section>
       <img class="logo" src="/assets/idsensor-logo.png" alt="IDsensor">
       <h1>Ativar aparelho celular</h1>
-      <p>Digite este codigo no app IDsensor para vincular o celular ao cliente. Esta tela tambem confirma que o QR abriu pelo navegador.</p>
+      <p>Digite este código no app IDsensor para vincular o celular ao cliente. Esta tela também confirma que o QR abriu pelo navegador.</p>
       <div class="code">${escapeHtml(code)}</div>
       <p class="client">${escapeHtml(clientName)}<br>${escapeHtml(unitName)}</p>
       <p>Backend conectado em ${escapeHtml(appUrl)}.</p>
@@ -388,7 +389,7 @@ function servePanelFile(req, res, pathname) {
 
   const filePath = safePanelPath(pathname);
   if (!filePath) {
-    fail(res, 403, 'Arquivo nao autorizado.');
+    fail(res, 403, 'Arquivo não autorizado.');
     return true;
   }
 
@@ -447,7 +448,7 @@ async function readJsonBody(req) {
   try {
     return JSON.parse(text);
   } catch {
-    const error = new Error('JSON invalido no corpo da requisicao.');
+    const error = new Error('JSON inválido no corpo da requisição.');
     error.statusCode = 400;
     throw error;
   }
@@ -490,13 +491,41 @@ function alertSelectSql(where = '') {
       d.local AS dispositivo_local,
       c.nome AS cliente_nome,
       u.nome AS unidade_nome,
-      ad.modelo_aparelho AS reconhecido_por_modelo,
-      ad.plataforma AS reconhecido_por_plataforma
+      NULL AS reconhecido_por_modelo,
+      NULL AS reconhecido_por_plataforma,
+      0 AS visualizado,
+      NULL AS visualizado_em
     FROM alerts a
     JOIN dispositivos d ON d.id = a.dispositivo_id
     JOIN clientes c ON c.id = a.cliente_id
     JOIN unidades u ON u.id = a.unidade_id
-    LEFT JOIN alert_acknowledgements ack ON ack.alert_id = a.id
+    ${where}
+    ORDER BY a.criado_em DESC
+  `;
+}
+
+function appAlertSelectSql(where = '') {
+  return `
+    SELECT
+      a.*,
+      d.nome AS dispositivo_nome,
+      d.local AS dispositivo_local,
+      c.nome AS cliente_nome,
+      u.nome AS unidade_nome,
+      ad.modelo_aparelho AS reconhecido_por_modelo,
+      ad.plataforma AS reconhecido_por_plataforma,
+      CASE WHEN ack.alert_id IS NULL THEN 0 ELSE 1 END AS visualizado,
+      ack.criado_em AS visualizado_em
+    FROM alerts a
+    JOIN dispositivos d ON d.id = a.dispositivo_id
+    JOIN clientes c ON c.id = a.cliente_id
+    JOIN unidades u ON u.id = a.unidade_id
+    LEFT JOIN (
+      SELECT alert_id, app_device_id, MIN(criado_em) AS criado_em
+      FROM alert_acknowledgements
+      WHERE app_device_id = ?
+      GROUP BY alert_id, app_device_id
+    ) ack ON ack.alert_id = a.id
     LEFT JOIN app_devices ad ON ad.id = ack.app_device_id
     ${where}
     ORDER BY a.criado_em DESC
@@ -519,6 +548,8 @@ function buildAlert(row) {
     criado_em: row.criado_em,
     reconhecido_em: row.reconhecido_em,
     encerrado_em: row.encerrado_em,
+    visualizado: !!row.visualizado,
+    visualizado_em: row.visualizado_em || null,
     dispositivo: {
       nome: row.dispositivo_nome,
       local: row.dispositivo_local
@@ -601,9 +632,9 @@ addRoute('GET', '/q/:codigo', async ({ params, res }) => {
   const row = getDeviceByScannedCode(code);
   if (!row) {
     return html(res, 404, renderQrMessagePage(
-      'QR nao encontrado',
-      'Nao encontramos um equipamento ativo para este QR Code.',
-      code || 'QR NAO ENCONTRADO'
+      'QR não encontrado',
+      'Não encontramos um equipamento ativo para este QR Code.',
+      code || 'QR NÃO ENCONTRADO'
     ));
   }
 
@@ -622,7 +653,7 @@ addRoute('GET', '/a/:codigo', async ({ params, req, res }) => {
 
   return html(res, activation ? 200 : 404, renderActivationQrPage(
     activation,
-    code || 'CODIGO INVALIDO',
+    code || 'CÓDIGO INVÁLIDO',
     requestPublicBase(req)
   ));
 });
@@ -633,7 +664,7 @@ addRoute('GET', '/devices/by-code/:codigo', async ({ params, req, res }) => {
   advanceSimulationIfNeeded(db);
   const row = getDeviceByScannedCode(code);
 
-  if (!row) return fail(res, 404, 'Dispositivo nao encontrado para este QR Code.');
+  if (!row) return fail(res, 404, 'Dispositivo não encontrado para este QR Code.');
 
   const payload = buildDevicePayload(row.qr_code, requestPublicBase(req));
   const card = buildDeviceCard(row);
@@ -649,13 +680,13 @@ addRoute('GET', '/devices/by-code/:codigo', async ({ params, req, res }) => {
 
 addRoute('GET', '/devices/:id', async ({ params, res }) => {
   const row = getDeviceById(params.id);
-  if (!row) return fail(res, 404, 'Dispositivo nao encontrado.');
+  if (!row) return fail(res, 404, 'Dispositivo não encontrado.');
   ok(res, buildDeviceCard(row));
 });
 
 addRoute('POST', '/devices/:id/update-status', async ({ params, body, res }) => {
   const current = getDeviceById(params.id);
-  if (!current) return fail(res, 404, 'Dispositivo nao encontrado.');
+  if (!current) return fail(res, 404, 'Dispositivo não encontrado.');
 
   const status = body.status || current.status;
   const temperatura = Object.prototype.hasOwnProperty.call(body, 'temperatura_atual')
@@ -710,7 +741,7 @@ addRoute('POST', '/activation-code', async ({ body, req, res }) => {
   const enviarEmail = body.enviar_email !== false && body.enviar_email !== 'false';
 
   if (!clienteId || !unidadeId) {
-    return fail(res, 400, 'cliente_id e unidade_id sao obrigatorios.');
+    return fail(res, 400, 'cliente_id e unidade_id são obrigatórios.');
   }
 
   const target = db.prepare(`
@@ -720,7 +751,7 @@ addRoute('POST', '/activation-code', async ({ body, req, res }) => {
     WHERE c.id = ? AND u.id = ?
   `).get(clienteId, unidadeId);
 
-  if (!target) return fail(res, 404, 'Cliente ou unidade nao encontrados.');
+  if (!target) return fail(res, 404, 'Cliente ou unidade não encontrados.');
 
   const prefix = tipoAtivacao === 'dispositivo_qrcode' ? 'DEV' : 'APP';
   const code = activationCode(prefix);
@@ -751,7 +782,7 @@ addRoute('POST', '/activation-code', async ({ body, req, res }) => {
     ? buildDevicePayload(code, publicBase)
     : buildActivationPayload(code, publicBase);
 
-  let emailDelivery = { status_envio: 'skipped', message: 'Envio nao solicitado para este tipo de ativacao.' };
+  let emailDelivery = { status_envio: 'skipped', message: 'Envio não solicitado para este tipo de ativação.' };
   if (tipoAtivacao === 'app_alerta' && enviarEmail) {
     try {
       emailDelivery = await sendActivationEmail({
@@ -804,7 +835,7 @@ addRoute('POST', '/activate', async ({ body, res }) => {
   const plataforma = body.plataforma || 'desconhecida';
   const modelo = body.modelo_aparelho || 'Aparelho de teste';
 
-  if (!codigo) return fail(res, 400, 'Codigo de ativacao obrigatorio.');
+  if (!codigo) return fail(res, 400, 'Código de ativação obrigatório.');
 
   const activation = db.prepare(`
     SELECT ac.*, c.nome AS cliente_nome, u.nome AS unidade_nome
@@ -814,7 +845,7 @@ addRoute('POST', '/activate', async ({ body, res }) => {
     WHERE ac.codigo = ? AND ac.ativo = 1 AND ac.tipo_ativacao = 'app_alerta'
   `).get(codigo);
 
-  if (!activation) return fail(res, 404, 'Codigo invalido ou inativo.');
+  if (!activation) return fail(res, 404, 'Código inválido ou inativo.');
 
   const appDeviceId = id('appdev');
   const createdAt = nowIso();
@@ -940,7 +971,7 @@ addRoute('POST', '/app-devices/:id/deactivate', async ({ params, res }) => {
     WHERE ad.id = ? AND ad.ativo = 1
   `).get(params.id);
 
-  if (!appDevice) return fail(res, 404, 'Celular habilitado nao encontrado.');
+  if (!appDevice) return fail(res, 404, 'Celular habilitado não encontrado.');
 
   db.prepare('UPDATE app_devices SET ativo = 0 WHERE id = ?').run(params.id);
   db.prepare('UPDATE activation_codes SET ativo = 0 WHERE id = ?').run(appDevice.activation_code_id);
@@ -961,7 +992,7 @@ addRoute('POST', '/app-devices/:id/deactivate', async ({ params, res }) => {
 addRoute('POST', '/alerts', async ({ body, res }) => {
   const db = getDb();
   const device = getDeviceById(body.dispositivo_id);
-  if (!device) return fail(res, 404, 'Dispositivo nao encontrado.');
+  if (!device) return fail(res, 404, 'Dispositivo não encontrado.');
 
   const alertId = id('alert');
   const createdAt = nowIso();
@@ -970,7 +1001,11 @@ addRoute('POST', '/alerts', async ({ body, res }) => {
   const temperatura = Object.prototype.hasOwnProperty.call(body, 'temperatura_atual')
     ? body.temperatura_atual
     : device.temperatura_atual;
-  const mensagem = body.mensagem || `${device.nome} em alerta.`;
+  const mensagem = body.mensagem || alertMessageForAlert({
+    status: body.status,
+    severidade,
+    tipo_alerta: tipoAlerta
+  });
 
   db.prepare(`
     INSERT INTO alerts (
@@ -1062,52 +1097,55 @@ addRoute('GET', '/alerts/history', async ({ res }) => {
 addRoute('GET', '/app/alerts/:app_device_id', async ({ params, res }) => {
   const db = getDb();
   const appDevice = db.prepare('SELECT * FROM app_devices WHERE id = ? AND ativo = 1').get(params.app_device_id);
-  if (!appDevice) return fail(res, 404, 'Celular habilitado nao encontrado.');
+  if (!appDevice) return fail(res, 404, 'Celular habilitado não encontrado.');
 
   const rows = isAdminProfile(appDevice.usuario_perfil)
-    ? db.prepare(alertSelectSql(`
+    ? db.prepare(appAlertSelectSql(`
       WHERE a.cliente_id = ?
         AND (? IS NULL OR a.dispositivo_id = ?)
-    `)).all(appDevice.cliente_id, appDevice.dispositivo_id, appDevice.dispositivo_id)
-    : db.prepare(alertSelectSql(`
+    `)).all(appDevice.id, appDevice.cliente_id, appDevice.dispositivo_id, appDevice.dispositivo_id)
+    : db.prepare(appAlertSelectSql(`
       WHERE a.cliente_id = ?
         AND a.unidade_id = ?
         AND (? IS NULL OR a.dispositivo_id = ?)
-    `)).all(appDevice.cliente_id, appDevice.unidade_id, appDevice.dispositivo_id, appDevice.dispositivo_id);
+    `)).all(appDevice.id, appDevice.cliente_id, appDevice.unidade_id, appDevice.dispositivo_id, appDevice.dispositivo_id);
 
   ok(res, rows.map(buildAlert));
 });
 
 addRoute('GET', '/alerts/:id', async ({ params, res }) => {
   const row = getDb().prepare(alertSelectSql('WHERE a.id = ?')).get(params.id);
-  if (!row) return fail(res, 404, 'Alerta nao encontrado.');
+  if (!row) return fail(res, 404, 'Alerta não encontrado.');
   ok(res, buildAlert(row));
 });
 
 addRoute('POST', '/alerts/:id/acknowledge', async ({ params, body, res }) => {
   const db = getDb();
   const alert = db.prepare('SELECT * FROM alerts WHERE id = ?').get(params.id);
-  if (!alert) return fail(res, 404, 'Alerta nao encontrado.');
+  if (!alert) return fail(res, 404, 'Alerta não encontrado.');
 
   const appDeviceId = body.app_device_id;
   const appDevice = db.prepare('SELECT * FROM app_devices WHERE id = ? AND ativo = 1').get(appDeviceId);
-  if (!appDevice) return fail(res, 404, 'Celular habilitado nao encontrado.');
+  if (!appDevice) return fail(res, 404, 'Celular habilitado não encontrado.');
 
   const createdAt = nowIso();
-  db.prepare(`
-    INSERT INTO alert_acknowledgements (id, alert_id, app_device_id, status, criado_em)
-    VALUES (?, ?, ?, 'ciente', ?)
-  `).run(id('ack'), alert.id, appDevice.id, createdAt);
+  const existingAck = db.prepare(`
+    SELECT id
+    FROM alert_acknowledgements
+    WHERE alert_id = ? AND app_device_id = ?
+    LIMIT 1
+  `).get(alert.id, appDevice.id);
 
-  db.prepare(`
-    UPDATE alerts
-    SET status = 'reconhecido', reconhecido_em = ?
-    WHERE id = ?
-  `).run(createdAt, alert.id);
+  if (!existingAck) {
+    db.prepare(`
+      INSERT INTO alert_acknowledgements (id, alert_id, app_device_id, status, criado_em)
+      VALUES (?, ?, ?, 'ciente', ?)
+    `).run(id('ack'), alert.id, appDevice.id, createdAt);
+  }
 
   ok(res, {
     success: true,
-    alert: buildAlert(db.prepare(alertSelectSql('WHERE a.id = ?')).get(alert.id))
+    alert: buildAlert(db.prepare(appAlertSelectSql('WHERE a.id = ?')).get(appDevice.id, alert.id))
   });
 });
 
@@ -1118,7 +1156,7 @@ addRoute('POST', '/alerts/:id/close', async ({ params, res }) => {
     WHERE id = ?
   `).run(nowIso(), params.id);
 
-  if (!result.changes) return fail(res, 404, 'Alerta nao encontrado.');
+  if (!result.changes) return fail(res, 404, 'Alerta não encontrado.');
   ok(res, { id: params.id, status: 'encerrado' });
 });
 
@@ -1144,7 +1182,7 @@ async function app(req, res) {
 
     if (!match) {
       if (servePanelFile(req, res, url.pathname)) return;
-      return fail(res, 404, 'Rota nao encontrada.');
+      return fail(res, 404, 'Rota não encontrada.');
     }
 
     const body = ['POST', 'PATCH', 'PUT'].includes(req.method) ? await readJsonBody(req) : {};

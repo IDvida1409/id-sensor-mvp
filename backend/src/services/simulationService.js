@@ -1,5 +1,6 @@
 const { id } = require('../utils/ids');
 const { buildDeviceCard } = require('./deviceCard');
+const { alertMessageForStatus } = require('./alertText');
 
 const DEFAULT_INTERVAL_MS = 10000;
 const FIRST_EVENT_AFTER_MS = 2 * 60 * 1000;
@@ -199,9 +200,7 @@ function createSimulationAlert(db, row, next) {
   const alertId = id('alert');
   const createdAt = nowIso();
   const severity = next.status === 'critico' || next.status === 'offline' ? 'critica' : 'alta';
-  const message = next.status === 'offline'
-    ? `${row.nome} ficou sem comunicacao.`
-    : `${row.nome} entrou em ${next.status === 'critico' ? 'estado critico' : 'atencao'}.`;
+  const message = alertMessageForStatus(next.status);
 
   db.prepare(`
     INSERT INTO alerts (
@@ -230,7 +229,7 @@ function createSimulationAlert(db, row, next) {
     id('notif'),
     alertId,
     'simulation_created',
-    'Alerta criado pela simulacao; envio push sera validado no app.',
+    'Alerta criado pela simulação; envio push será validado no app.',
     createdAt
   );
 
@@ -254,7 +253,7 @@ function attentionStateFor(row) {
   return {
     status: 'atencao',
     temp: WARNING_TEMPERATURES.get(number) || 8.4,
-    ultima_comunicacao: 'ha 1 min',
+    ultima_comunicacao: 'há 1 min',
     bateria: Math.max(42, Number(row.bateria || (96 - number)))
   };
 }
@@ -274,7 +273,7 @@ function offlineStateFor(row) {
   return {
     status: 'offline',
     temp: Number(row.temperatura_atual ?? normalTemp(number)),
-    ultima_comunicacao: 'sem comunicacao ha 15 min',
+    ultima_comunicacao: 'sem comunicação há 15 min',
     bateria: Math.max(42, Number(row.bateria || (96 - number)))
   };
 }
@@ -418,13 +417,13 @@ function cardRotations(card, filters) {
   const isSourceDisconnected = card.powerMode === 'source' && isOffline;
 
   if (selectedIncludes(filters, 'offline') && isOffline) {
-    out.push({ key: 'offline', count: 1, text: 'Sem comunicacao', severity: 'critical', visibleIds: [card.id] });
+    out.push({ key: 'offline', count: 1, text: 'Sem comunicação', severity: 'critical', visibleIds: [card.id] });
   }
   if (selectedIncludes(filters, 'near_limit') && isWarn) {
-    out.push({ key: 'warn', count: 1, text: 'Proximo do limite', severity: 'warning', visibleIds: [card.id] });
+    out.push({ key: 'warn', count: 1, text: 'Próximo do limite', severity: 'warning', visibleIds: [card.id] });
   }
   if (selectedIncludes(filters, 'out_of_range') && isCrit) {
-    out.push({ key: 'crit', count: 1, text: 'Fora da temperatura', severity: 'critical', visibleIds: [card.id] });
+    out.push({ key: 'crit', count: 1, text: 'Fora do limite', severity: 'critical', visibleIds: [card.id] });
   }
   if (selectedIncludes(filters, 'battery') && isBatteryLow) {
     out.push({ key: 'battery_low', count: 1, text: 'Bateria', severity: 'warning', visibleIds: [card.id] });

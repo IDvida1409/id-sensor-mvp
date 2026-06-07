@@ -25,16 +25,22 @@ O nome correto no app e `IDsensor`.
 ### Ativacao
 
 1. App abre.
-2. Se nao estiver ativado, mostra campo de codigo.
-3. Usuario digita codigo ou escaneia QR de ativacao.
-4. App chama `/activate`.
-5. App recebe `app_device_id`, cliente e unidade.
+2. App procura a sessao do aparelho salva no armazenamento local.
+3. Se ja estiver ativado, entra direto no painel do usuario vinculado.
+4. Se nao estiver ativado, mostra campo de codigo vazio.
+5. Usuario digita codigo ou escaneia QR de ativacao.
+6. App chama `/activate`.
+7. App recebe `app_device_id`, cliente e unidade.
+8. App salva a sessao ativada no celular com `@react-native-async-storage/async-storage`.
 
-Codigo demo:
+Codigos atuais usados na demonstracao:
 
 ```text
-APP-DEMO-11
+APP-430E091F
+APP-2131C465
 ```
+
+O app nao deve preencher automaticamente `APP-DEMO-11`. Depois da primeira ativacao correta, fechar e abrir o Expo Go deve manter o mesmo aparelho vinculado.
 
 ### Inicio
 

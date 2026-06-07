@@ -12,7 +12,7 @@ const STATUS_META = {
     state: 'warn',
     label: 'ATEN\u00c7\u00c3O',
     timerLabel: 'Fora do limite. Monitorando antes de escalar.',
-    events: ['Fora da faixa permitida', 'Alerta de atencao gerado pela simulacao'],
+    events: ['Fora da faixa permitida', 'Alerta de atenção gerado pela simulação'],
     timer: 35,
     fill: 70,
     range: 82
@@ -20,8 +20,8 @@ const STATUS_META = {
   critico: {
     state: 'crit',
     label: 'CR\u00cdTICO',
-    timerLabel: 'Alerta critico enviado pelo app',
-    events: ['Alerta critico ativo', 'Aguardando ciencia'],
+    timerLabel: 'Alerta crítico enviado pelo app',
+    events: ['Alerta crítico ativo', 'Aguardando ciência'],
     timer: 100,
     fill: 84,
     range: 96
@@ -29,8 +29,8 @@ const STATUS_META = {
   offline: {
     state: 'blue',
     label: 'NORMAL',
-    timerLabel: 'Sem comunicacao com o sensor',
-    events: ['Sensor sem comunicacao', 'Verificar energia, rede ou gateway'],
+    timerLabel: 'Dispositivo sem comunicação',
+    events: ['Dispositivo sem comunicação', 'Verificar energia, rede ou gateway'],
     timer: 45,
     fill: 48,
     range: 40
@@ -38,8 +38,8 @@ const STATUS_META = {
   manutencao: {
     state: 'maint',
     label: 'MANUTEN\u00c7\u00c3O',
-    timerLabel: 'Equipamento em manutencao',
-    events: ['Equipamento em manutencao'],
+    timerLabel: 'Equipamento em manutenção',
+    events: ['Equipamento em manutenção'],
     timer: 40,
     fill: 28,
     range: 0
@@ -125,7 +125,7 @@ function buildDeviceCard(row) {
     fill: meta.fill,
     range: meta.range,
     events: meta.events,
-    commText: online ? null : `Ultima comunicacao: ${row.ultima_comunicacao}`,
+    commText: online ? null : `Última comunicação: ${row.ultima_comunicacao}`,
     chart,
     qrCode: row.qr_code,
     code: row.qr_code,

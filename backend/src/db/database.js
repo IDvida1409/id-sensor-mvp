@@ -151,6 +151,10 @@ function initDb() {
   ensureColumn(database, 'app_devices', 'usuario_email', 'TEXT');
   ensureColumn(database, 'app_devices', 'area_nome', 'TEXT');
   ensureColumn(database, 'app_devices', 'usuario_perfil', 'TEXT');
+  database.exec(`
+    CREATE INDEX IF NOT EXISTS idx_alert_ack_app_device
+    ON alert_acknowledgements (app_device_id, alert_id);
+  `);
 }
 
 function ensureColumn(database, table, column, definition) {

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  AppState,
   Image,
   KeyboardAvoidingView,
   Linking,
@@ -15,6 +16,7 @@ import {
   View
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { DeviceCard } from './src/components/DeviceCard';
 import {
@@ -27,6 +29,24 @@ import {
 } from './src/services/api';
 import { colors } from './src/theme/colors';
 
+Text.defaultProps = Text.defaultProps || {};
+Text.defaultProps.allowFontScaling = false;
+Text.defaultProps.maxFontSizeMultiplier = 1;
+TextInput.defaultProps = TextInput.defaultProps || {};
+TextInput.defaultProps.allowFontScaling = false;
+TextInput.defaultProps.maxFontSizeMultiplier = 1;
+
+const IS_ANDROID = Platform.OS === 'android';
+const HEADER_TOP_PADDING = IS_ANDROID
+  ? Math.max(28, (StatusBar.currentHeight || 0) + 10)
+  : 16;
+const HEADER_ICON_TILE_SIZE = IS_ANDROID ? 62 : 64;
+const HEADER_ICON_SIZE = IS_ANDROID ? 48 : 50;
+const REFRESH_BUTTON_HEIGHT = IS_ANDROID ? 38 : 40;
+const REFRESH_BUTTON_MIN_WIDTH = IS_ANDROID ? 86 : 90;
+const REFRESH_TEXT_SIZE = IS_ANDROID ? 11.5 : 12;
+const UNIT_TEXT_SIZE = IS_ANDROID ? 12.5 : 13;
+
 const tabs = [
   { id: 'home', icon: 'information-circle-outline', label: 'Informação', tone: 'green' },
   { id: 'alerts', icon: 'notifications-outline', label: 'Alertas', tone: 'red' },
@@ -35,6 +55,8 @@ const tabs = [
 ];
 
 const ADMIN_PROFILES = new Set(['master', 'admin1', 'admin2']);
+const SESSION_STORAGE_KEY = 'idsensor.activeSession.v1';
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 const fallbackAreas = [
   { id: 'unidade_banco_sangue', nome: 'Banco de Sangue', devices_count: 24 },
@@ -60,7 +82,9 @@ function unitDisplayName(session) {
 }
 
 function userDisplayName(session) {
-  return session?.usuario?.nome || 'IDvida';
+  const name = String(session?.usuario?.nome || 'IDvida').trim();
+  if (name.replace(/\s+/g, '').toLowerCase() === 'idvida') return 'IDvida';
+  return name;
 }
 
 function sessionAreas(session) {
@@ -125,6 +149,15 @@ function buildStats(devices) {
     },
     { total: 0, normal: 0, warn: 0, crit: 0, offline: 0 }
   );
+}
+
+function isAlertFromLast24Hours(alert, now = Date.now()) {
+  const createdAt = new Date(alert?.criado_em || 0).getTime();
+  return Number.isFinite(createdAt) && now - createdAt <= DAY_MS;
+}
+
+function isAlertViewed(alert) {
+  return !!(alert?.visualizado || alert?.visualizado_em);
 }
 
 function PoweredByFooter() {
@@ -224,15 +257,27 @@ function AreaSelector({ areas, selectedAreaId, onSelect }) {
   );
 }
 
-function LastAlertsBox({ alerts, setTab }) {
-  if (alerts.length) {
+function CurrentStatusBox({ pendingCount, currentIssueCount, onOpenAlerts }) {
+  if (pendingCount > 0) {
     return (
-      <Pressable onPress={() => setTab('alerts')} style={styles.lastAlertBox}>
+      <Pressable onPress={onOpenAlerts} style={styles.lastAlertBox}>
         <View style={[styles.lastAlertIcon, styles.lastAlertIconWarn]}>
           <Ionicons name="notifications-outline" size={24} color={colors.white} />
         </View>
-        <Text style={styles.lastAlertTitle}>{alerts.length} alerta(s) recente(s)</Text>
+        <Text style={styles.lastAlertTitle}>{pendingCount} alerta(s) recente(s)</Text>
         <Text style={styles.lastAlertCaption}>Toque para ver o histórico de eventos.</Text>
+      </Pressable>
+    );
+  }
+
+  if (currentIssueCount > 0) {
+    return (
+      <Pressable onPress={onOpenAlerts} style={styles.lastAlertBox}>
+        <View style={[styles.lastAlertIcon, styles.lastAlertIconWarn]}>
+          <Ionicons name="notifications-outline" size={24} color={colors.white} />
+        </View>
+        <Text style={styles.lastAlertTitle}>{currentIssueCount} ocorrência(s) agora</Text>
+        <Text style={styles.lastAlertCaption}>Toque para conferir a situação atual.</Text>
       </Pressable>
     );
   }
@@ -248,50 +293,126 @@ function LastAlertsBox({ alerts, setTab }) {
   );
 }
 
-function alertTone(alert) {
-  const text = `${alert?.tipo_alerta || ''} ${alert?.mensagem || ''}`.toLowerCase();
-  if (text.includes('offline') || text.includes('comunic') || alert?.severidade === 'critica') return 'crit';
+function ReportHistoryBox({ count, onOpenHistory }) {
+  return (
+    <Pressable onPress={onOpenHistory} style={styles.reportBox}>
+      <View style={styles.reportIcon}>
+        <Ionicons name="document-text-outline" size={23} color={colors.navy} />
+      </View>
+      <View style={styles.reportTextBlock}>
+        <Text style={styles.reportTitle}>Histórico das últimas 24h</Text>
+        <Text style={styles.reportCaption}>{count} evento(s). Toque para ver o histórico.</Text>
+      </View>
+      <Ionicons name="chevron-forward" size={20} color={colors.muted} />
+    </Pressable>
+  );
+}
+
+function CurrentStatusBoxV2({ currentIssueCount, onOpenAlerts }) {
+  if (currentIssueCount > 0) {
+    return (
+      <Pressable onPress={onOpenAlerts} style={styles.lastAlertBox}>
+        <View style={[styles.lastAlertIcon, styles.lastAlertIconWarn]}>
+          <Ionicons name="notifications-outline" size={24} color={colors.white} />
+        </View>
+        <Text style={styles.lastAlertTitle}>{currentIssueCount} ocorrência(s) agora</Text>
+        <Text style={styles.lastAlertCaption}>Toque para conferir a situação atual.</Text>
+      </Pressable>
+    );
+  }
+
+  return (
+    <View style={styles.lastAlertBox}>
+      <View style={styles.lastAlertIcon}>
+        <Ionicons name="checkmark" size={27} color={colors.greenDark} />
+      </View>
+      <Text style={styles.lastAlertTitle}>Nenhum alerta recente</Text>
+      <Text style={styles.lastAlertCaption}>Tudo está dentro dos parâmetros.</Text>
+    </View>
+  );
+}
+
+function PendingAlertsBox({ count, onOpenAlerts }) {
+  if (count <= 0) return null;
+
+  return (
+    <Pressable onPress={onOpenAlerts} style={styles.pendingAlertBox}>
+      <View style={[styles.reportIcon, styles.pendingAlertIcon]}>
+        <Ionicons name="notifications-outline" size={22} color={colors.white} />
+      </View>
+      <View style={styles.reportTextBlock}>
+        <Text style={styles.reportTitle}>{count} pendência(s) de ciência</Text>
+        <Text style={styles.reportCaption}>Toque para ver os alertas ainda não visualizados.</Text>
+      </View>
+      <Ionicons name="chevron-forward" size={20} color={colors.muted} />
+    </Pressable>
+  );
+}
+
+function normalizeAlertText(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
+
+function alertKind(alert) {
+  const text = normalizeAlertText(`${alert?.tipo_alerta || ''} ${alert?.mensagem || ''} ${alert?.severidade || ''}`);
+  if (text.includes('offline') || text.includes('comunic')) return 'offline';
+  if (text.includes('critico') || text.includes('critica')) return 'crit';
   return 'warn';
 }
 
+function alertTone(alert) {
+  return alertKind(alert) === 'warn' ? 'warn' : 'crit';
+}
+
 function alertLabel(alert) {
-  const text = `${alert?.tipo_alerta || ''} ${alert?.mensagem || ''}`.toLowerCase();
-  if (text.includes('offline') || text.includes('comunic')) return 'OFFLINE';
-  if (alert?.severidade === 'critica') return 'CRÍTICO';
+  const kind = alertKind(alert);
+  if (kind === 'offline') return 'OFFLINE';
+  if (kind === 'crit') return 'CRÍTICO';
   return 'ATENÇÃO';
 }
 
-function AlertCard({ alert, onAcknowledge, busy, showAction = true }) {
+function alertDisplayMessage(alert) {
+  const kind = alertKind(alert);
+  if (kind === 'offline') return 'Dispositivo sem comunicação.';
+  if (kind === 'crit') return 'Temperatura fora do limite estabelecido.';
+  return 'Temperatura próxima do limite estabelecido.';
+}
+
+function AlertCard({ alert, onAcknowledge, busy, showAction = true, compact = false }) {
   const tone = alertTone(alert);
   const critical = tone === 'crit';
-  const canAcknowledge = showAction && alert?.status === 'ativo';
+  const viewed = isAlertViewed(alert);
+  const canAcknowledge = showAction && !viewed;
 
   return (
-    <View style={[styles.alertCard, critical && styles.alertCardCritical]}>
+    <View style={[styles.alertCard, compact && styles.alertCardCompact, critical && styles.alertCardCritical]}>
       <View style={styles.alertTop}>
         <View style={styles.alertTitleBlock}>
-          <Text style={styles.alertTitle}>{alert?.dispositivo?.nome || 'Alerta'}</Text>
+          <Text style={[styles.alertTitle, compact && styles.alertTitleCompact]}>{alert?.dispositivo?.nome || 'Alerta'}</Text>
           <Text style={styles.alertMeta}>{alert?.dispositivo?.local || 'Banco de Sangue'}</Text>
         </View>
         <View style={[styles.alertBadge, critical && styles.alertBadgeCritical]}>
           <Text style={styles.alertBadgeText}>{alertLabel(alert)}</Text>
         </View>
       </View>
-      <Text style={styles.alertMessage}>{alert?.mensagem || 'Evento de monitoramento ativo.'}</Text>
-      <Text style={styles.alertTime}>{alert?.criado_em ? new Date(alert.criado_em).toLocaleString() : 'Agora'}</Text>
+      <Text style={[styles.alertMessage, compact && styles.alertMessageCompact]}>{alertDisplayMessage(alert)}</Text>
+      <Text style={[styles.alertTime, compact && styles.alertTimeCompact]}>{alert?.criado_em ? new Date(alert.criado_em).toLocaleString() : 'Agora'}</Text>
       {canAcknowledge ? (
         <Pressable onPress={() => onAcknowledge(alert)} disabled={busy} style={styles.ackButton}>
           <Text style={styles.ackButtonText}>{busy ? 'Registrando...' : 'Estou ciente'}</Text>
         </Pressable>
-      ) : showAction ? (
-        <Text style={styles.acknowledgedText}>Ciencia registrada</Text>
+      ) : showAction && viewed ? (
+        <Text style={styles.acknowledgedText}>Ciência registrada</Text>
       ) : null}
     </View>
   );
 }
 
 function ActivationScreen({ onActivated }) {
-  const [code, setCode] = useState('APP-DEMO-11');
+  const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [permission, requestPermission] = useCameraPermissions();
@@ -311,7 +432,7 @@ function ActivationScreen({ onActivated }) {
     try {
       const result = await activateApp(activationCode);
       setCameraOpen(false);
-      onActivated(result);
+      await onActivated(result);
     } catch (err) {
       setError(err.message || 'Não foi possível ativar este aparelho.');
     } finally {
@@ -355,7 +476,7 @@ function ActivationScreen({ onActivated }) {
             autoCapitalize="characters"
             value={code}
             onChangeText={setCode}
-            placeholder="APP-DEMO-11"
+            placeholder="Digite ou escaneie o código atual"
             placeholderTextColor="#9aacc1"
             style={styles.input}
           />
@@ -399,15 +520,14 @@ function Header({ session, loading, onRefresh }) {
             <Image source={require('./assets/icon.png')} style={styles.brandIcon} resizeMode="contain" />
           </View>
           <View style={styles.brandTextBlock}>
-            <Text style={styles.brandName}><Text style={styles.brandNameGreen}>ID</Text>Sensor</Text>
             <Text style={styles.clientName}>{clientDisplayName(session)}</Text>
-            <Text style={styles.unitName}>{unitDisplayName(session)}</Text>
           </View>
         </View>
         <Pressable onPress={onRefresh} style={styles.refreshButton}>
           {loading ? <ActivityIndicator size="small" color={colors.navy} /> : <Text style={styles.refreshText}>Atualizar</Text>}
         </Pressable>
       </View>
+      <Text style={styles.unitName}>{unitDisplayName(session)}</Text>
       <View style={styles.greetingRow}>
         <Text style={styles.greetingText}>Olá, </Text>
         <Text style={styles.userName}>{userDisplayName(session)}</Text>
@@ -416,7 +536,7 @@ function Header({ session, loading, onRefresh }) {
   );
 }
 
-function HomeScreen({ devices, alerts, session, onAcknowledge, acknowledgingId, setTab }) {
+function HomeScreen({ devices, alerts, session, onOpenAlerts, onOpenHistory }) {
   const areas = useMemo(() => sessionAreas(session), [session]);
   const [selectedAreaId, setSelectedAreaId] = useState(areas[0]?.id || 'unidade_banco_sangue');
   const admin = isAdminSession(session);
@@ -424,7 +544,12 @@ function HomeScreen({ devices, alerts, session, onAcknowledge, acknowledgingId, 
   const scopedDevices = admin ? filterDevicesByArea(devices, selectedArea?.id) : devices;
   const stats = useMemo(() => buildStats(scopedDevices), [scopedDevices]);
   const totalDevices = stats.total || (admin ? selectedArea?.devices_count : session?.devices_count) || 0;
-  const visibleAlerts = alerts.slice(0, 4);
+  const recentAlerts = useMemo(() => {
+    const now = Date.now();
+    return alerts.filter((alert) => isAlertFromLast24Hours(alert, now));
+  }, [alerts]);
+  const pendingAlerts = recentAlerts.filter((alert) => !isAlertViewed(alert));
+  const currentIssueCount = stats.crit + stats.warn + stats.offline;
   const areaName = selectedArea?.nome || 'Banco de Sangue';
   const overviewCards = [
     {
@@ -488,32 +613,25 @@ function HomeScreen({ devices, alerts, session, onAcknowledge, acknowledgingId, 
 
       <SectionHeader
         title="Últimos alertas"
-        actionLabel={alerts.length ? 'Ver alertas' : null}
-        onAction={() => setTab('alerts')}
+        actionLabel={recentAlerts.length ? 'Ver alertas' : null}
+        onAction={recentAlerts.length ? onOpenAlerts : undefined}
       />
-      {visibleAlerts.length ? (
-        <>
-          <LastAlertsBox alerts={visibleAlerts} setTab={setTab} />
-          {visibleAlerts.slice(0, 2).map((alert) => (
-        <AlertCard
-          key={alert.id}
-          alert={alert}
-          busy={acknowledgingId === alert.id}
-          onAcknowledge={onAcknowledge}
-          showAction={false}
-        />
-          ))}
-        </>
-      ) : (
-        <LastAlertsBox alerts={[]} setTab={setTab} />
-      )}
+      <CurrentStatusBoxV2
+        currentIssueCount={currentIssueCount}
+        onOpenAlerts={onOpenAlerts}
+      />
+      <PendingAlertsBox count={pendingAlerts.length} onOpenAlerts={onOpenAlerts} />
+      <ReportHistoryBox count={recentAlerts.length} onOpenHistory={onOpenHistory} />
     </ScrollView>
   );
 }
 
-function AlertsScreen({ alerts, onAcknowledge, acknowledgingId }) {
-  const visibleAlerts = alerts.slice(0, 24);
-  const activeCount = alerts.filter((alert) => alert?.status === 'ativo').length;
+function AlertsScreenLegacy({ alerts, onAcknowledge, acknowledgingId }) {
+  const visibleAlerts = useMemo(() => {
+    const now = Date.now();
+    return alerts.filter((alert) => isAlertFromLast24Hours(alert, now)).slice(0, 24);
+  }, [alerts]);
+  const activeCount = visibleAlerts.filter((alert) => alert?.status === 'ativo').length;
 
   return (
     <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -527,6 +645,52 @@ function AlertsScreen({ alerts, onAcknowledge, acknowledgingId }) {
           alert={alert}
           busy={acknowledgingId === alert.id}
           onAcknowledge={onAcknowledge}
+        />
+      )) : (
+        <EmptyState title="Sem alertas" caption="Quando o simulador gerar atenção, crítico ou offline, os eventos aparecem aqui." />
+      )}
+    </ScrollView>
+  );
+}
+
+function AlertsScreen({ alerts, mode, viewedSnapshot, onAcknowledge, acknowledgingId }) {
+  const recentAlerts = useMemo(() => {
+    const now = Date.now();
+    return alerts.filter((alert) => isAlertFromLast24Hours(alert, now));
+  }, [alerts]);
+
+  const visibleAlerts = useMemo(() => {
+    if (mode === 'history') return recentAlerts.slice(0, 24);
+
+    const snapshot = Array.isArray(viewedSnapshot) ? viewedSnapshot : [];
+    if (snapshot.length) return snapshot.slice(0, 5);
+
+    const pending = recentAlerts.filter((alert) => !isAlertViewed(alert));
+    return (pending.length ? pending : recentAlerts).slice(0, 5);
+  }, [mode, recentAlerts, viewedSnapshot]);
+
+  const pendingCount = visibleAlerts.filter((alert) => !isAlertViewed(alert)).length;
+  const caption = mode === 'history'
+    ? `${recentAlerts.length} evento(s) nas últimas 24h`
+    : pendingCount
+      ? `${pendingCount} pendente(s) - mostrando os últimos ${visibleAlerts.length}`
+      : visibleAlerts.length
+        ? `Mostrando os últimos ${visibleAlerts.length} alerta(s)`
+        : 'Nenhum alerta recente';
+
+  return (
+    <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <SectionHeader
+        title={mode === 'history' ? 'Histórico 24h' : 'Alertas'}
+        caption={caption}
+      />
+      {visibleAlerts.length ? visibleAlerts.map((alert) => (
+        <AlertCard
+          key={alert.id}
+          alert={alert}
+          busy={acknowledgingId === alert.id || acknowledgingId === 'bulk'}
+          onAcknowledge={onAcknowledge}
+          showAction={mode !== 'history'}
         />
       )) : (
         <EmptyState title="Sem alertas" caption="Quando o simulador gerar atenção, crítico ou offline, os eventos aparecem aqui." />
@@ -650,7 +814,7 @@ function SettingsScreen({ settings, setSettings, session }) {
         <Text style={styles.linkedLine}>{clientDisplayName(session)}</Text>
         <Text style={styles.linkedLine}>{unitDisplayName(session)}</Text>
         <Text style={styles.linkedLine}>Usuário: {userDisplayName(session)}</Text>
-        <Text style={styles.linkedCode}>{session?.app_device_id || 'APP-DEMO-11'}</Text>
+        <Text style={styles.linkedCode}>{session?.app_device_id || 'Aparelho ativo'}</Text>
       </View>
 
       <PoweredByFooter />
@@ -660,7 +824,10 @@ function SettingsScreen({ settings, setSettings, session }) {
 
 export default function App() {
   const [session, setSession] = useState(null);
+  const [sessionLoading, setSessionLoading] = useState(true);
   const [tab, setTab] = useState('home');
+  const [alertViewMode, setAlertViewMode] = useState('latest');
+  const [viewedAlertsSnapshot, setViewedAlertsSnapshot] = useState([]);
   const [devices, setDevices] = useState([]);
   const [alerts, setAlerts] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -671,6 +838,45 @@ export default function App() {
     sound: true,
     autoRefresh: true
   });
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadStoredSession() {
+      try {
+        const stored = await AsyncStorage.getItem(SESSION_STORAGE_KEY);
+        if (!stored) return;
+
+        const parsed = JSON.parse(stored);
+        if (mounted && parsed?.app_device_id) {
+          setSession(parsed);
+        }
+      } catch (err) {
+        if (mounted) {
+          setError('Não foi possível carregar o aparelho vinculado.');
+        }
+      } finally {
+        if (mounted) {
+          setSessionLoading(false);
+        }
+      }
+    }
+
+    loadStoredSession();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const handleActivated = useCallback(async (activatedSession) => {
+    setSession(activatedSession);
+    try {
+      await AsyncStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(activatedSession));
+    } catch (err) {
+      setError('Aparelho ativado, mas a sessão não foi salva no celular.');
+    }
+  }, []);
 
   const loadData = useCallback(async () => {
     if (!session) return;
@@ -690,15 +896,60 @@ export default function App() {
     }
   }, [session]);
 
+  const openAlertsView = useCallback((mode = 'latest') => {
+    setAlertViewMode(mode);
+    setTab('alerts');
+
+    const now = Date.now();
+    const recentAlerts = alerts.filter((alert) => isAlertFromLast24Hours(alert, now));
+    const pendingAlerts = recentAlerts.filter((alert) => !isAlertViewed(alert) && alert?.id);
+
+    if (mode === 'history') {
+      setViewedAlertsSnapshot([]);
+      return;
+    }
+
+    const snapshotSource = pendingAlerts.length ? pendingAlerts : recentAlerts;
+    setViewedAlertsSnapshot(
+      snapshotSource.slice(0, 5).map((alert) => (
+        pendingAlerts.length ? { ...alert, visualizado: true, visualizado_em: new Date().toISOString() } : alert
+      ))
+    );
+
+    if (!pendingAlerts.length || !session?.app_device_id) return;
+
+    setAcknowledgingId('bulk');
+    Promise.all(pendingAlerts.map((alert) => acknowledgeAlert(alert.id, session.app_device_id)
+      .then(() => true)
+      .catch(() => false)))
+      .then((results) => {
+        if (results.some((ok) => !ok)) {
+          setError('Não foi possível registrar ciência de todos os alertas.');
+        }
+        return loadData();
+      })
+      .finally(() => {
+        setAcknowledgingId('');
+      });
+  }, [alerts, loadData, session]);
+
   useEffect(() => {
     loadData();
   }, [loadData]);
 
   useEffect(() => {
     if (!session || !settings.autoRefresh) return undefined;
-    const interval = setInterval(loadData, 60000);
+    const interval = setInterval(loadData, 20000);
     return () => clearInterval(interval);
   }, [loadData, session, settings.autoRefresh]);
+
+  useEffect(() => {
+    if (!session) return undefined;
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') loadData();
+    });
+    return () => subscription.remove();
+  }, [loadData, session]);
 
   async function handleAcknowledge(alert) {
     setAcknowledgingId(alert.id);
@@ -713,7 +964,24 @@ export default function App() {
     }
   }
 
-  if (!session) return <ActivationScreen onActivated={setSession} />;
+  const unseenAlertCount = useMemo(() => {
+    const now = Date.now();
+    return alerts.filter((alert) => isAlertFromLast24Hours(alert, now) && !isAlertViewed(alert)).length;
+  }, [alerts]);
+
+  if (sessionLoading) {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <StatusBar barStyle="dark-content" backgroundColor={colors.panel} />
+        <View style={styles.sessionLoader}>
+          <ActivityIndicator color={colors.navy} />
+          <Text style={styles.sessionLoaderText}>Abrindo aparelho vinculado...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!session) return <ActivationScreen onActivated={handleActivated} />;
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -727,13 +995,18 @@ export default function App() {
             devices={devices}
             alerts={alerts}
             session={session}
-            onAcknowledge={handleAcknowledge}
-            acknowledgingId={acknowledgingId}
-            setTab={setTab}
+            onOpenAlerts={() => openAlertsView('latest')}
+            onOpenHistory={() => openAlertsView('history')}
           />
         ) : null}
         {tab === 'alerts' ? (
-          <AlertsScreen alerts={alerts} onAcknowledge={handleAcknowledge} acknowledgingId={acknowledgingId} />
+          <AlertsScreen
+            alerts={alerts}
+            mode={alertViewMode}
+            viewedSnapshot={viewedAlertsSnapshot}
+            onAcknowledge={handleAcknowledge}
+            acknowledgingId={acknowledgingId}
+          />
         ) : null}
         {tab === 'scan' ? <ScanScreen /> : null}
         {tab === 'settings' ? <SettingsScreen settings={settings} setSettings={setSettings} session={session} /> : null}
@@ -741,12 +1014,26 @@ export default function App() {
 
       <View style={styles.tabBar}>
         {tabs.map((item) => (
-          <Pressable key={item.id} onPress={() => setTab(item.id)} style={[styles.tabItem, tab === item.id && styles.tabItemActive]}>
-            <Ionicons
-              name={item.icon}
-              size={25}
-              color={item.tone === 'red' ? colors.crit : item.tone === 'green' ? colors.green : colors.navy}
-            />
+          <Pressable
+            key={item.id}
+            onPress={() => {
+              if (item.id === 'alerts') openAlertsView('latest');
+              else setTab(item.id);
+            }}
+            style={[styles.tabItem, tab === item.id && styles.tabItemActive]}
+          >
+            <View style={styles.tabIconWrap}>
+              <Ionicons
+                name={item.icon}
+                size={25}
+                color={item.tone === 'red' ? colors.crit : item.tone === 'green' ? colors.green : colors.navy}
+              />
+              {item.id === 'alerts' && unseenAlertCount > 0 ? (
+                <View style={styles.tabBadge}>
+                  <Text style={styles.tabBadgeText}>{unseenAlertCount > 99 ? '99+' : unseenAlertCount}</Text>
+                </View>
+              ) : null}
+            </View>
             <Text style={[styles.tabLabel, tab === item.id && styles.tabTextActive]}>{item.label}</Text>
           </Pressable>
         ))}
@@ -764,6 +1051,19 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'space-between',
     padding: 22
+  },
+  sessionLoader: {
+    alignItems: 'center',
+    flex: 1,
+    gap: 12,
+    justifyContent: 'center',
+    padding: 24
+  },
+  sessionLoaderText: {
+    color: colors.muted,
+    fontSize: 14,
+    fontWeight: '800',
+    textAlign: 'center'
   },
   logoCard: {
     alignItems: 'center',
@@ -874,9 +1174,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#eef5fc',
     borderBottomColor: '#d7e5f4',
     borderBottomWidth: 1,
-    paddingBottom: 22,
+    paddingBottom: 14,
     paddingHorizontal: 18,
-    paddingTop: 16
+    paddingTop: HEADER_TOP_PADDING
   },
   headerTopSurface: {
     alignItems: 'center',
@@ -893,34 +1193,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: colors.white,
     borderColor: '#d9e8f5',
-    borderRadius: 18,
+    borderRadius: 15,
     borderWidth: 1,
     elevation: 3,
-    height: 74,
+    height: HEADER_ICON_TILE_SIZE,
     justifyContent: 'center',
-    marginRight: 14,
+    marginRight: 12,
     shadowColor: '#0b2f55',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.10,
     shadowRadius: 14,
-    width: 74
+    width: HEADER_ICON_TILE_SIZE
   },
   brandIcon: {
-    height: 58,
-    width: 58
+    height: HEADER_ICON_SIZE,
+    width: HEADER_ICON_SIZE
   },
   brandTextBlock: {
     flex: 1
-  },
-  brandName: {
-    color: '#34312d',
-    fontSize: 25,
-    fontWeight: '900',
-    letterSpacing: 0,
-    lineHeight: 29
-  },
-  brandNameGreen: {
-    color: colors.greenDark
   },
   headerLogoRow: {
     alignItems: 'center',
@@ -937,32 +1227,32 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: 8,
     borderWidth: 1,
-    height: 42,
+    height: REFRESH_BUTTON_HEIGHT,
     justifyContent: 'center',
-    minWidth: 96,
+    minWidth: REFRESH_BUTTON_MIN_WIDTH,
     paddingHorizontal: 12
   },
   refreshText: {
     color: colors.navy,
-    fontSize: 12,
+    fontSize: REFRESH_TEXT_SIZE,
     fontWeight: '900'
   },
   clientName: {
     color: colors.ink,
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '900',
-    marginTop: 6
+    marginTop: 0
   },
   unitName: {
     color: colors.muted,
-    fontSize: 13,
+    fontSize: UNIT_TEXT_SIZE,
     fontWeight: '700',
-    marginTop: 3
+    marginTop: 4
   },
   greetingRow: {
     alignItems: 'baseline',
     flexDirection: 'row',
-    marginTop: 22
+    marginTop: 6
   },
   greetingText: {
     color: colors.ink,
@@ -1045,9 +1335,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     elevation: 3,
     flexDirection: 'row',
-    minHeight: 78,
+    minHeight: 72,
     paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingVertical: 12,
     shadowColor: '#0b2f55',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.08,
@@ -1057,10 +1347,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#eef9f3',
     borderRadius: 12,
-    height: 48,
+    height: 44,
     justifyContent: 'center',
     marginRight: 14,
-    width: 48
+    width: 44
   },
   areaTextBlock: {
     flex: 1
@@ -1072,7 +1362,7 @@ const styles = StyleSheet.create({
   },
   areaName: {
     color: colors.ink,
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '900',
     marginTop: 3
   },
@@ -1113,15 +1403,15 @@ const styles = StyleSheet.create({
   overviewGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12
+    gap: 10
   },
   overviewCard: {
     backgroundColor: colors.white,
-    borderRadius: 18,
+    borderRadius: 16,
     borderWidth: 1,
     elevation: 2,
-    minHeight: 136,
-    padding: 16,
+    minHeight: 122,
+    padding: 13,
     shadowColor: '#0b2f55',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.06,
@@ -1146,9 +1436,9 @@ const styles = StyleSheet.create({
   overviewIcon: {
     alignItems: 'center',
     borderRadius: 25,
-    height: 50,
+    height: 44,
     justifyContent: 'center',
-    width: 50
+    width: 44
   },
   overviewIconGreen: {
     backgroundColor: colors.green
@@ -1163,10 +1453,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#798394'
   },
   overviewValue: {
-    fontSize: 42,
+    fontSize: 36,
     fontWeight: '900',
     letterSpacing: 0,
-    marginTop: 14
+    marginTop: 8
   },
   overviewValueGreen: {
     color: colors.greenDark
@@ -1182,7 +1472,7 @@ const styles = StyleSheet.create({
   },
   overviewLabel: {
     color: colors.ink,
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '900',
     marginTop: 2
   },
@@ -1190,12 +1480,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: colors.white,
     borderColor: '#dce8f4',
-    borderRadius: 18,
+    borderRadius: 16,
     borderWidth: 1,
     elevation: 2,
     marginBottom: 12,
-    minHeight: 128,
-    padding: 18,
+    minHeight: 112,
+    padding: 14,
     shadowColor: '#0b2f55',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.06,
@@ -1204,28 +1494,88 @@ const styles = StyleSheet.create({
   lastAlertIcon: {
     alignItems: 'center',
     backgroundColor: '#e9f8ef',
-    borderRadius: 24,
-    height: 48,
+    borderRadius: 22,
+    height: 42,
     justifyContent: 'center',
-    marginBottom: 13,
-    width: 48
+    marginBottom: 8,
+    width: 42
   },
   lastAlertIconWarn: {
     backgroundColor: colors.warn
   },
   lastAlertTitle: {
     color: colors.ink,
-    fontSize: 17,
+    fontSize: 15,
     fontWeight: '900',
     textAlign: 'center'
   },
   lastAlertCaption: {
     color: colors.muted,
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
-    lineHeight: 20,
-    marginTop: 5,
+    lineHeight: 18,
+    marginTop: 4,
     textAlign: 'center'
+  },
+  reportBox: {
+    alignItems: 'center',
+    backgroundColor: colors.white,
+    borderColor: '#dce8f4',
+    borderRadius: 14,
+    borderWidth: 1,
+    elevation: 1,
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    shadowColor: '#0b2f55',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.04,
+    shadowRadius: 10
+  },
+  pendingAlertBox: {
+    alignItems: 'center',
+    backgroundColor: colors.white,
+    borderColor: '#ffdcb7',
+    borderRadius: 14,
+    borderWidth: 1,
+    elevation: 1,
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    shadowColor: '#0b2f55',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.04,
+    shadowRadius: 10
+  },
+  reportIcon: {
+    alignItems: 'center',
+    backgroundColor: colors.chip,
+    borderRadius: 18,
+    height: 36,
+    justifyContent: 'center',
+    width: 36
+  },
+  pendingAlertIcon: {
+    backgroundColor: colors.warn
+  },
+  reportTextBlock: {
+    flex: 1
+  },
+  reportTitle: {
+    color: colors.ink,
+    fontSize: 14,
+    fontWeight: '900'
+  },
+  reportCaption: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '700',
+    lineHeight: 17,
+    marginTop: 2
   },
   totalCard: {
     alignItems: 'center',
@@ -1280,6 +1630,11 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     padding: 15
   },
+  alertCardCompact: {
+    borderLeftWidth: 4,
+    marginBottom: 10,
+    padding: 13
+  },
   alertCardCritical: {
     borderLeftColor: colors.crit
   },
@@ -1296,6 +1651,9 @@ const styles = StyleSheet.create({
     color: colors.ink,
     fontSize: 16,
     fontWeight: '900'
+  },
+  alertTitleCompact: {
+    fontSize: 15
   },
   alertMeta: {
     color: colors.muted,
@@ -1324,11 +1682,20 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginTop: 11
   },
+  alertMessageCompact: {
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 8
+  },
   alertTime: {
     color: colors.muted,
     fontSize: 12,
     fontWeight: '700',
     marginTop: 7
+  },
+  alertTimeCompact: {
+    fontSize: 11,
+    marginTop: 5
   },
   ackButton: {
     alignItems: 'center',
@@ -1487,5 +1854,26 @@ const styles = StyleSheet.create({
   },
   tabTextActive: {
     color: colors.navy
+  },
+  tabIconWrap: {
+    position: 'relative'
+  },
+  tabBadge: {
+    alignItems: 'center',
+    backgroundColor: colors.crit,
+    borderColor: colors.white,
+    borderRadius: 9,
+    borderWidth: 2,
+    minWidth: 18,
+    paddingHorizontal: 4,
+    position: 'absolute',
+    right: -10,
+    top: -8
+  },
+  tabBadgeText: {
+    color: colors.white,
+    fontSize: 9,
+    fontWeight: '900',
+    lineHeight: 14
   }
 });

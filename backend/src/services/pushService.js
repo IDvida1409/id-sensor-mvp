@@ -1,4 +1,5 @@
 const { expoPushEnabled } = require('../config');
+const { alertMessageForAlert } = require('./alertText');
 
 async function sendExpoPush({ token, alert, device }) {
   if (!expoPushEnabled) {
@@ -18,7 +19,7 @@ async function sendExpoPush({ token, alert, device }) {
   if (!String(token).startsWith('ExponentPushToken[') && !String(token).startsWith('ExpoPushToken[')) {
     return {
       status_envio: 'invalid_token',
-      resposta: 'Token informado nao parece ser um Expo Push Token.'
+      resposta: 'Token informado não parece ser um Expo Push Token.'
     };
   }
 
@@ -26,10 +27,15 @@ async function sendExpoPush({ token, alert, device }) {
     ? '--'
     : `${Number(alert.temperatura_atual).toFixed(1)} C`;
 
+  const displayMessage = alertMessageForAlert(alert);
+  const body = displayMessage === 'Dispositivo sem comunicação.'
+    ? `${device.nome}: ${displayMessage}`
+    : `${device.nome}: ${displayMessage} Atual: ${currentTemp}.`;
+
   const payload = {
     to: token,
-    title: 'ALERTA ID Sensor',
-    body: `${device.nome} em alerta. Atual: ${currentTemp}.`,
+    title: 'Alerta IDsensor',
+    body,
     sound: 'default',
     priority: 'high',
     data: {
