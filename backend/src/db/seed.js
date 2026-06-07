@@ -44,6 +44,57 @@ function geladeira(index) {
   };
 }
 
+const DEMO_APP_ACTIVATION_CODES = [
+  {
+    id: 'act_vinicius_admin',
+    codigo: 'APP-430E091F',
+    usuario_nome: 'Vinicius',
+    area_nome: 'Administrativo',
+    usuario_perfil: 'admin1'
+  },
+  {
+    id: 'act_idvida_banco_sangue',
+    codigo: 'APP-2131C465',
+    usuario_nome: 'IDvida',
+    area_nome: 'Banco de Sangue',
+    usuario_perfil: 'area'
+  }
+];
+
+function ensureAppActivationCode(db, activation, createdAt) {
+  const current = db.prepare('SELECT id FROM activation_codes WHERE codigo = ?').get(activation.codigo);
+  if (current) {
+    db.prepare(`
+      UPDATE activation_codes
+      SET
+        cliente_id = 'cliente_idvida',
+        unidade_id = 'unidade_banco_sangue',
+        dispositivo_id = NULL,
+        tipo_ativacao = 'app_alerta',
+        ativo = 1,
+        usuario_nome = ?,
+        area_nome = ?,
+        usuario_perfil = ?
+      WHERE codigo = ?
+    `).run(activation.usuario_nome, activation.area_nome, activation.usuario_perfil, activation.codigo);
+    return;
+  }
+
+  db.prepare(`
+    INSERT INTO activation_codes (
+      id, codigo, cliente_id, unidade_id, dispositivo_id, tipo_ativacao, ativo,
+      criado_em, usuario_nome, usuario_email, area_nome, usuario_perfil
+    ) VALUES (?, ?, 'cliente_idvida', 'unidade_banco_sangue', NULL, 'app_alerta', 1, ?, ?, NULL, ?, ?)
+  `).run(
+    activation.id,
+    activation.codigo,
+    createdAt,
+    activation.usuario_nome,
+    activation.area_nome,
+    activation.usuario_perfil
+  );
+}
+
 function seedDatabase() {
   const db = getDb();
   const createdAt = nowIso();
@@ -96,25 +147,14 @@ function seedDatabase() {
       });
     });
 
-    db.prepare(`
-      INSERT INTO activation_codes (
-        id, codigo, cliente_id, unidade_id, dispositivo_id, tipo_ativacao, ativo,
-        criado_em, usuario_nome, usuario_email, area_nome, usuario_perfil
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      'act_demo_app',
-      'APP-DEMO-11',
-      'cliente_idvida',
-      'unidade_banco_sangue',
-      null,
-      'app_alerta',
-      1,
-      createdAt,
-      'IDvida',
-      null,
-      'Banco de Sangue',
-      'area'
-    );
+    ensureAppActivationCode(db, {
+      id: 'act_demo_app',
+      codigo: 'APP-DEMO-11',
+      usuario_nome: 'IDvida',
+      area_nome: 'Banco de Sangue',
+      usuario_perfil: 'area'
+    }, createdAt);
+    DEMO_APP_ACTIVATION_CODES.forEach((activation) => ensureAppActivationCode(db, activation, createdAt));
 
     db.prepare(`
       INSERT INTO simulation_state (
@@ -176,6 +216,8 @@ function ensureDemoReferenceData(db = getDb()) {
       WHERE id = ?
     `).run(demo.id);
   }
+
+  DEMO_APP_ACTIVATION_CODES.forEach((activation) => ensureAppActivationCode(db, activation, createdAt));
 }
 
 module.exports = {

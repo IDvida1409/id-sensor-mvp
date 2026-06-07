@@ -890,6 +890,14 @@ export default function App() {
       setDevices(deviceList);
       setAlerts(alertList);
     } catch (err) {
+      if (String(err.message || '').toLowerCase().includes('celular habilitado')) {
+        await AsyncStorage.removeItem(SESSION_STORAGE_KEY);
+        setSession(null);
+        setDevices([]);
+        setAlerts([]);
+        setError('');
+        return;
+      }
       setError('Servidor indisponível. Toque em Atualizar.');
     } finally {
       setLoading(false);
