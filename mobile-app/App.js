@@ -103,9 +103,74 @@ function sessionAreas(session) {
   }));
 }
 
+function areaName(area) {
+  return String(area?.nome || '').replace('Laboratorio', 'Laborat\u00f3rio') || 'Banco de Sangue';
+}
+
+function areaUnitName(area) {
+  return String(area?.local || 'Unidade Bela Vista').replace('Laboratorio', 'Laborat\u00f3rio');
+}
+
+function unitsFromAreas(areas) {
+  const map = new Map();
+  areas.forEach((area) => {
+    const name = areaUnitName(area);
+    if (!map.has(name)) {
+      map.set(name, {
+        id: `unit-${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+        name,
+        devices_count: 0,
+        areaIds: []
+      });
+    }
+
+    const unit = map.get(name);
+    unit.devices_count += Number(area?.devices_count || 0);
+    unit.areaIds.push(area.id);
+  });
+
+  return Array.from(map.values());
+}
+
+function defaultScope() {
+  return { level: 'all', unitName: null, areaId: null };
+}
+
+function scopeUnitAreas(areas, scope) {
+  if (scope?.level === 'all') return areas;
+  const unitName = scope?.unitName || areaUnitName(areas.find((area) => area.id === scope?.areaId));
+  return areas.filter((area) => areaUnitName(area) === unitName);
+}
+
 function filterDevicesByArea(devices, areaId) {
   if (!areaId) return devices;
   return devices.filter((device) => device?.unitId === areaId || device?.unit_id === areaId);
+}
+
+function filterDevicesByScope(devices, areas, scope) {
+  if (!scope || scope.level === 'all') return devices;
+  if (scope.level === 'area') return filterDevicesByArea(devices, scope.areaId);
+
+  const allowedAreaIds = scopeUnitAreas(areas, scope).map((area) => area.id);
+  if (!allowedAreaIds.length) return devices;
+  return devices.filter((device) => allowedAreaIds.includes(device?.unitId || device?.unit_id));
+}
+
+function filterAlertsByScope(alerts, areas, scope) {
+  if (!scope || scope.level === 'all') return alerts;
+  if (scope.level === 'area') return alerts.filter((alert) => alert?.unidade_id === scope.areaId);
+
+  const allowedAreaIds = scopeUnitAreas(areas, scope).map((area) => area.id);
+  if (!allowedAreaIds.length) return alerts;
+  return alerts.filter((alert) => allowedAreaIds.includes(alert?.unidade_id));
+}
+
+function scopeAreaName(areas, scope) {
+  if (scope?.level === 'area') {
+    return areaName(areas.find((area) => area.id === scope.areaId));
+  }
+  if (scope?.level === 'unit') return scope.unitName;
+  return null;
 }
 
 function panelFilterValue(kind) {
@@ -298,9 +363,35 @@ function OverviewCard({ label, value, icon, tone, disabled, onPress }) {
   );
 }
 
-function AreaSelector({ areas, selectedAreaId, onSelect }) {
+function LegacyScopeSelector({ areas, scope, onChange }) {
   const [open, setOpen] = useState(false);
-  const selected = areas.find((area) => area.id === selectedAreaId) || areas[0] || fallbackAreas[0];
+  const units = useMemo(() => unitsFromAreas(areas), [areas]);
+  const selectedArea = areas.find((area) => area.id === scope?.areaId);
+  const selectedUnitName = scope?.unitName || areaUnitName(selectedArea);
+  const unitAreas = scope?.level === 'all'
+    ? areas
+    : areas.filter((area) => areaUnitName(area) === selectedUnitName);
+  const active = scope?.level !== 'all';
+  const label = scope?.level === 'area'
+    ? 'Ãrea selecionada'
+    : (scope?.level === 'unit' ? 'Unidade selecionada' : 'Escopo atual');
+  const name = scope?.level === 'area'
+    ? areaName(selectedArea)
+    : (scope?.level === 'unit' ? selectedUnitName : 'Todos os dispositivos');
+  const optionTitle = scope?.level === 'all' ? 'Unidades' : `Ãreas de ${selectedUnitName}`;
+
+  function backOneLevel() {
+    if (scope?.level === 'area') {
+      onChange({ level: 'unit', unitName: selectedUnitName, areaId: null });
+      setOpen(false);
+      return;
+    }
+
+    if (scope?.level === 'unit') {
+      onChange(defaultScope());
+      setOpen(false);
+    }
+  }
 
   return (
     <View style={styles.areaPickerWrap}>
@@ -335,6 +426,101 @@ function AreaSelector({ areas, selectedAreaId, onSelect }) {
               </Pressable>
             );
           })}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function ScopeSelector({ areas, scope, onChange }) {
+  const [open, setOpen] = useState(false);
+  const units = useMemo(() => unitsFromAreas(areas), [areas]);
+  const selectedArea = areas.find((area) => area.id === scope?.areaId);
+  const selectedUnitName = scope?.unitName || areaUnitName(selectedArea);
+  const unitAreas = scope?.level === 'all'
+    ? areas
+    : areas.filter((area) => areaUnitName(area) === selectedUnitName);
+  const active = scope?.level !== 'all';
+  const label = scope?.level === 'area'
+    ? '\u00c1rea selecionada'
+    : (scope?.level === 'unit' ? 'Unidade selecionada' : 'Escopo atual');
+  const name = scope?.level === 'area'
+    ? areaName(selectedArea)
+    : (scope?.level === 'unit' ? selectedUnitName : 'Todos os dispositivos');
+  const optionTitle = scope?.level === 'all' ? 'Unidades' : `\u00c1reas de ${selectedUnitName}`;
+
+  function backOneLevel() {
+    if (scope?.level === 'area') {
+      onChange({ level: 'unit', unitName: selectedUnitName, areaId: null });
+      setOpen(false);
+      return;
+    }
+
+    if (scope?.level === 'unit') {
+      onChange(defaultScope());
+      setOpen(false);
+    }
+  }
+
+  return (
+    <View style={styles.areaPickerWrap}>
+      <View style={styles.areaPicker}>
+        <Pressable
+          onPress={backOneLevel}
+          disabled={!active}
+          style={[styles.areaIconBox, active && styles.areaIconBoxActive]}
+        >
+          <Ionicons name="business-outline" size={25} color={active ? colors.navy : colors.greenDark} />
+        </Pressable>
+        <Pressable onPress={() => setOpen((current) => !current)} style={styles.areaMainButton}>
+          <View style={styles.areaTextBlock}>
+            <Text style={styles.areaLabel}>{label}</Text>
+            <Text style={styles.areaName}>{name}</Text>
+          </View>
+          <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={24} color={colors.navy} />
+        </Pressable>
+      </View>
+
+      {open ? (
+        <View style={styles.areaOptions}>
+          <Text style={styles.areaOptionsTitle}>{optionTitle}</Text>
+          {scope?.level === 'all' ? (
+            units.map((unit) => (
+              <Pressable
+                key={unit.id}
+                onPress={() => {
+                  onChange({ level: 'unit', unitName: unit.name, areaId: null });
+                  setOpen(false);
+                }}
+                style={styles.areaOption}
+              >
+                <View>
+                  <Text style={styles.areaOptionName}>{unit.name}</Text>
+                  <Text style={styles.areaOptionCount}>{unit.devices_count} dispositivos</Text>
+                </View>
+              </Pressable>
+            ))
+          ) : (
+            unitAreas.map((area) => {
+              const selected = scope?.level === 'area' && area.id === scope.areaId;
+              return (
+                <Pressable
+                  key={area.id}
+                  onPress={() => {
+                    onChange({ level: 'area', unitName: selectedUnitName, areaId: area.id });
+                    setOpen(false);
+                  }}
+                  style={[styles.areaOption, selected && styles.areaOptionActive]}
+                >
+                  <View>
+                    <Text style={[styles.areaOptionName, selected && styles.areaOptionNameActive]}>{areaName(area)}</Text>
+                    <Text style={styles.areaOptionCount}>{area.devices_count} dispositivos</Text>
+                  </View>
+                  {selected ? <Ionicons name="checkmark-circle" size={21} color={colors.green} /> : null}
+                </Pressable>
+              );
+            })
+          )}
         </View>
       ) : null}
     </View>
@@ -622,19 +808,29 @@ function Header({ session, loading, onRefresh }) {
 
 function HomeScreen({ devices, alerts, session, onOpenAlerts, onOpenHistory }) {
   const areas = useMemo(() => sessionAreas(session), [session]);
-  const [selectedAreaId, setSelectedAreaId] = useState(areas[0]?.id || 'unidade_banco_sangue');
+  const [scope, setScope] = useState(defaultScope);
   const admin = isAdminSession(session);
-  const selectedArea = areas.find((area) => area.id === selectedAreaId) || areas[0] || fallbackAreas[0];
-  const scopedDevices = admin ? filterDevicesByArea(devices, selectedArea?.id) : devices;
+  const userAreaScope = useMemo(() => ({
+    level: 'area',
+    areaId: session?.unidade?.id,
+    unitName: areaUnitName(areas[0])
+  }), [areas, session?.unidade?.id]);
+  const activeScope = admin ? scope : userAreaScope;
+  const scopedDevices = admin
+    ? filterDevicesByScope(devices, areas, activeScope)
+    : filterDevicesByArea(devices, session?.unidade?.id);
   const stats = useMemo(() => buildStats(scopedDevices), [scopedDevices]);
-  const totalDevices = stats.total || (admin ? selectedArea?.devices_count : session?.devices_count) || 0;
+  const totalDevices = stats.total;
+  const scopedAlerts = useMemo(() => (
+    admin ? filterAlertsByScope(alerts, areas, activeScope) : filterAlertsByScope(alerts, areas, userAreaScope)
+  ), [admin, alerts, areas, activeScope, userAreaScope]);
   const recentAlerts = useMemo(() => {
     const now = Date.now();
-    return alerts.filter((alert) => isAlertFromLast24Hours(alert, now));
-  }, [alerts]);
+    return scopedAlerts.filter((alert) => isAlertFromLast24Hours(alert, now));
+  }, [scopedAlerts]);
   const pendingAlerts = recentAlerts.filter((alert) => !isAlertViewed(alert));
   const currentIssueCount = stats.crit + stats.warn + stats.offline;
-  const areaName = selectedArea?.nome || 'Banco de Sangue';
+  const panelAreaName = scopeAreaName(areas, activeScope) || 'Todos os dispositivos';
   const overviewCards = [
     {
       key: 'all',
@@ -673,10 +869,10 @@ function HomeScreen({ devices, alerts, session, onOpenAlerts, onOpenHistory }) {
   return (
     <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       {admin ? (
-        <AreaSelector
+        <ScopeSelector
           areas={areas}
-          selectedAreaId={selectedAreaId}
-          onSelect={setSelectedAreaId}
+          scope={scope}
+          onChange={setScope}
         />
       ) : null}
 
@@ -690,7 +886,7 @@ function HomeScreen({ devices, alerts, session, onOpenAlerts, onOpenHistory }) {
             icon={card.icon}
             tone={card.tone}
             disabled={card.disabled}
-            onPress={() => openPanel(session, card.key, areaName)}
+            onPress={() => openPanel(session, card.key, panelAreaName)}
           />
         ))}
       </View>
@@ -1499,6 +1695,14 @@ const styles = StyleSheet.create({
     marginRight: 14,
     width: 44
   },
+  areaIconBoxActive: {
+    backgroundColor: '#eaf2fb'
+  },
+  areaMainButton: {
+    alignItems: 'center',
+    flex: 1,
+    flexDirection: 'row'
+  },
   areaTextBlock: {
     flex: 1
   },
@@ -1520,6 +1724,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     marginTop: 8,
     overflow: 'hidden'
+  },
+  areaOptionsTitle: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '900',
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 4,
+    textTransform: 'uppercase'
   },
   areaOption: {
     alignItems: 'center',
