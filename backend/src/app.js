@@ -1,4 +1,5 @@
 const {
+  buildActivationDeepLink,
   buildActivationPayload,
   buildDevicePayload,
   buildQrDataUrl,
@@ -496,6 +497,7 @@ function renderDeviceQrPage(card, code) {
 function renderActivationQrPage(activation, code, appUrl = publicApiUrl) {
   const clientName = activation?.cliente_nome || 'Cliente vinculado';
   const unitName = activation?.unidade_nome || 'Unidade vinculada';
+  const deepLink = buildActivationDeepLink(code);
 
   return `<!doctype html>
 <html lang="pt-BR">
@@ -512,6 +514,8 @@ function renderActivationQrPage(activation, code, appUrl = publicApiUrl) {
     h1 { font-size: 25px; margin: 0 0 10px; }
     p { color: #65758f; font-size: 15px; font-weight: 700; line-height: 1.5; margin: 0 0 16px; }
     .code { background: #eaf2fb; border: 1px solid #d8e4f2; border-radius: 8px; color: #0b2f55; font-size: 23px; font-weight: 900; letter-spacing: 1px; padding: 14px; text-align: center; }
+    .open-app { background: #0b68d8; border-radius: 8px; color: white; display: block; font-size: 16px; font-weight: 900; margin: 18px 0 8px; padding: 14px; text-align: center; text-decoration: none; }
+    .hint { font-size: 13px; }
     .client { margin-top: 16px; }
     .powered { align-items: center; color: #65758f; display: flex; gap: 10px; justify-content: center; margin-top: 24px; font-size: 12px; font-weight: 800; }
     .powered img { display: block; height: 31px; width: auto; }
@@ -522,8 +526,10 @@ function renderActivationQrPage(activation, code, appUrl = publicApiUrl) {
     <section>
       <img class="logo" src="/assets/idsensor-logo.png" alt="IDsensor">
       <h1>Ativar aparelho celular</h1>
-      <p>Digite este código no app IDsensor para vincular o celular ao cliente. Esta tela também confirma que o QR abriu pelo navegador.</p>
+      <p>Este link foi feito para abrir o app IDsensor e vincular o celular ao cliente.</p>
       <div class="code">${escapeHtml(code)}</div>
+      <a class="open-app" href="${escapeHtml(deepLink)}">Abrir no app IDsensor</a>
+      <p class="hint">Se o app não abrir automaticamente, copie o código acima e ative manualmente no celular.</p>
       <p class="client">${escapeHtml(clientName)}<br>${escapeHtml(unitName)}</p>
       <p>Backend conectado em ${escapeHtml(appUrl)}.</p>
       <div class="powered">Powered by <img src="/assets/idvida-logo.png" alt="IDvida"></div>
@@ -1002,6 +1008,9 @@ addRoute('POST', '/activation-code', async ({ body, req, res }) => {
   const payload = tipoAtivacao === 'dispositivo_qrcode'
     ? buildDevicePayload(code, publicBase)
     : buildActivationPayload(code, publicBase);
+  const qrPayload = tipoAtivacao === 'app_alerta'
+    ? buildActivationDeepLink(code)
+    : payload;
 
   let emailDelivery = { status_envio: 'skipped', message: 'Envio não solicitado para este tipo de ativação.' };
   if (tipoAtivacao === 'app_alerta' && enviarEmail) {
@@ -1011,7 +1020,7 @@ addRoute('POST', '/activation-code', async ({ body, req, res }) => {
         usuarioEmail,
         codigo: code,
         activationUrl: payload,
-        qrImageUrl: buildQrImageUrl(payload),
+        qrImageUrl: buildQrImageUrl(qrPayload),
         clienteNome: target.cliente_nome,
         unidadeNome: target.unidade_nome,
         areaNome,
@@ -1048,8 +1057,10 @@ addRoute('POST', '/activation-code', async ({ body, req, res }) => {
     expira_em: expiresAt,
     email_delivery: emailDelivery,
     qr_payload: payload,
-    qr_code_data_url: await buildQrDataUrl(payload),
-    qr_image_url: buildQrImageUrl(payload)
+    qr_scan_payload: qrPayload,
+    activation_deep_link: tipoAtivacao === 'app_alerta' ? qrPayload : null,
+    qr_code_data_url: await buildQrDataUrl(qrPayload),
+    qr_image_url: buildQrImageUrl(qrPayload)
   }, 201);
 });
 

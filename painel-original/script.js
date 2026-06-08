@@ -6570,7 +6570,13 @@ document.addEventListener('DOMContentLoaded', function(){
     if(status === 'sent') return 'E-mail enviado com sucesso.';
     if(status === 'not_configured') return 'Código gerado. Envio de e-mail ainda não configurado no servidor.';
     if(status === 'disabled') return 'Código gerado. Envio de e-mail desativado no servidor.';
-    if(status === 'failed') return `Código gerado. Falha no envio do e-mail: ${delivery?.message || 'verifique o provedor.'}`;
+    if(status === 'failed'){
+      const message = String(delivery?.message || '');
+      if(message.includes('testing emails') || message.includes('verify a domain')){
+        return 'Código gerado. O e-mail de teste só pode ser enviado para david@idvida.com.br.';
+      }
+      return 'Código gerado. O e-mail não foi enviado, mas o QR Code e o código podem ser usados normalmente.';
+    }
     return 'Código gerado para ativação manual.';
   }
 
@@ -6578,6 +6584,7 @@ document.addEventListener('DOMContentLoaded', function(){
     const result = getEl('bindDeviceResult');
     if(!result) return;
     const payload = data?.qr_payload || '';
+    const scanPayload = data?.qr_scan_payload || data?.activation_deep_link || '';
     const qrImage = data?.qr_code_data_url || data?.qr_image_url || '';
     const delivery = data?.email_delivery || {};
     result.innerHTML = `
@@ -6586,8 +6593,9 @@ document.addEventListener('DOMContentLoaded', function(){
         <div class="bind-device-result-code">${escapeHtml(data?.codigo || '')}</div>
         ${qrImage ? `<img class="bind-device-result-qr" src="${escapeHtml(qrImage)}" alt="QR Code de ativação">` : ''}
       </div>
+      ${scanPayload ? `<div class="bind-device-result-line">QR Code: abre o app IDsensor para vincular este aparelho.</div>` : ''}
       <div class="bind-device-result-line">${escapeHtml(emailStatusLabel(delivery))}</div>
-      ${payload ? `<div class="bind-device-result-line">Link: ${escapeHtml(payload)}</div>` : ''}
+      ${payload ? `<div class="bind-device-result-line">Link de apoio: ${escapeHtml(payload)}</div>` : ''}
       <button class="bind-device-copy" id="copyBindDeviceCode" type="button">Copiar código</button>
     `;
     result.hidden = false;

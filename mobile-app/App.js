@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   AppState,
@@ -1196,6 +1196,7 @@ function SettingsScreen({ settings, setSettings, session }) {
 export default function App() {
   const [session, setSession] = useState(null);
   const [sessionLoading, setSessionLoading] = useState(true);
+  const handledActivationUrls = useRef(new Set());
   const [tab, setTab] = useState('home');
   const [alertViewMode, setAlertViewMode] = useState('latest');
   const [viewedAlertsSnapshot, setViewedAlertsSnapshot] = useState([]);
@@ -1248,6 +1249,53 @@ export default function App() {
       setError('Aparelho ativado, mas a sessão não foi salva no celular.');
     }
   }, []);
+
+  const handleActivationUrl = useCallback(async (url) => {
+    const rawUrl = String(url || '').trim();
+    if (!rawUrl || handledActivationUrls.current.has(rawUrl)) return;
+
+    const activationCode = extractActivationCode(rawUrl);
+    if (!activationCode || !activationCode.startsWith('APP-')) return;
+    handledActivationUrls.current.add(rawUrl);
+
+    if (session?.app_device_id) {
+      setTab('home');
+      setError('Este celular já está vinculado ao IDsensor.');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+    try {
+      const activatedSession = await activateMobileSession(activationCode);
+      await handleActivated(activatedSession);
+      setTab('home');
+    } catch (err) {
+      setError(err.message || 'Não foi possível ativar este aparelho pelo QR Code.');
+    } finally {
+      setLoading(false);
+    }
+  }, [handleActivated, session?.app_device_id]);
+
+  useEffect(() => {
+    if (sessionLoading) return undefined;
+    let mounted = true;
+
+    Linking.getInitialURL()
+      .then((url) => {
+        if (mounted && url) handleActivationUrl(url);
+      })
+      .catch(() => {});
+
+    const subscription = Linking.addEventListener('url', ({ url }) => {
+      handleActivationUrl(url);
+    });
+
+    return () => {
+      mounted = false;
+      subscription.remove();
+    };
+  }, [handleActivationUrl, sessionLoading]);
 
   const recoverStoredSession = useCallback(async () => {
     const activationCode = session?.activation_code;

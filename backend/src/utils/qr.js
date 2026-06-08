@@ -13,6 +13,10 @@ function buildActivationPayload(code, base) {
   return joinPublicLink('/a', code, base);
 }
 
+function buildActivationDeepLink(code) {
+  return `idsensor://activate/${encodeURIComponent(code)}`;
+}
+
 function buildDevicePayload(code, base) {
   return joinPublicLink('/q', code, base);
 }
@@ -41,6 +45,7 @@ function extractScannedCode(input) {
 
 module.exports = {
   buildActivationPayload,
+  buildActivationDeepLink,
   buildDevicePayload,
   buildQrImageUrl,
   buildQrDataUrl,
