@@ -764,6 +764,20 @@ function buildAlert(row) {
   };
 }
 
+function applyAppDeviceAlertBaseline(rows, appDevice) {
+  const activatedAt = appDevice?.criado_em;
+  if (!activatedAt) return rows;
+
+  return rows.map((row) => {
+    if (row.visualizado || !row.criado_em || row.criado_em > activatedAt) return row;
+    return {
+      ...row,
+      visualizado: 1,
+      visualizado_em: activatedAt
+    };
+  });
+}
+
 function buildAreasSummary(db, clienteId) {
   const rows = db.prepare(`
     SELECT
@@ -1407,7 +1421,7 @@ addRoute('GET', '/app/alerts/:app_device_id', async ({ params, req, res }) => {
         AND (? IS NULL OR a.dispositivo_id = ?)
     `)).all(appDevice.id, appDevice.cliente_id, appDevice.unidade_id, appDevice.dispositivo_id, appDevice.dispositivo_id);
 
-  ok(res, rows.map(buildAlert));
+  ok(res, applyAppDeviceAlertBaseline(rows, appDevice).map(buildAlert));
 });
 
 addRoute('GET', '/alerts/:id', async ({ params, res }) => {
