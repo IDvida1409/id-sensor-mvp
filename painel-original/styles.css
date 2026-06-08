@@ -7664,6 +7664,22 @@ svg defs #cbWarnPattern rect, svg defs #cbCritPattern rect { shape-rendering:cri
   margin:6px 0 8px;
 }
 
+.bind-device-result-main{
+  align-items:center;
+  display:flex;
+  gap:14px;
+  justify-content:space-between;
+}
+
+.bind-device-result-qr{
+  background:#fff;
+  border:1px solid #d8e6f5;
+  border-radius:12px;
+  height:112px;
+  padding:6px;
+  width:112px;
+}
+
 .bind-device-result-line{
   color:#607189;
   font-size:12px;
@@ -7718,6 +7734,17 @@ svg defs #cbWarnPattern rect, svg defs #cbCritPattern rect { shape-rendering:cri
 .bind-area-trigger[aria-expanded="true"]{
   border-color:#9fc2f6;
   box-shadow:0 0 0 4px rgba(47,128,255,.10);
+}
+
+.bind-area-trigger:disabled{
+  cursor:not-allowed;
+  opacity:.86;
+}
+
+.bind-area-picker.locked .bind-area-trigger{
+  background:linear-gradient(180deg,#f7fbff,#edf5ff);
+  border-color:#cfe0f4;
+  color:#103b66;
 }
 
 .bind-area-chevron{

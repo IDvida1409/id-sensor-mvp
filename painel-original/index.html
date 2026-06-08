@@ -602,7 +602,7 @@
   <div class="info-modal bind-device-modal" role="dialog" aria-modal="true" aria-labelledby="bindDeviceTitle">
     <button class="info-modal-close" id="closeBindDeviceModal" type="button" aria-label="Fechar">×</button>
     <h2 id="bindDeviceTitle">Vincular dispositivo</h2>
-    <p class="bind-device-subtitle">Gere um código para o usuário ativar o app e receber alertas da área vinculada.</p>
+    <p class="bind-device-subtitle">Gere um código para ativar o app conforme o perfil e as áreas liberadas.</p>
     <form id="bindDeviceForm">
       <div class="info-field">
         <label for="bindUserName">Nome do usuário</label>
@@ -613,18 +613,20 @@
         <input id="bindUserEmail" name="usuario_email" type="email" autocomplete="email" placeholder="usuario@empresa.com" required>
       </div>
       <div class="info-field">
-        <label for="bindUserArea">Área</label>
-        <input id="bindUserArea" name="area" type="hidden" value="unidade_banco_sangue" data-area-name="Banco de Sangue">
+        <label for="bindUserArea">Áreas liberadas</label>
+        <input id="bindUserArea" name="area" type="hidden" value="unidade_banco_sangue" data-area-name="Todas as áreas" data-area-ids='["all"]'>
         <div class="bind-area-picker" id="bindAreaPicker">
           <button class="bind-area-trigger" id="bindUserAreaButton" type="button" aria-expanded="false" aria-controls="bindAreaMenu">
-            <span id="bindUserAreaLabel">Banco de Sangue</span>
+            <span id="bindUserAreaLabel">Todas as áreas</span>
             <span class="bind-area-chevron" aria-hidden="true">⌄</span>
           </button>
           <div class="bind-area-menu" id="bindAreaMenu" hidden>
-            <button class="bind-area-option active" type="button" data-value="unidade_banco_sangue" data-area-name="Banco de Sangue">Banco de Sangue</button>
-            <button class="bind-area-option" type="button" data-value="unidade_laboratorio" data-area-name="Laboratório">Laboratório</button>
+            <button class="bind-area-option active" type="button" data-value="all" data-area-id="all" data-area-name="Todas as áreas">Todas as áreas</button>
+            <button class="bind-area-option" type="button" data-value="unidade_banco_sangue" data-area-id="unidade_banco_sangue" data-area-name="Banco de Sangue">Banco de Sangue</button>
+            <button class="bind-area-option" type="button" data-value="unidade_laboratorio" data-area-id="unidade_laboratorio" data-area-name="Laboratório">Laboratório</button>
           </div>
         </div>
+        <div class="bind-device-help" id="bindAreaHelp">Para usuário comum, selecione todas as áreas ou uma ou mais áreas específicas.</div>
       </div>
       <div class="info-field">
         <label for="bindUserProfile">Nível do usuário</label>
@@ -635,9 +637,9 @@
             <span class="bind-area-chevron" aria-hidden="true">⌄</span>
           </button>
           <div class="bind-area-menu" id="bindProfileMenu" hidden>
-            <button class="bind-area-option active" type="button" data-profile="area" data-profile-name="Usuário da área">Usuário da área - somente área selecionada</button>
-            <button class="bind-area-option" type="button" data-profile="admin1" data-profile-name="Administrador">Administrador - visão administrativa</button>
-            <button class="bind-area-option" type="button" data-profile="admin2" data-profile-name="Administrador avançado">Administrador avançado</button>
+            <button class="bind-area-option active" type="button" data-profile="area" data-profile-name="Usuário">Usuário - acesso por área</button>
+            <button class="bind-area-option" type="button" data-profile="admin1" data-profile-name="Admin 1">Admin 1 - todas as áreas</button>
+            <button class="bind-area-option" type="button" data-profile="admin2" data-profile-name="Admin 2">Admin 2 - todas as áreas</button>
             <button class="bind-area-option" type="button" data-profile="master" data-profile-name="Master">Master - acesso completo</button>
           </div>
         </div>
@@ -648,7 +650,7 @@
       <div class="info-actions bind-device-actions">
         <button class="bind-disable-shortcut" id="openDisableDeviceModal" type="button" title="Desabilitar dispositivo vinculado" aria-label="Desabilitar dispositivo vinculado">+</button>
         <button class="info-btn secondary" id="cancelBindDevice" type="button">Cancelar</button>
-        <button class="info-btn primary bind-device-submit" id="submitBindDevice" type="submit">Gerar código e enviar</button>
+        <button class="info-btn primary bind-device-submit" id="submitBindDevice" type="submit">Gerar código</button>
       </div>
     </form>
   </div>

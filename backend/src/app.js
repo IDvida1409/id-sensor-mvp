@@ -81,6 +81,7 @@ function createAppDeviceToken(appDevice, activation) {
     usuario_nome: appDevice.usuario_nome || null,
     usuario_email: appDevice.usuario_email || null,
     area_nome: appDevice.area_nome || null,
+    area_ids: serializeAreaIds(appDevice.area_ids),
     usuario_perfil: normalizeUserProfile(appDevice.usuario_perfil),
     criado_em: appDevice.criado_em,
     expira_em: activation.expira_em || null
@@ -138,8 +139,8 @@ function ensureRecoveredAppDevice(db, payload) {
     db.prepare(`
       INSERT INTO activation_codes (
         id, codigo, cliente_id, unidade_id, dispositivo_id, tipo_ativacao, ativo,
-        criado_em, expira_em, usado_em, usuario_nome, usuario_email, area_nome, usuario_perfil
-      ) VALUES (?, ?, ?, ?, ?, 'app_alerta', 0, ?, ?, ?, ?, ?, ?, ?)
+        criado_em, expira_em, usado_em, usuario_nome, usuario_email, area_nome, area_ids, usuario_perfil
+      ) VALUES (?, ?, ?, ?, ?, 'app_alerta', 0, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       activationId,
       activationCode,
@@ -152,6 +153,7 @@ function ensureRecoveredAppDevice(db, payload) {
       payload.usuario_nome || null,
       payload.usuario_email || null,
       payload.area_nome || null,
+      serializeAreaIds(payload.area_ids),
       normalizeUserProfile(payload.usuario_perfil)
     );
   }
@@ -160,8 +162,8 @@ function ensureRecoveredAppDevice(db, payload) {
     INSERT INTO app_devices (
       id, activation_code_id, cliente_id, unidade_id, dispositivo_id,
       expo_push_token, plataforma, modelo_aparelho, usuario_nome,
-      usuario_email, area_nome, usuario_perfil, ativo, criado_em
-    ) VALUES (?, ?, ?, ?, ?, NULL, 'restored', 'Sessão restaurada', ?, ?, ?, ?, 1, ?)
+      usuario_email, area_nome, area_ids, usuario_perfil, ativo, criado_em
+    ) VALUES (?, ?, ?, ?, ?, NULL, 'restored', 'Sessão restaurada', ?, ?, ?, ?, ?, 1, ?)
   `).run(
     payload.app_device_id,
     activationId,
@@ -171,6 +173,7 @@ function ensureRecoveredAppDevice(db, payload) {
     payload.usuario_nome || null,
     payload.usuario_email || null,
     payload.area_nome || null,
+    serializeAreaIds(payload.area_ids),
     normalizeUserProfile(payload.usuario_perfil),
     createdAt
   );
@@ -197,6 +200,51 @@ function normalizeUserProfile(value) {
 
 function isAdminProfile(profile) {
   return ADMIN_PROFILES.has(normalizeUserProfile(profile));
+}
+
+function normalizeAreaIds(value) {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => String(item || '').trim())
+      .filter(Boolean);
+  }
+
+  if (typeof value === 'string') {
+    const raw = value.trim();
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return normalizeAreaIds(parsed);
+    } catch {
+      return raw.split(',').map((item) => item.trim()).filter(Boolean);
+    }
+  }
+
+  return [];
+}
+
+function serializeAreaIds(value) {
+  const ids = normalizeAreaIds(value);
+  return ids.length ? JSON.stringify(Array.from(new Set(ids))) : null;
+}
+
+function areaIdsAllowAll(value) {
+  return normalizeAreaIds(value).some((idValue) => idValue === 'all' || idValue === '*');
+}
+
+function allowedAreaIdsForAppDevice(appDevice) {
+  const profile = normalizeUserProfile(appDevice?.usuario_perfil);
+  if (isAdminProfile(profile) || areaIdsAllowAll(appDevice?.area_ids)) return null;
+
+  const ids = normalizeAreaIds(appDevice?.area_ids)
+    .filter((idValue) => idValue !== 'all' && idValue !== '*');
+  if (ids.length) return Array.from(new Set(ids));
+  return appDevice?.unidade_id ? [appDevice.unidade_id] : [];
+}
+
+function appDeviceCanAccessUnit(appDevice, unitId) {
+  const allowedIds = allowedAreaIdsForAppDevice(appDevice);
+  return allowedIds === null || allowedIds.includes(unitId);
 }
 
 function addRoute(method, pattern, handler) {
@@ -881,8 +929,16 @@ addRoute('POST', '/activation-code', async ({ body, req, res }) => {
   const tipoAtivacao = body.tipo_ativacao || 'app_alerta';
   const usuarioNome = String(body.usuario_nome || '').trim() || null;
   const usuarioEmail = String(body.usuario_email || '').trim().toLowerCase() || null;
-  const areaNome = String(body.area_nome || '').trim() || null;
   const usuarioPerfil = normalizeUserProfile(body.usuario_perfil || body.perfil);
+  const rawAreaIds = normalizeAreaIds(body.area_ids);
+  const areaIds = isAdminProfile(usuarioPerfil)
+    ? []
+    : (rawAreaIds.length ? rawAreaIds : [unidadeId]);
+  const areaNome = String(body.area_nome || '').trim()
+    || (usuarioPerfil === 'master'
+      ? 'Todos os clientes'
+      : (isAdminProfile(usuarioPerfil) || areaIdsAllowAll(areaIds) ? 'Todas as áreas' : null));
+  const serializedAreaIds = isAdminProfile(usuarioPerfil) ? null : serializeAreaIds(areaIds);
   const enviarEmail = body.enviar_email !== false && body.enviar_email !== 'false';
 
   if (!clienteId || !unidadeId) {
@@ -916,15 +972,16 @@ addRoute('POST', '/activation-code', async ({ body, req, res }) => {
         AND COALESCE(usuario_email, '') = COALESCE(?, '')
         AND COALESCE(usuario_nome, '') = COALESCE(?, '')
         AND COALESCE(area_nome, '') = COALESCE(?, '')
+        AND COALESCE(area_ids, '') = COALESCE(?, '')
         AND COALESCE(usuario_perfil, '') = COALESCE(?, '')
-    `).run(clienteId, unidadeId, usuarioEmail, usuarioNome, areaNome, usuarioPerfil);
+    `).run(clienteId, unidadeId, usuarioEmail, usuarioNome, areaNome, serializedAreaIds, usuarioPerfil);
   }
 
   db.prepare(`
     INSERT INTO activation_codes (
       id, codigo, cliente_id, unidade_id, dispositivo_id, tipo_ativacao, ativo,
-      criado_em, expira_em, usuario_nome, usuario_email, area_nome, usuario_perfil
-    ) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)
+      criado_em, expira_em, usuario_nome, usuario_email, area_nome, area_ids, usuario_perfil
+    ) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     activationId,
     code,
@@ -937,6 +994,7 @@ addRoute('POST', '/activation-code', async ({ body, req, res }) => {
     usuarioNome,
     usuarioEmail,
     areaNome,
+    serializedAreaIds,
     usuarioPerfil
   );
 
@@ -985,6 +1043,7 @@ addRoute('POST', '/activation-code', async ({ body, req, res }) => {
     usuario_nome: usuarioNome,
     usuario_email: usuarioEmail,
     area_nome: areaNome,
+    area_ids: normalizeAreaIds(serializedAreaIds),
     usuario_perfil: usuarioPerfil,
     expira_em: expiresAt,
     email_delivery: emailDelivery,
@@ -1027,8 +1086,8 @@ addRoute('POST', '/activate', async ({ body, res }) => {
     INSERT INTO app_devices (
       id, activation_code_id, cliente_id, unidade_id, dispositivo_id,
       expo_push_token, plataforma, modelo_aparelho, usuario_nome,
-      usuario_email, area_nome, usuario_perfil, ativo, criado_em
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+      usuario_email, area_nome, area_ids, usuario_perfil, ativo, criado_em
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
   `).run(
     appDeviceId,
     activation.id,
@@ -1041,6 +1100,7 @@ addRoute('POST', '/activate', async ({ body, res }) => {
     activation.usuario_nome,
     activation.usuario_email,
     activation.area_nome,
+    activation.area_ids || null,
     usuarioPerfil,
     createdAt
   );
@@ -1048,11 +1108,19 @@ addRoute('POST', '/activate', async ({ body, res }) => {
   db.prepare('UPDATE activation_codes SET usado_em = COALESCE(usado_em, ?), ativo = 0 WHERE id = ?')
     .run(createdAt, activation.id);
 
-  const devicesCount = isAdminProfile(usuarioPerfil)
+  const activationAreaIds = normalizeAreaIds(activation.area_ids);
+  const devicesCount = isAdminProfile(usuarioPerfil) || areaIdsAllowAll(activationAreaIds)
     ? db.prepare('SELECT COUNT(*) AS count FROM dispositivos WHERE cliente_id = ?')
       .get(activation.cliente_id).count
-    : db.prepare('SELECT COUNT(*) AS count FROM dispositivos WHERE cliente_id = ? AND unidade_id = ?')
-      .get(activation.cliente_id, activation.unidade_id).count;
+    : activationAreaIds.length
+      ? db.prepare(`
+          SELECT COUNT(*) AS count
+          FROM dispositivos
+          WHERE cliente_id = ?
+            AND unidade_id IN (${activationAreaIds.map(() => '?').join(',')})
+        `).get(activation.cliente_id, ...activationAreaIds).count
+      : db.prepare('SELECT COUNT(*) AS count FROM dispositivos WHERE cliente_id = ? AND unidade_id = ?')
+        .get(activation.cliente_id, activation.unidade_id).count;
 
   const appDeviceSession = {
     id: appDeviceId,
@@ -1063,6 +1131,7 @@ addRoute('POST', '/activate', async ({ body, res }) => {
     usuario_nome: activation.usuario_nome,
     usuario_email: activation.usuario_email,
     area_nome: activation.area_nome,
+    area_ids: activation.area_ids || null,
     usuario_perfil: usuarioPerfil,
     criado_em: createdAt
   };
@@ -1083,6 +1152,7 @@ addRoute('POST', '/activate', async ({ body, res }) => {
       nome: activation.usuario_nome || null,
       email: activation.usuario_email || null,
       area: activation.area_nome || activation.unidade_nome,
+      area_ids: normalizeAreaIds(activation.area_ids),
       perfil: usuarioPerfil
     },
     dispositivo_id: activation.dispositivo_id,
@@ -1248,9 +1318,9 @@ addRoute('POST', '/alerts', async ({ body, res }) => {
     FROM app_devices
     WHERE ativo = 1
       AND cliente_id = ?
-      AND (unidade_id = ? OR usuario_perfil IN ('master', 'admin1', 'admin2'))
       AND (dispositivo_id IS NULL OR dispositivo_id = ?)
-  `).all(device.cliente_id, device.unidade_id, device.id);
+  `).all(device.cliente_id, device.id)
+    .filter((recipient) => appDeviceCanAccessUnit(recipient, device.unidade_id));
 
   const logs = [];
   for (const recipient of recipients) {
@@ -1308,11 +1378,18 @@ addRoute('GET', '/app/alerts/:app_device_id', async ({ params, req, res }) => {
   const appDevice = getAuthorizedAppDevice(db, params.app_device_id, req);
   if (!appDevice) return fail(res, 404, 'Celular habilitado não encontrado.');
 
-  const rows = isAdminProfile(appDevice.usuario_perfil)
+  const allowedAreaIds = allowedAreaIdsForAppDevice(appDevice);
+  const rows = allowedAreaIds === null
     ? db.prepare(appAlertSelectSql(`
       WHERE a.cliente_id = ?
         AND (? IS NULL OR a.dispositivo_id = ?)
     `)).all(appDevice.id, appDevice.cliente_id, appDevice.dispositivo_id, appDevice.dispositivo_id)
+    : allowedAreaIds.length
+      ? db.prepare(appAlertSelectSql(`
+        WHERE a.cliente_id = ?
+          AND a.unidade_id IN (${allowedAreaIds.map(() => '?').join(',')})
+          AND (? IS NULL OR a.dispositivo_id = ?)
+      `)).all(appDevice.id, appDevice.cliente_id, ...allowedAreaIds, appDevice.dispositivo_id, appDevice.dispositivo_id)
     : db.prepare(appAlertSelectSql(`
       WHERE a.cliente_id = ?
         AND a.unidade_id = ?

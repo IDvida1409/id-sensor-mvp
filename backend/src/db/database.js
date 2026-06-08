@@ -145,6 +145,7 @@ function initDb() {
   ensureColumn(database, 'activation_codes', 'usuario_nome', 'TEXT');
   ensureColumn(database, 'activation_codes', 'usuario_email', 'TEXT');
   ensureColumn(database, 'activation_codes', 'area_nome', 'TEXT');
+  ensureColumn(database, 'activation_codes', 'area_ids', 'TEXT');
   ensureColumn(database, 'activation_codes', 'usuario_perfil', 'TEXT');
   ensureColumn(database, 'activation_codes', 'email_status', 'TEXT');
   ensureColumn(database, 'activation_codes', 'email_erro', 'TEXT');
@@ -152,6 +153,7 @@ function initDb() {
   ensureColumn(database, 'app_devices', 'usuario_nome', 'TEXT');
   ensureColumn(database, 'app_devices', 'usuario_email', 'TEXT');
   ensureColumn(database, 'app_devices', 'area_nome', 'TEXT');
+  ensureColumn(database, 'app_devices', 'area_ids', 'TEXT');
   ensureColumn(database, 'app_devices', 'usuario_perfil', 'TEXT');
   database.exec(`
     CREATE INDEX IF NOT EXISTS idx_alert_ack_app_device

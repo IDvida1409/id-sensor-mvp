@@ -6533,6 +6533,20 @@ document.addEventListener('DOMContentLoaded', function(){
     result.innerHTML = '';
   }
 
+  function readAreaIds(areaInput){
+    const raw = areaInput?.dataset?.areaIds || '[]';
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed.filter(Boolean) : [];
+    } catch(e) {
+      return [];
+    }
+  }
+
+  function isWideProfile(profile){
+    return ['master','admin1','admin2'].includes(String(profile || '').toLowerCase());
+  }
+
   function openModal(){
     if(!canBindDevice()) return;
     const overlay = getEl('bindDeviceOverlay');
@@ -6564,10 +6578,14 @@ document.addEventListener('DOMContentLoaded', function(){
     const result = getEl('bindDeviceResult');
     if(!result) return;
     const payload = data?.qr_payload || '';
+    const qrImage = data?.qr_code_data_url || data?.qr_image_url || '';
     const delivery = data?.email_delivery || {};
     result.innerHTML = `
       <div class="bind-device-result-line">Código de ativação</div>
-      <div class="bind-device-result-code">${escapeHtml(data?.codigo || '')}</div>
+      <div class="bind-device-result-main">
+        <div class="bind-device-result-code">${escapeHtml(data?.codigo || '')}</div>
+        ${qrImage ? `<img class="bind-device-result-qr" src="${escapeHtml(qrImage)}" alt="QR Code de ativação">` : ''}
+      </div>
       <div class="bind-device-result-line">${escapeHtml(emailStatusLabel(delivery))}</div>
       ${payload ? `<div class="bind-device-result-line">Link: ${escapeHtml(payload)}</div>` : ''}
       <button class="bind-device-copy" id="copyBindDeviceCode" type="button">Copiar código</button>
@@ -6590,6 +6608,7 @@ document.addEventListener('DOMContentLoaded', function(){
     const unidadeId = areaInput?.value || 'unidade_banco_sangue';
     const areaNome = areaInput?.dataset?.areaName || 'Banco de Sangue';
     const usuarioPerfil = profileInput?.value || 'area';
+    const areaIds = isWideProfile(usuarioPerfil) ? [] : readAreaIds(areaInput);
 
     if(!usuarioNome || !usuarioEmail){
       setFeedback('Preencha nome e e-mail do usuário.', 'error');
@@ -6609,7 +6628,8 @@ document.addEventListener('DOMContentLoaded', function(){
           unidade_id:unidadeId,
           usuario_nome:usuarioNome,
           usuario_email:usuarioEmail,
-          area_nome:areaNome,
+          area_nome:isWideProfile(usuarioPerfil) ? '' : areaNome,
+          area_ids:areaIds,
           usuario_perfil:usuarioPerfil,
           tipo_ativacao:'app_alerta',
           enviar_email:true
@@ -6664,6 +6684,7 @@ document.addEventListener('DOMContentLoaded', function(){
 /* ===== SCRIPT BLOCK 37C | disable-linked-device-modal ===== */
 (function(){
   const allowedRoles = new Set(['master', 'admin1', 'admin2']);
+  const wideProfiles = new Set(['master', 'admin1', 'admin2']);
 
   function getEl(id){ return document.getElementById(id); }
 
@@ -6705,6 +6726,7 @@ document.addEventListener('DOMContentLoaded', function(){
     const menu = getEl('bindAreaMenu');
     const trigger = getEl('bindUserAreaButton');
     if(!menu || !trigger) return;
+    if(trigger.disabled) return;
     const open = menu.hidden;
     menu.hidden = !open;
     trigger.setAttribute('aria-expanded', open ? 'true' : 'false');
@@ -6719,18 +6741,82 @@ document.addEventListener('DOMContentLoaded', function(){
     trigger.setAttribute('aria-expanded', open ? 'true' : 'false');
   }
 
-  function selectArea(option){
+  function selectedAreaOptions(){
+    return Array.from(document.querySelectorAll('#bindAreaMenu .bind-area-option.active'));
+  }
+
+  function updateAreaInputFromSelection(){
     const areaInput = getEl('bindUserArea');
     const label = getEl('bindUserAreaLabel');
-    const options = document.querySelectorAll('.bind-area-option');
-    const areaName = option?.dataset?.areaName || option?.textContent || 'Banco de Sangue';
+    const selected = selectedAreaOptions();
+    const areaOptions = selected.filter((option) => option?.dataset?.areaId !== 'all');
+    const allSelected = selected.some((option) => option?.dataset?.areaId === 'all') || !areaOptions.length;
+    const areaIds = allSelected ? ['all'] : areaOptions.map((option) => option.dataset.areaId || option.dataset.value).filter(Boolean);
+    const areaName = allSelected
+      ? 'Todas as áreas'
+      : areaOptions.map((option) => option.dataset.areaName || option.textContent || '').filter(Boolean).join(', ');
+
     if(areaInput){
-      areaInput.value = option?.dataset?.value || 'unidade_banco_sangue';
+      areaInput.value = areaIds[0] === 'all' ? 'unidade_banco_sangue' : (areaIds[0] || 'unidade_banco_sangue');
       areaInput.dataset.areaName = areaName;
+      areaInput.dataset.areaIds = JSON.stringify(areaIds);
     }
-    if(label) label.textContent = areaName;
-    options.forEach(item => item.classList.toggle('active', item === option));
+    if(label) label.textContent = allSelected
+      ? 'Todas as áreas'
+      : (areaOptions.length === 1 ? areaName : `${areaOptions.length} áreas selecionadas`);
+  }
+
+  function selectArea(option){
+    const options = document.querySelectorAll('#bindAreaMenu .bind-area-option');
+    const isAll = option?.dataset?.areaId === 'all';
+
+    if(isAll){
+      options.forEach(item => item.classList.toggle('active', item === option));
+    } else {
+      const allOption = getEl('bindAreaMenu')?.querySelector('[data-area-id="all"]');
+      if(allOption) allOption.classList.remove('active');
+      option.classList.toggle('active');
+
+      const hasSpecific = Array.from(options)
+        .some(item => item.dataset.areaId !== 'all' && item.classList.contains('active'));
+      if(!hasSpecific && allOption) allOption.classList.add('active');
+    }
+
+    updateAreaInputFromSelection();
+    if(isAll) closeAreaMenu();
+  }
+
+  function updateAreaPickerForProfile(profile){
+    const isWide = wideProfiles.has(String(profile || '').toLowerCase());
+    const picker = getEl('bindAreaPicker');
+    const trigger = getEl('bindUserAreaButton');
+    const label = getEl('bindUserAreaLabel');
+    const areaInput = getEl('bindUserArea');
+    const help = getEl('bindAreaHelp');
+
+    if(picker) picker.classList.toggle('locked', isWide);
+    if(trigger){
+      trigger.disabled = isWide;
+      trigger.setAttribute('aria-expanded','false');
+    }
     closeAreaMenu();
+
+    if(isWide){
+      const profileLabel = profile === 'master' ? 'Todos os clientes' : 'Todas as áreas';
+      if(label) label.textContent = profileLabel;
+      if(areaInput){
+        areaInput.value = 'unidade_banco_sangue';
+        areaInput.dataset.areaName = profileLabel;
+        areaInput.dataset.areaIds = '[]';
+      }
+      if(help) help.textContent = profile === 'master'
+        ? 'Master acessa todos os clientes automaticamente.'
+        : 'Admin 1 e Admin 2 acessam todas as áreas automaticamente.';
+      return;
+    }
+
+    if(help) help.textContent = 'Para usuário comum, selecione todas as áreas ou uma ou mais áreas específicas.';
+    updateAreaInputFromSelection();
   }
 
   function selectProfile(option){
@@ -6744,6 +6830,7 @@ document.addEventListener('DOMContentLoaded', function(){
     }
     if(label) label.textContent = profileName;
     options.forEach(item => item.classList.toggle('active', item === option));
+    updateAreaPickerForProfile(profileInput?.value || 'area');
     closeProfileMenu();
   }
 
@@ -6904,6 +6991,7 @@ document.addEventListener('DOMContentLoaded', function(){
       if(!button) return;
       deactivateLinkedDevice(button.dataset.disableDeviceId, button);
     });
+    updateAreaPickerForProfile(getEl('bindUserProfile')?.value || 'area');
     document.addEventListener('click', function(){
       closeAreaMenu();
       closeProfileMenu();

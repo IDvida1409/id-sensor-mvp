@@ -80,6 +80,10 @@ function isAdminSession(session) {
   return ADMIN_PROFILES.has(userProfile(session));
 }
 
+function isMasterSession(session) {
+  return userProfile(session) === 'master';
+}
+
 function unitDisplayName(session) {
   return isAdminSession(session)
     ? 'Unidade Bela Vista - Administrativo'
@@ -101,6 +105,25 @@ function sessionAreas(session) {
     nome: String(area?.nome || '').replace('Laboratorio', 'Laboratório'),
     devices_count: Number(area?.devices_count || 0)
   }));
+}
+
+function sessionClients(session, areas = []) {
+  const totalDevices = areas.reduce((sum, area) => sum + Number(area?.devices_count || 0), 0);
+  return [{
+    id: session?.cliente?.id || 'cliente_idvida',
+    name: clientDisplayName(session),
+    devices_count: totalDevices
+  }];
+}
+
+function sessionAllowedAreaIds(session) {
+  const areaIds = Array.isArray(session?.usuario?.area_ids)
+    ? session.usuario.area_ids
+    : (Array.isArray(session?.area_ids) ? session.area_ids : []);
+  const cleanIds = areaIds.map((item) => String(item || '').trim()).filter(Boolean);
+  if (cleanIds.includes('all') || cleanIds.includes('*')) return null;
+  if (cleanIds.length) return cleanIds;
+  return session?.unidade?.id ? [session.unidade.id] : [];
 }
 
 function areaName(area) {
@@ -133,11 +156,15 @@ function unitsFromAreas(areas) {
 }
 
 function defaultScope() {
-  return { level: 'all', unitName: null, areaId: null };
+  return { level: 'all', clientId: null, clientName: null, unitName: null, areaId: null, areaIds: null };
 }
 
 function scopeUnitAreas(areas, scope) {
-  if (scope?.level === 'all') return areas;
+  if (scope?.level === 'all' || scope?.level === 'client') return areas;
+  if (scope?.level === 'areas') {
+    const allowed = Array.isArray(scope.areaIds) ? scope.areaIds : [];
+    return areas.filter((area) => allowed.includes(area.id));
+  }
   const unitName = scope?.unitName || areaUnitName(areas.find((area) => area.id === scope?.areaId));
   return areas.filter((area) => areaUnitName(area) === unitName);
 }
@@ -149,6 +176,10 @@ function filterDevicesByArea(devices, areaId) {
 
 function filterDevicesByScope(devices, areas, scope) {
   if (!scope || scope.level === 'all') return devices;
+  if (scope.level === 'client') {
+    if (!scope.clientId) return devices;
+    return devices.filter((device) => !device?.clientId || device.clientId === scope.clientId);
+  }
   if (scope.level === 'area') return filterDevicesByArea(devices, scope.areaId);
 
   const allowedAreaIds = scopeUnitAreas(areas, scope).map((area) => area.id);
@@ -158,6 +189,10 @@ function filterDevicesByScope(devices, areas, scope) {
 
 function filterAlertsByScope(alerts, areas, scope) {
   if (!scope || scope.level === 'all') return alerts;
+  if (scope.level === 'client') {
+    if (!scope.clientId) return alerts;
+    return alerts.filter((alert) => !alert?.cliente_id || alert.cliente_id === scope.clientId);
+  }
   if (scope.level === 'area') return alerts.filter((alert) => alert?.unidade_id === scope.areaId);
 
   const allowedAreaIds = scopeUnitAreas(areas, scope).map((area) => area.id);
@@ -169,6 +204,8 @@ function scopeAreaName(areas, scope) {
   if (scope?.level === 'area') {
     return areaName(areas.find((area) => area.id === scope.areaId));
   }
+  if (scope?.level === 'client') return scope.clientName;
+  if (scope?.level === 'areas') return 'Áreas selecionadas';
   if (scope?.level === 'unit') return scope.unitName;
   return null;
 }
@@ -432,26 +469,44 @@ function LegacyScopeSelector({ areas, scope, onChange }) {
   );
 }
 
-function ScopeSelector({ areas, scope, onChange }) {
+function ScopeSelector({ areas, clients = [], master, scope, onChange }) {
   const [open, setOpen] = useState(false);
   const units = useMemo(() => unitsFromAreas(areas), [areas]);
   const selectedArea = areas.find((area) => area.id === scope?.areaId);
   const selectedUnitName = scope?.unitName || areaUnitName(selectedArea);
-  const unitAreas = scope?.level === 'all'
-    ? areas
-    : areas.filter((area) => areaUnitName(area) === selectedUnitName);
+  const unitAreas = scope?.level === 'unit'
+    ? areas.filter((area) => areaUnitName(area) === selectedUnitName)
+    : areas;
   const active = scope?.level !== 'all';
   const label = scope?.level === 'area'
     ? '\u00c1rea selecionada'
-    : (scope?.level === 'unit' ? 'Unidade selecionada' : 'Escopo atual');
+    : (scope?.level === 'client'
+      ? 'Cliente selecionado'
+      : (scope?.level === 'unit' ? 'Unidade selecionada' : 'Escopo atual'));
   const name = scope?.level === 'area'
     ? areaName(selectedArea)
-    : (scope?.level === 'unit' ? selectedUnitName : 'Todos os dispositivos');
-  const optionTitle = scope?.level === 'all' ? 'Unidades' : `\u00c1reas de ${selectedUnitName}`;
+    : (scope?.level === 'client'
+      ? scope.clientName
+      : (scope?.level === 'unit' ? selectedUnitName : 'Todos os dispositivos'));
+  const optionTitle = scope?.level === 'all'
+    ? (master ? 'Clientes' : 'Unidades')
+    : ((master && scope?.clientName) || scope?.level === 'client'
+      ? `\u00c1reas de ${scope.clientName}`
+      : `\u00c1reas de ${selectedUnitName}`);
 
   function backOneLevel() {
     if (scope?.level === 'area') {
-      onChange({ level: 'unit', unitName: selectedUnitName, areaId: null });
+      if (master && scope.clientId) {
+        onChange({ level: 'client', clientId: scope.clientId, clientName: scope.clientName, unitName: null, areaId: null });
+      } else {
+        onChange({ level: 'unit', unitName: selectedUnitName, areaId: null });
+      }
+      setOpen(false);
+      return;
+    }
+
+    if (scope?.level === 'client') {
+      onChange(defaultScope());
       setOpen(false);
       return;
     }
@@ -484,7 +539,23 @@ function ScopeSelector({ areas, scope, onChange }) {
       {open ? (
         <View style={styles.areaOptions}>
           <Text style={styles.areaOptionsTitle}>{optionTitle}</Text>
-          {scope?.level === 'all' ? (
+          {scope?.level === 'all' && master ? (
+            clients.map((client) => (
+              <Pressable
+                key={client.id}
+                onPress={() => {
+                  onChange({ level: 'client', clientId: client.id, clientName: client.name, unitName: null, areaId: null });
+                  setOpen(false);
+                }}
+                style={styles.areaOption}
+              >
+                <View>
+                  <Text style={styles.areaOptionName}>{client.name}</Text>
+                  <Text style={styles.areaOptionCount}>{client.devices_count} dispositivos</Text>
+                </View>
+              </Pressable>
+            ))
+          ) : scope?.level === 'all' ? (
             units.map((unit) => (
               <Pressable
                 key={unit.id}
@@ -507,7 +578,13 @@ function ScopeSelector({ areas, scope, onChange }) {
                 <Pressable
                   key={area.id}
                   onPress={() => {
-                    onChange({ level: 'area', unitName: selectedUnitName, areaId: area.id });
+                    onChange({
+                      level: 'area',
+                      clientId: scope?.clientId || null,
+                      clientName: scope?.clientName || null,
+                      unitName: master ? null : selectedUnitName,
+                      areaId: area.id
+                    });
                     setOpen(false);
                   }}
                   style={[styles.areaOption, selected && styles.areaOptionActive]}
@@ -808,17 +885,29 @@ function Header({ session, loading, onRefresh }) {
 
 function HomeScreen({ devices, alerts, session, onOpenAlerts, onOpenHistory }) {
   const areas = useMemo(() => sessionAreas(session), [session]);
+  const clients = useMemo(() => sessionClients(session, areas), [session, areas]);
   const [scope, setScope] = useState(defaultScope);
   const admin = isAdminSession(session);
-  const userAreaScope = useMemo(() => ({
-    level: 'area',
-    areaId: session?.unidade?.id,
-    unitName: areaUnitName(areas[0])
-  }), [areas, session?.unidade?.id]);
+  const master = isMasterSession(session);
+  const userAreaScope = useMemo(() => {
+    const allowedAreaIds = sessionAllowedAreaIds(session);
+    if (allowedAreaIds === null) return defaultScope();
+    if (allowedAreaIds.length === 1) {
+      const area = areas.find((item) => item.id === allowedAreaIds[0]) || areas[0];
+      return {
+        level: 'area',
+        areaId: allowedAreaIds[0],
+        unitName: areaUnitName(area)
+      };
+    }
+    return {
+      level: 'areas',
+      areaIds: allowedAreaIds,
+      unitName: areaUnitName(areas[0])
+    };
+  }, [areas, session]);
   const activeScope = admin ? scope : userAreaScope;
-  const scopedDevices = admin
-    ? filterDevicesByScope(devices, areas, activeScope)
-    : filterDevicesByArea(devices, session?.unidade?.id);
+  const scopedDevices = filterDevicesByScope(devices, areas, activeScope);
   const stats = useMemo(() => buildStats(scopedDevices), [scopedDevices]);
   const totalDevices = stats.total;
   const scopedAlerts = useMemo(() => (
@@ -871,6 +960,8 @@ function HomeScreen({ devices, alerts, session, onOpenAlerts, onOpenHistory }) {
       {admin ? (
         <ScopeSelector
           areas={areas}
+          clients={clients}
+          master={master}
           scope={scope}
           onChange={setScope}
         />
