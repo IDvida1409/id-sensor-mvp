@@ -6593,7 +6593,7 @@ document.addEventListener('DOMContentLoaded', function(){
         <div class="bind-device-result-code">${escapeHtml(data?.codigo || '')}</div>
         ${qrImage ? `<img class="bind-device-result-qr" src="${escapeHtml(qrImage)}" alt="QR Code de ativação">` : ''}
       </div>
-      ${scanPayload ? `<div class="bind-device-result-line">QR Code: abre o app IDsensor para vincular este aparelho.</div>` : ''}
+      ${scanPayload ? `<div class="bind-device-result-line">QR Code: no app instalado, abre o IDsensor. No Expo Go, abra o projeto primeiro e escaneie este QR dentro do app.</div>` : ''}
       <div class="bind-device-result-line">${escapeHtml(emailStatusLabel(delivery))}</div>
       ${payload ? `<div class="bind-device-result-line">Link de apoio: ${escapeHtml(payload)}</div>` : ''}
       <button class="bind-device-copy" id="copyBindDeviceCode" type="button">Copiar código</button>

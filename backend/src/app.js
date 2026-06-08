@@ -529,7 +529,7 @@ function renderActivationQrPage(activation, code, appUrl = publicApiUrl) {
       <p>Este link foi feito para abrir o app IDsensor e vincular o celular ao cliente.</p>
       <div class="code">${escapeHtml(code)}</div>
       <a class="open-app" href="${escapeHtml(deepLink)}">Abrir no app IDsensor</a>
-      <p class="hint">Se o app não abrir automaticamente, copie o código acima e ative manualmente no celular.</p>
+      <p class="hint">No Expo Go, este botão pode não abrir o app. Abra o projeto no Expo Go e ative pelo scanner interno ou digitando o código.</p>
       <p class="client">${escapeHtml(clientName)}<br>${escapeHtml(unitName)}</p>
       <p>Backend conectado em ${escapeHtml(appUrl)}.</p>
       <div class="powered">Powered by <img src="/assets/idvida-logo.png" alt="IDvida"></div>
