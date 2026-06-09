@@ -1237,13 +1237,13 @@ addRoute('GET', '/app-devices/search', async ({ query, res }) => {
   ok(res, rows);
 });
 
-addRoute('POST', '/app-devices/:id/push-token', async ({ params, body, res }) => {
+addRoute('POST', '/app-devices/:id/push-token', async ({ params, body, req, res }) => {
   const db = getDb();
   const token = String(body.expo_push_token || '').trim() || null;
   const plataforma = String(body.plataforma || '').trim() || 'desconhecida';
   const modelo = String(body.modelo_aparelho || '').trim() || 'Aparelho IDsensor';
 
-  const appDevice = db.prepare('SELECT id FROM app_devices WHERE id = ? AND ativo = 1').get(params.id);
+  const appDevice = getAuthorizedAppDevice(db, params.id, req, body);
   if (!appDevice) return fail(res, 404, 'Celular habilitado não encontrado.');
 
   db.prepare(`

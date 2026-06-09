@@ -36,6 +36,7 @@ export function activateApp(codigo, options = {}) {
 export function updateAppDevicePushToken(appDeviceId, options = {}) {
   return request(`/app-devices/${encodeURIComponent(appDeviceId)}/push-token`, {
     method: 'POST',
+    authToken: options.appDeviceToken,
     body: JSON.stringify({
       expo_push_token: options.expoPushToken || null,
       plataforma: options.plataforma || 'expo',

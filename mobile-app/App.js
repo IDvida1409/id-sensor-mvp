@@ -1297,19 +1297,6 @@ export default function App() {
     };
   }, [handleActivationUrl, sessionLoading]);
 
-  const recoverStoredSession = useCallback(async () => {
-    const activationCode = session?.activation_code;
-    if (!activationCode) return null;
-
-    try {
-      const recoveredSession = await activateMobileSession(activationCode);
-      await handleActivated(recoveredSession);
-      return recoveredSession;
-    } catch {
-      return null;
-    }
-  }, [handleActivated, session?.activation_code]);
-
   const loadData = useCallback(async () => {
     if (!session) return;
     setLoading(true);
@@ -1323,9 +1310,6 @@ export default function App() {
       setAlerts(alertList);
     } catch (err) {
       if (String(err.message || '').toLowerCase().includes('celular habilitado')) {
-        const recoveredSession = await recoverStoredSession();
-        if (recoveredSession) return;
-
         await AsyncStorage.removeItem(SESSION_STORAGE_KEY);
         setSession(null);
         setDevices([]);
@@ -1337,7 +1321,7 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, [recoverStoredSession, session]);
+  }, [session]);
 
   const openAlertsView = useCallback((mode = 'latest') => {
     setAlertViewMode(mode);
@@ -1407,9 +1391,19 @@ export default function App() {
       if (cancelled || !push.token) return;
 
       await updateAppDevicePushToken(session.app_device_id, {
+        appDeviceToken: session.app_device_token,
         expoPushToken: push.token,
         plataforma: Platform.OS,
         modeloAparelho: Device.modelName || Device.deviceName || 'IDsensor Mobile'
+      }).catch(async (err) => {
+        if (String(err.message || '').toLowerCase().includes('celular habilitado')) {
+          await AsyncStorage.removeItem(SESSION_STORAGE_KEY);
+          if (!cancelled) {
+            setSession(null);
+            setDevices([]);
+            setAlerts([]);
+          }
+        }
       });
 
       if (cancelled) return;
