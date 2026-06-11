@@ -1,5 +1,5 @@
-﻿const AREAS = [
-  { id: 'banco-sangue', name: 'Banco de Sangue', unitId: 'unit-h1', clientId: 'h1' },
+const AREAS = [
+  { id: 'banco-sangue', name: 'Banco IDvida', unitId: 'unit-h1', clientId: 'h1' },
   { id: 'laboratorio', name: 'Laboratorio', unitId: 'unit-h1', clientId: 'h1' },
   { id: 'uti', name: 'UTI', unitId: 'unit-h1', clientId: 'h1' },
   { id: 'farmacia', name: 'Farmacia', unitId: 'unit-h1', clientId: 'h1' }

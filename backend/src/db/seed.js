@@ -34,7 +34,7 @@ function geladeira(index) {
     id: `disp_geladeira_${padded}`,
     nome: `Geladeira ${padded}`,
     tipo: 'geladeira',
-    local: 'Banco de Sangue',
+    local: 'Banco IDvida',
     temperatura_atual: temp,
     status: 'normal',
     bateria: Math.max(42, 96 - index),
@@ -110,7 +110,7 @@ function seedDatabase() {
       .run('cliente_idvida', 'Laboratorio IDvida', createdAt);
 
     const insertUnit = db.prepare('INSERT INTO unidades (id, cliente_id, nome, local, criado_em) VALUES (?, ?, ?, ?, ?)');
-    insertUnit.run('unidade_banco_sangue', 'cliente_idvida', 'Banco de Sangue', 'Unidade Bela Vista', createdAt);
+    insertUnit.run('unidade_banco_sangue', 'cliente_idvida', 'Banco IDvida', 'Unidade Bela Vista', createdAt);
     insertUnit.run('unidade_laboratorio', 'cliente_idvida', 'Laboratorio', 'Unidade Bela Vista', createdAt);
 
     const insertDevice = db.prepare(`
@@ -187,6 +187,18 @@ function ensureDemoReferenceData(db = getDb()) {
   const createdAt = nowIso();
   const client = db.prepare('SELECT id FROM clientes WHERE id = ?').get('cliente_idvida');
   if (!client) return;
+
+  const legacyAreaName = 'Banco ' + 'de Sangue';
+  const currentAreaName = 'Banco IDvida';
+
+  db.prepare('UPDATE unidades SET nome = ? WHERE id = ? OR nome = ?')
+    .run(currentAreaName, 'unidade_banco_sangue', legacyAreaName);
+  db.prepare('UPDATE dispositivos SET local = ? WHERE unidade_id = ? OR local = ?')
+    .run(currentAreaName, 'unidade_banco_sangue', legacyAreaName);
+  db.prepare('UPDATE activation_codes SET area_nome = ? WHERE area_nome = ?')
+    .run(currentAreaName, legacyAreaName);
+  db.prepare('UPDATE app_devices SET area_nome = ? WHERE area_nome = ?')
+    .run(currentAreaName, legacyAreaName);
 
   const lab = db.prepare('SELECT id FROM unidades WHERE id = ?').get('unidade_laboratorio');
   if (!lab) {

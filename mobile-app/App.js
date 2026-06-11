@@ -64,12 +64,18 @@ const PUSH_CHANNEL_ID = 'idsensor-alerts';
 let notificationsModule = null;
 
 const fallbackAreas = [
-  { id: 'unidade_banco_sangue', nome: 'Banco de Sangue', devices_count: 24 },
+  { id: 'unidade_banco_sangue', nome: 'Banco IDvida', devices_count: 24 },
   { id: 'unidade_laboratorio', nome: 'Laboratório', devices_count: 0 }
 ];
 
 function clientDisplayName(session) {
   return (session?.cliente?.nome || 'Laboratório IDvida').replace('Laboratorio', 'Laboratório');
+}
+
+function displayAreaName(value) {
+  return String(value || '')
+    .replace('Laboratorio', 'Laboratório')
+    .replace('Banco ' + 'de Sangue', 'Banco IDvida');
 }
 
 function userProfile(session) {
@@ -87,7 +93,7 @@ function isMasterSession(session) {
 function unitDisplayName(session) {
   return isAdminSession(session)
     ? 'Unidade Bela Vista - Administrativo'
-    : 'Unidade Bela Vista - Banco de Sangue';
+    : 'Unidade Bela Vista - Banco IDvida';
 }
 
 function userDisplayName(session) {
@@ -102,7 +108,7 @@ function sessionAreas(session) {
   const merged = hasLaboratorio ? areas : [...areas, fallbackAreas[1]];
   return merged.map((area) => ({
     ...area,
-    nome: String(area?.nome || '').replace('Laboratorio', 'Laboratório'),
+    nome: displayAreaName(area?.nome),
     devices_count: Number(area?.devices_count || 0)
   }));
 }
@@ -127,7 +133,7 @@ function sessionAllowedAreaIds(session) {
 }
 
 function areaName(area) {
-  return String(area?.nome || '').replace('Laboratorio', 'Laborat\u00f3rio') || 'Banco de Sangue';
+  return displayAreaName(area?.nome) || 'Banco IDvida';
 }
 
 function areaUnitName(area) {
@@ -224,7 +230,7 @@ function openPanel(session, kind, areaName) {
   const query = [
     `role=${encodeURIComponent(role)}`,
     `filter=${encodeURIComponent(filter)}`,
-    `area=${encodeURIComponent(areaName || 'Banco de Sangue')}`
+    `area=${encodeURIComponent(areaName || 'Banco IDvida')}`
   ].join('&');
   Linking.openURL(`${API_BASE_URL}/?${query}`);
 }
@@ -438,7 +444,7 @@ function LegacyScopeSelector({ areas, scope, onChange }) {
         </View>
         <View style={styles.areaTextBlock}>
           <Text style={styles.areaLabel}>Área selecionada</Text>
-          <Text style={styles.areaName}>{selected?.nome || 'Banco de Sangue'}</Text>
+          <Text style={styles.areaName}>{selected?.nome || 'Banco IDvida'}</Text>
         </View>
         <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={24} color={colors.navy} />
       </Pressable>
@@ -739,7 +745,7 @@ function AlertCard({ alert, onAcknowledge, busy, showAction = true, compact = fa
       <View style={styles.alertTop}>
         <View style={styles.alertTitleBlock}>
           <Text style={[styles.alertTitle, compact && styles.alertTitleCompact]}>{alert?.dispositivo?.nome || 'Alerta'}</Text>
-          <Text style={styles.alertMeta}>{alert?.dispositivo?.local || 'Banco de Sangue'}</Text>
+          <Text style={styles.alertMeta}>{displayAreaName(alert?.dispositivo?.local) || 'Banco IDvida'}</Text>
         </View>
         <View style={[styles.alertBadge, critical && styles.alertBadgeCritical]}>
           <Text style={styles.alertBadgeText}>{alertLabel(alert)}</Text>

@@ -542,7 +542,7 @@ function getNocOccurrences(db, options = {}) {
   const groups = {
     area: total ? [{
       key: 'area_banco_sangue',
-      title: 'Banco de Sangue',
+      title: 'Banco IDvida',
       count: total,
       rotations: allRotations,
       visibleIds

@@ -1,29 +1,29 @@
 /* ===== SCRIPT BLOCK 1 | (sem-id) ===== */
 const devices = [
-  {id:1,name:'Geladeira 1',sector:'Banco de Sangue',temp:5.4,dailyMin:4.8,dailyMax:5.6,min:2,max:8,status:'NORMAL',state:'blue',online:true,battery:92,hum1:62,hum2:64,updated:'agora',timerLabel:'Dentro da faixa segura',timer:0,fill:52,range:36,events:['Sem alerta ativo'],chart:[5.2,5.1,5.2,5.3,5.4,5.3,5.2,5.4,5.5,5.4,5.3,5.4]},
-  {id:2,name:'Geladeira 2',sector:'Banco de Sangue',temp:3.2,dailyMin:3.2,dailyMax:7.5,min:2,max:8,status:'NORMAL',state:'blue',online:false,battery:45,hum1:61,hum2:61,updated:'agora',timerLabel:'Dentro da faixa segura',timer:0,fill:40,range:28,events:['Sem alerta ativo'],commText:'Sem comunicação há 15 min',chart:[3.1,3.2,3.1,3.0,3.1,3.2,3.3,3.2,3.2,3.1,3.2,3.2]},
-  {id:3,name:'Geladeira 3',sector:'Banco de Sangue',temp:8.6,dailyMin:7.0,dailyMax:8.9,min:2,max:8,status:'ATENÇÃO',state:'warn',online:true,battery:82,hum1:61,hum2:67,updated:'há 7 min',timerLabel:'Fora do limite há 8 min · alerta em 22 min',timer:26,fill:64,range:82,events:['Fora do limite há 8 min','Alerta previsto em 22 min'],chart:[7.1,7.2,7.0,7.3,7.5,7.9,8.1,8.0,8.2,8.3,8.4,8.6]},
-  {id:4,name:'Geladeira 4',sector:'Banco de Sangue',temp:5.1,dailyMin:4.7,dailyMax:5.4,min:2,max:8,status:'NORMAL',state:'blue',online:true,battery:90,hum1:64,hum2:66,updated:'agora',timerLabel:'Dentro da faixa segura',timer:0,fill:50,range:34,events:['Sem alerta ativo'],chart:[5.0,5.1,5.1,5.2,5.0,4.9,5.1,5.2,5.2,5.1,5.0,5.1]},
-  {id:5,name:'Geladeira 5',sector:'Banco de Sangue',temp:-127.0,dailyMin:1.2,dailyMax:16.0,min:2,max:8,status:'CRÍTICO',state:'crit',online:false,battery:79,hum1:72,hum2:72,updated:'agora',timerLabel:'30 min atingidos · alertas enviados',timer:100,fill:84,range:96,events:['SMS enviado','Email enviado','Fora do limite por 30 minutos'],commText:'Última comunicação: 20/03',chart:[7.3,7.4,7.2,7.5,7.8,8.3,8.9,9.4,9.8,10.1,10.5,10.8]},
-  {id:6,name:'Geladeira 6',sector:'Banco de Sangue',temp:7.9,dailyMin:6.8,dailyMax:7.9,min:2,max:8,status:'ATENÇÃO',state:'warn',online:true,battery:82,hum1:61,hum2:67,updated:'agora',timerLabel:'Próximo do limite · monitorando',timer:14,fill:60,range:76,events:['Próximo do limite','Sem envio de alerta'],chart:[6.8,6.7,6.9,7.0,7.1,7.2,7.2,7.3,7.4,7.5,7.7,7.9]},
-  {id:7,name:'Geladeira 7',sector:'Banco de Sangue',temp:4.7,dailyMin:4.2,dailyMax:5.1,min:2,max:8,status:'NORMAL',state:'blue',online:true,battery:28,hum1:60,hum2:63,updated:'há 1 min',timerLabel:'Dentro da faixa segura',timer:0,fill:46,range:44,events:['Sem alerta ativo'],chart:[4.8,4.7,4.8,4.9,4.8,4.7,4.6,4.7,4.8,4.8,4.7,4.7]},
-  {id:8,name:'Geladeira 8',sector:'Banco de Sangue',temp:8.3,dailyMin:7.1,dailyMax:8.5,min:2,max:8,status:'ATENÇÃO',state:'warn',online:true,battery:76,hum1:63,hum2:65,updated:'há 3 min',timerLabel:'Fora do limite há 4 min · alerta em 26 min',timer:14,fill:62,range:80,events:['Fora do limite há 4 min','Alerta previsto em 26 min'],chart:[7.0,7.2,7.1,7.2,7.3,7.5,7.7,7.9,8.0,8.0,8.2,8.3]},
-  {id:9,name:'Geladeira 9',sector:'Banco de Sangue',temp:6.1,dailyMin:5.7,dailyMax:6.3,min:2,max:8,status:'NORMAL',state:'blue',online:true,battery:89,hum1:62,hum2:64,updated:'agora',timerLabel:'Dentro da faixa segura',timer:0,fill:54,range:48,events:['Sem alerta ativo'],chart:[6.0,6.1,6.0,6.1,6.2,6.1,6.0,6.0,6.1,6.2,6.1,6.1]},
-  {id:10,name:'Geladeira 10',sector:'Banco de Sangue',temp:2.8,dailyMin:2.6,dailyMax:3.4,min:2,max:8,status:'NORMAL',state:'blue',online:true,battery:69,hum1:58,hum2:60,updated:'há 6 min',timerLabel:'Última leitura estável',timer:0,fill:34,range:20,events:['Offline, última leitura preservada'],chart:[2.9,2.8,2.8,2.9,2.8,2.7,2.8,2.8,2.8,2.9,2.8,2.8]},
-  {id:11,name:'Geladeira 11',sector:'Banco de Sangue',temp:9.5,dailyMin:7.4,dailyMax:9.7,min:2,max:8,status:'ATENÇÃO',state:'warn',online:true,battery:12,hum1:66,hum2:69,updated:'há 9 min',timerLabel:'Fora do limite há 18 min · alerta em 12 min',timer:60,fill:72,range:88,events:['Fora do limite há 18 min','Alerta previsto em 12 min'],chart:[7.4,7.5,7.6,7.7,7.8,8.0,8.2,8.4,8.7,9.0,9.3,9.5]},
-  {id:12,name:'Geladeira 12',sector:'Banco de Sangue',temp:11.1,dailyMin:8.2,dailyMax:11.3,min:2,max:8,status:'CRÍTICO',state:'crit',online:true,battery:74,hum1:71,hum2:74,updated:'há 2 min',timerLabel:'30 min atingidos · alertas enviados',timer:100,fill:86,range:98,events:['SMS enviado','Email enviado','Fora do limite'],chart:[7.2,7.3,7.5,7.8,8.1,8.5,9.0,9.4,9.8,10.3,10.8,11.1]},
-  {id:13,name:'Geladeira 13',sector:'Banco de Sangue',temp:5.8,dailyMin:5.2,dailyMax:6.1,min:2,max:8,status:'NORMAL',state:'blue',online:true,battery:87,hum1:63,hum2:64,updated:'agora',timerLabel:'Dentro da faixa segura',timer:0,fill:56,range:40,events:['Sem alerta ativo'],chart:[5.7,5.8,5.8,5.9,5.8,5.7,5.8,5.9,5.8,5.8,5.9,5.8]},
-  {id:14,name:'Geladeira 14',sector:'Banco de Sangue',temp:4.9,dailyMin:4.4,dailyMax:5.0,min:2,max:8,status:'NORMAL',state:'blue',online:true,battery:91,hum1:60,hum2:62,updated:'agora',timerLabel:'Dentro da faixa segura',timer:0,fill:48,range:38,events:['Sem alerta ativo'],chart:[4.8,4.9,5.0,4.9,4.8,4.8,4.9,5.0,4.9,4.9,4.8,4.9]},
-  {id:15,name:'Geladeira 15',sector:'Banco de Sangue',temp:6.7,dailyMin:6.0,dailyMax:6.9,min:2,max:8,status:'NORMAL',state:'blue',online:true,battery:85,hum1:62,hum2:65,updated:'há 1 min',timerLabel:'Dentro da faixa segura',timer:0,fill:58,range:58,events:['Sem alerta ativo'],chart:[6.5,6.6,6.6,6.7,6.7,6.8,6.7,6.6,6.7,6.7,6.8,6.7]},
-  {id:16,name:'Geladeira 16',sector:'Banco de Sangue',temp:7.4,dailyMin:6.8,dailyMax:7.8,min:2,max:8,status:'NORMAL',state:'blue',online:true,battery:80,hum1:64,hum2:66,updated:'há 2 min',timerLabel:'Próximo do limite, ainda dentro da faixa',timer:0,fill:61,range:68,events:['Sem alerta ativo'],chart:[7.0,7.1,7.1,7.2,7.2,7.3,7.4,7.4,7.3,7.4,7.4,7.4]},
-  {id:17,name:'Geladeira 17',sector:'Banco de Sangue',temp:5.0,min:2,max:8,status:'NORMAL',state:'blue',online:true,battery:83,hum1:60,hum2:63,updated:'agora',timerLabel:'Dentro da faixa segura',timer:0,fill:49,range:35,events:['Sem alerta ativo'],chart:[5.0,5.0,5.1,5.0,4.9,5.0,5.1,5.0,5.0,4.9,5.0,5.0]},
-  {id:18,name:'Geladeira 18',sector:'Banco de Sangue',temp:8.1,min:2,max:8,status:'ATENÇÃO',state:'warn',online:true,battery:68,hum1:66,hum2:68,updated:'há 5 min',timerLabel:'Fora do limite há 2 min · alerta em 28 min',timer:8,fill:61,range:78,events:['Fora do limite há 2 min','Alerta previsto em 28 min'],chart:[7.0,7.0,7.1,7.1,7.2,7.3,7.4,7.5,7.7,7.9,8.0,8.1]},
-  {id:19,name:'Geladeira 19',sector:'Banco de Sangue',temp:4.2,min:2,max:8,status:'NORMAL',state:'blue',online:true,battery:78,hum1:59,hum2:61,updated:'há 1 min',timerLabel:'Dentro da faixa segura',timer:0,fill:43,range:30,events:['Sem alerta ativo'],chart:[4.2,4.1,4.2,4.3,4.2,4.1,4.2,4.2,4.3,4.2,4.2,4.2]},
-  {id:20,name:'Geladeira 20',sector:'Banco de Sangue',temp:10.2,min:2,max:8,status:'CRÍTICO',state:'crit',online:true,battery:72,hum1:70,hum2:73,updated:'há 4 min',timerLabel:'30 min atingidos · alertas enviados',timer:100,fill:80,range:94,events:['SMS enviado','Email enviado','Fora do limite por 30 minutos'],chart:[7.1,7.2,7.3,7.6,7.9,8.2,8.6,9.0,9.3,9.7,9.9,10.2]},
-  {id:21,name:'Geladeira 21',sector:'Banco de Sangue',temp:null,min:2,max:8,status:'MANUTENÇÃO',state:'maint',online:false,battery:null,hum1:null,hum2:null,updated:'há 30 min',timerLabel:'Em manutenção há 30 min',timer:40,fill:28,range:0,events:['Equipamento em manutenção','Responsável: João Silva','Previsão: mais 1h'],chart:[5.4,5.3,5.3,5.2,5.2,5.1,5.1,5.0,5.0,5.0,5.0,5.0]},
-  {id:22,name:'Geladeira 22',sector:'Banco de Sangue',temp:null,min:2,max:8,status:'MANUTENÇÃO',state:'maint',online:false,battery:null,hum1:null,hum2:null,updated:'há 2h',timerLabel:'Em manutenção há 2h',timer:80,fill:28,range:0,events:['Equipamento em manutenção','Responsável: Carlos Lima','Sem previsão de retorno'],chart:[6.0,6.0,5.9,5.9,5.8,5.8,5.8,5.7,5.7,5.7,5.7,5.7]},
-  {id:23,name:'Geladeira 23',sector:'Banco de Sangue',temp:null,min:2,max:8,status:'MANUTENÇÃO',state:'maint',online:false,battery:null,hum1:null,hum2:null,updated:'há 10 min',timerLabel:'Manutenção iniciada',timer:15,fill:28,range:0,events:['Manutenção preventiva','Responsável: Equipe Técnica'],chart:[4.9,4.9,4.8,4.8,4.8,4.7,4.7,4.7,4.7,4.7,4.7,4.7]},
-  {id:24,name:'Geladeira 24',sector:'Banco de Sangue',temp:null,min:2,max:8,status:'MANUTENÇÃO',state:'maint',online:false,battery:null,hum1:null,hum2:null,updated:'há 50 min',timerLabel:'Em manutenção',timer:55,fill:28,range:0,events:['Falha detectada','Responsável: Ana Paula','Previsão: mais 30 min'],chart:[5.8,5.8,5.7,5.7,5.6,5.6,5.6,5.5,5.5,5.5,5.5,5.5]}
+  {id:1,name:'Geladeira 1',sector:'Banco IDvida',temp:5.4,dailyMin:4.8,dailyMax:5.6,min:2,max:8,status:'NORMAL',state:'blue',online:true,battery:92,hum1:62,hum2:64,updated:'agora',timerLabel:'Dentro da faixa segura',timer:0,fill:52,range:36,events:['Sem alerta ativo'],chart:[5.2,5.1,5.2,5.3,5.4,5.3,5.2,5.4,5.5,5.4,5.3,5.4]},
+  {id:2,name:'Geladeira 2',sector:'Banco IDvida',temp:3.2,dailyMin:3.2,dailyMax:7.5,min:2,max:8,status:'NORMAL',state:'blue',online:false,battery:45,hum1:61,hum2:61,updated:'agora',timerLabel:'Dentro da faixa segura',timer:0,fill:40,range:28,events:['Sem alerta ativo'],commText:'Sem comunicação há 15 min',chart:[3.1,3.2,3.1,3.0,3.1,3.2,3.3,3.2,3.2,3.1,3.2,3.2]},
+  {id:3,name:'Geladeira 3',sector:'Banco IDvida',temp:8.6,dailyMin:7.0,dailyMax:8.9,min:2,max:8,status:'ATENÇÃO',state:'warn',online:true,battery:82,hum1:61,hum2:67,updated:'há 7 min',timerLabel:'Fora do limite há 8 min · alerta em 22 min',timer:26,fill:64,range:82,events:['Fora do limite há 8 min','Alerta previsto em 22 min'],chart:[7.1,7.2,7.0,7.3,7.5,7.9,8.1,8.0,8.2,8.3,8.4,8.6]},
+  {id:4,name:'Geladeira 4',sector:'Banco IDvida',temp:5.1,dailyMin:4.7,dailyMax:5.4,min:2,max:8,status:'NORMAL',state:'blue',online:true,battery:90,hum1:64,hum2:66,updated:'agora',timerLabel:'Dentro da faixa segura',timer:0,fill:50,range:34,events:['Sem alerta ativo'],chart:[5.0,5.1,5.1,5.2,5.0,4.9,5.1,5.2,5.2,5.1,5.0,5.1]},
+  {id:5,name:'Geladeira 5',sector:'Banco IDvida',temp:-127.0,dailyMin:1.2,dailyMax:16.0,min:2,max:8,status:'CRÍTICO',state:'crit',online:false,battery:79,hum1:72,hum2:72,updated:'agora',timerLabel:'30 min atingidos · alertas enviados',timer:100,fill:84,range:96,events:['SMS enviado','Email enviado','Fora do limite por 30 minutos'],commText:'Última comunicação: 20/03',chart:[7.3,7.4,7.2,7.5,7.8,8.3,8.9,9.4,9.8,10.1,10.5,10.8]},
+  {id:6,name:'Geladeira 6',sector:'Banco IDvida',temp:7.9,dailyMin:6.8,dailyMax:7.9,min:2,max:8,status:'ATENÇÃO',state:'warn',online:true,battery:82,hum1:61,hum2:67,updated:'agora',timerLabel:'Próximo do limite · monitorando',timer:14,fill:60,range:76,events:['Próximo do limite','Sem envio de alerta'],chart:[6.8,6.7,6.9,7.0,7.1,7.2,7.2,7.3,7.4,7.5,7.7,7.9]},
+  {id:7,name:'Geladeira 7',sector:'Banco IDvida',temp:4.7,dailyMin:4.2,dailyMax:5.1,min:2,max:8,status:'NORMAL',state:'blue',online:true,battery:28,hum1:60,hum2:63,updated:'há 1 min',timerLabel:'Dentro da faixa segura',timer:0,fill:46,range:44,events:['Sem alerta ativo'],chart:[4.8,4.7,4.8,4.9,4.8,4.7,4.6,4.7,4.8,4.8,4.7,4.7]},
+  {id:8,name:'Geladeira 8',sector:'Banco IDvida',temp:8.3,dailyMin:7.1,dailyMax:8.5,min:2,max:8,status:'ATENÇÃO',state:'warn',online:true,battery:76,hum1:63,hum2:65,updated:'há 3 min',timerLabel:'Fora do limite há 4 min · alerta em 26 min',timer:14,fill:62,range:80,events:['Fora do limite há 4 min','Alerta previsto em 26 min'],chart:[7.0,7.2,7.1,7.2,7.3,7.5,7.7,7.9,8.0,8.0,8.2,8.3]},
+  {id:9,name:'Geladeira 9',sector:'Banco IDvida',temp:6.1,dailyMin:5.7,dailyMax:6.3,min:2,max:8,status:'NORMAL',state:'blue',online:true,battery:89,hum1:62,hum2:64,updated:'agora',timerLabel:'Dentro da faixa segura',timer:0,fill:54,range:48,events:['Sem alerta ativo'],chart:[6.0,6.1,6.0,6.1,6.2,6.1,6.0,6.0,6.1,6.2,6.1,6.1]},
+  {id:10,name:'Geladeira 10',sector:'Banco IDvida',temp:2.8,dailyMin:2.6,dailyMax:3.4,min:2,max:8,status:'NORMAL',state:'blue',online:true,battery:69,hum1:58,hum2:60,updated:'há 6 min',timerLabel:'Última leitura estável',timer:0,fill:34,range:20,events:['Offline, última leitura preservada'],chart:[2.9,2.8,2.8,2.9,2.8,2.7,2.8,2.8,2.8,2.9,2.8,2.8]},
+  {id:11,name:'Geladeira 11',sector:'Banco IDvida',temp:9.5,dailyMin:7.4,dailyMax:9.7,min:2,max:8,status:'ATENÇÃO',state:'warn',online:true,battery:12,hum1:66,hum2:69,updated:'há 9 min',timerLabel:'Fora do limite há 18 min · alerta em 12 min',timer:60,fill:72,range:88,events:['Fora do limite há 18 min','Alerta previsto em 12 min'],chart:[7.4,7.5,7.6,7.7,7.8,8.0,8.2,8.4,8.7,9.0,9.3,9.5]},
+  {id:12,name:'Geladeira 12',sector:'Banco IDvida',temp:11.1,dailyMin:8.2,dailyMax:11.3,min:2,max:8,status:'CRÍTICO',state:'crit',online:true,battery:74,hum1:71,hum2:74,updated:'há 2 min',timerLabel:'30 min atingidos · alertas enviados',timer:100,fill:86,range:98,events:['SMS enviado','Email enviado','Fora do limite'],chart:[7.2,7.3,7.5,7.8,8.1,8.5,9.0,9.4,9.8,10.3,10.8,11.1]},
+  {id:13,name:'Geladeira 13',sector:'Banco IDvida',temp:5.8,dailyMin:5.2,dailyMax:6.1,min:2,max:8,status:'NORMAL',state:'blue',online:true,battery:87,hum1:63,hum2:64,updated:'agora',timerLabel:'Dentro da faixa segura',timer:0,fill:56,range:40,events:['Sem alerta ativo'],chart:[5.7,5.8,5.8,5.9,5.8,5.7,5.8,5.9,5.8,5.8,5.9,5.8]},
+  {id:14,name:'Geladeira 14',sector:'Banco IDvida',temp:4.9,dailyMin:4.4,dailyMax:5.0,min:2,max:8,status:'NORMAL',state:'blue',online:true,battery:91,hum1:60,hum2:62,updated:'agora',timerLabel:'Dentro da faixa segura',timer:0,fill:48,range:38,events:['Sem alerta ativo'],chart:[4.8,4.9,5.0,4.9,4.8,4.8,4.9,5.0,4.9,4.9,4.8,4.9]},
+  {id:15,name:'Geladeira 15',sector:'Banco IDvida',temp:6.7,dailyMin:6.0,dailyMax:6.9,min:2,max:8,status:'NORMAL',state:'blue',online:true,battery:85,hum1:62,hum2:65,updated:'há 1 min',timerLabel:'Dentro da faixa segura',timer:0,fill:58,range:58,events:['Sem alerta ativo'],chart:[6.5,6.6,6.6,6.7,6.7,6.8,6.7,6.6,6.7,6.7,6.8,6.7]},
+  {id:16,name:'Geladeira 16',sector:'Banco IDvida',temp:7.4,dailyMin:6.8,dailyMax:7.8,min:2,max:8,status:'NORMAL',state:'blue',online:true,battery:80,hum1:64,hum2:66,updated:'há 2 min',timerLabel:'Próximo do limite, ainda dentro da faixa',timer:0,fill:61,range:68,events:['Sem alerta ativo'],chart:[7.0,7.1,7.1,7.2,7.2,7.3,7.4,7.4,7.3,7.4,7.4,7.4]},
+  {id:17,name:'Geladeira 17',sector:'Banco IDvida',temp:5.0,min:2,max:8,status:'NORMAL',state:'blue',online:true,battery:83,hum1:60,hum2:63,updated:'agora',timerLabel:'Dentro da faixa segura',timer:0,fill:49,range:35,events:['Sem alerta ativo'],chart:[5.0,5.0,5.1,5.0,4.9,5.0,5.1,5.0,5.0,4.9,5.0,5.0]},
+  {id:18,name:'Geladeira 18',sector:'Banco IDvida',temp:8.1,min:2,max:8,status:'ATENÇÃO',state:'warn',online:true,battery:68,hum1:66,hum2:68,updated:'há 5 min',timerLabel:'Fora do limite há 2 min · alerta em 28 min',timer:8,fill:61,range:78,events:['Fora do limite há 2 min','Alerta previsto em 28 min'],chart:[7.0,7.0,7.1,7.1,7.2,7.3,7.4,7.5,7.7,7.9,8.0,8.1]},
+  {id:19,name:'Geladeira 19',sector:'Banco IDvida',temp:4.2,min:2,max:8,status:'NORMAL',state:'blue',online:true,battery:78,hum1:59,hum2:61,updated:'há 1 min',timerLabel:'Dentro da faixa segura',timer:0,fill:43,range:30,events:['Sem alerta ativo'],chart:[4.2,4.1,4.2,4.3,4.2,4.1,4.2,4.2,4.3,4.2,4.2,4.2]},
+  {id:20,name:'Geladeira 20',sector:'Banco IDvida',temp:10.2,min:2,max:8,status:'CRÍTICO',state:'crit',online:true,battery:72,hum1:70,hum2:73,updated:'há 4 min',timerLabel:'30 min atingidos · alertas enviados',timer:100,fill:80,range:94,events:['SMS enviado','Email enviado','Fora do limite por 30 minutos'],chart:[7.1,7.2,7.3,7.6,7.9,8.2,8.6,9.0,9.3,9.7,9.9,10.2]},
+  {id:21,name:'Geladeira 21',sector:'Banco IDvida',temp:null,min:2,max:8,status:'MANUTENÇÃO',state:'maint',online:false,battery:null,hum1:null,hum2:null,updated:'há 30 min',timerLabel:'Em manutenção há 30 min',timer:40,fill:28,range:0,events:['Equipamento em manutenção','Responsável: João Silva','Previsão: mais 1h'],chart:[5.4,5.3,5.3,5.2,5.2,5.1,5.1,5.0,5.0,5.0,5.0,5.0]},
+  {id:22,name:'Geladeira 22',sector:'Banco IDvida',temp:null,min:2,max:8,status:'MANUTENÇÃO',state:'maint',online:false,battery:null,hum1:null,hum2:null,updated:'há 2h',timerLabel:'Em manutenção há 2h',timer:80,fill:28,range:0,events:['Equipamento em manutenção','Responsável: Carlos Lima','Sem previsão de retorno'],chart:[6.0,6.0,5.9,5.9,5.8,5.8,5.8,5.7,5.7,5.7,5.7,5.7]},
+  {id:23,name:'Geladeira 23',sector:'Banco IDvida',temp:null,min:2,max:8,status:'MANUTENÇÃO',state:'maint',online:false,battery:null,hum1:null,hum2:null,updated:'há 10 min',timerLabel:'Manutenção iniciada',timer:15,fill:28,range:0,events:['Manutenção preventiva','Responsável: Equipe Técnica'],chart:[4.9,4.9,4.8,4.8,4.8,4.7,4.7,4.7,4.7,4.7,4.7,4.7]},
+  {id:24,name:'Geladeira 24',sector:'Banco IDvida',temp:null,min:2,max:8,status:'MANUTENÇÃO',state:'maint',online:false,battery:null,hum1:null,hum2:null,updated:'há 50 min',timerLabel:'Em manutenção',timer:55,fill:28,range:0,events:['Falha detectada','Responsável: Ana Paula','Previsão: mais 30 min'],chart:[5.8,5.8,5.7,5.7,5.6,5.6,5.6,5.5,5.5,5.5,5.5,5.5]}
 ];
 
 const grid = document.getElementById('cardGrid');
@@ -44,7 +44,7 @@ const accessibility = { colorblind: false, contrast: false, compact: false, show
 let activeId = null;
 let activeFilter = null;
 let nocFilteredIds = null;
-let selectedArea = 'Banco de Sangue';
+let selectedArea = 'Banco IDvida';
 let selectedClient = 'Laboratório IDvida';
 
 const svgIcon = {
@@ -1201,7 +1201,7 @@ document.addEventListener("DOMContentLoaded", () => {
       id: Number.isFinite(panelId) ? panelId : index + 1,
       backendId: card.backendId || card.deviceId || card.id,
       name: card.name || card.deviceName || `Geladeira ${String(index + 1).padStart(2, '0')}`,
-      sector: card.sector || card.local || 'Banco de Sangue',
+      sector: card.sector || card.local || 'Banco IDvida',
       state: card.state || 'blue',
       status: card.status || 'NORMAL',
       online: card.online !== false,
@@ -1573,7 +1573,7 @@ window.DRILL_STATUS_TREE = {
       areas: [
         {
           id: 'banco-sangue',
-          title: 'Banco de Sangue',
+          title: 'Banco IDvida',
           subtitle: '3 dispositivos fora da temperatura neste momento.',
           badge: '3',
           badgeClass: 'badge-red',
@@ -1627,7 +1627,7 @@ window.DRILL_STATUS_TREE = {
       areas: [
         {
           id: 'banco-sangue',
-          title: 'Banco de Sangue',
+          title: 'Banco IDvida',
           subtitle: 'Conferência de produtos e insumos no setor.',
           badge: '2',
           badgeClass: 'badge-brown',
@@ -1756,8 +1756,8 @@ window.DRILL_SAUDE_TREE = (() => {
         badge:'84',
         badgeClass:'badge-blue',
         areas:[
-          { id:'banco-sangue-cal', title:'Banco de Sangue', subtitle:'10 dispositivos calibrados.', badge:'10', badgeClass:'badge-blue',
-            devices: makeDevices('Sensor CAL BS', 'Banco de Sangue', 10, 'Calibrado', 'badge-blue', 'Calibração em dia') },
+          { id:'banco-sangue-cal', title:'Banco IDvida', subtitle:'10 dispositivos calibrados.', badge:'10', badgeClass:'badge-blue',
+            devices: makeDevices('Sensor CAL BS', 'Banco IDvida', 10, 'Calibrado', 'badge-blue', 'Calibração em dia') },
           { id:'uti-cal', title:'UTI', subtitle:'18 dispositivos calibrados.', badge:'18', badgeClass:'badge-blue',
             devices: makeDevices('Sensor CAL UTI', 'UTI', 18, 'Calibrado', 'badge-blue', 'Calibração em dia') },
           { id:'farmacia-cal', title:'Farmácia', subtitle:'14 dispositivos calibrados.', badge:'14', badgeClass:'badge-blue',
@@ -1777,8 +1777,8 @@ window.DRILL_SAUDE_TREE = (() => {
         badge:'18',
         badgeClass:'badge-yellow',
         areas:[
-          { id:'banco-sangue-prox', title:'Banco de Sangue', subtitle:'4 dispositivos próximos do vencimento.', badge:'4', badgeClass:'badge-yellow',
-            devices: makeDevices('Sensor PV BS', 'Banco de Sangue', 4, 'Próx. vencimento', 'badge-yellow', 'Calibração próxima do vencimento') },
+          { id:'banco-sangue-prox', title:'Banco IDvida', subtitle:'4 dispositivos próximos do vencimento.', badge:'4', badgeClass:'badge-yellow',
+            devices: makeDevices('Sensor PV BS', 'Banco IDvida', 4, 'Próx. vencimento', 'badge-yellow', 'Calibração próxima do vencimento') },
           { id:'uti-prox', title:'UTI', subtitle:'5 dispositivos próximos do vencimento.', badge:'5', badgeClass:'badge-yellow',
             devices: makeDevices('Sensor PV UTI', 'UTI', 5, 'Próx. vencimento', 'badge-yellow', 'Calibração próxima do vencimento') },
           { id:'farmacia-prox', title:'Farmácia', subtitle:'3 dispositivos próximos do vencimento.', badge:'3', badgeClass:'badge-yellow',
@@ -1794,8 +1794,8 @@ window.DRILL_SAUDE_TREE = (() => {
         badge:'6',
         badgeClass:'badge-red',
         areas:[
-          { id:'banco-sangue-v', title:'Banco de Sangue', subtitle:'2 dispositivos vencidos.', badge:'2', badgeClass:'badge-red',
-            devices: makeDevices('Sensor VEN BS', 'Banco de Sangue', 2, 'Vencido', 'badge-red', 'Calibração vencida') },
+          { id:'banco-sangue-v', title:'Banco IDvida', subtitle:'2 dispositivos vencidos.', badge:'2', badgeClass:'badge-red',
+            devices: makeDevices('Sensor VEN BS', 'Banco IDvida', 2, 'Vencido', 'badge-red', 'Calibração vencida') },
           { id:'uti-v', title:'UTI', subtitle:'1 dispositivo vencido.', badge:'1', badgeClass:'badge-red',
             devices: makeDevices('Sensor VEN UTI', 'UTI', 1, 'Vencido', 'badge-red', 'Calibração vencida') },
           { id:'laboratorio-v', title:'Laboratório', subtitle:'2 dispositivos vencidos.', badge:'2', badgeClass:'badge-red',
@@ -1828,8 +1828,8 @@ window.DRILL_SAUDE_TREE = (() => {
         badge:'70',
         badgeClass:'badge-comm',
         areas:[
-          { id:'banco-sangue-c', title:'Banco de Sangue', subtitle:'12 dispositivos comunicando.', badge:'12', badgeClass:'badge-comm',
-            devices: makeDevices('Dispositivo C BS', 'Banco de Sangue', 12, 'Comunicando', 'badge-comm', 'Informação chegando normalmente') },
+          { id:'banco-sangue-c', title:'Banco IDvida', subtitle:'12 dispositivos comunicando.', badge:'12', badgeClass:'badge-comm',
+            devices: makeDevices('Dispositivo C BS', 'Banco IDvida', 12, 'Comunicando', 'badge-comm', 'Informação chegando normalmente') },
           { id:'uti-c', title:'UTI', subtitle:'16 dispositivos comunicando.', badge:'16', badgeClass:'badge-comm',
             devices: makeDevices('Dispositivo C UTI', 'UTI', 16, 'Comunicando', 'badge-comm', 'Informação chegando normalmente') },
           { id:'farmacia-c', title:'Farmácia', subtitle:'10 dispositivos comunicando.', badge:'10', badgeClass:'badge-comm',
@@ -1849,8 +1849,8 @@ window.DRILL_SAUDE_TREE = (() => {
         badge:'10',
         badgeClass:'badge-no-comm',
         areas:[
-          { id:'banco-sangue-sc', title:'Banco de Sangue', subtitle:'2 dispositivos sem comunicação.', badge:'2', badgeClass:'badge-no-comm',
-            devices: makeDevices('Dispositivo SC BS', 'Banco de Sangue', 2, 'Sem comunicação', 'badge-no-comm', 'Informação não está chegando') },
+          { id:'banco-sangue-sc', title:'Banco IDvida', subtitle:'2 dispositivos sem comunicação.', badge:'2', badgeClass:'badge-no-comm',
+            devices: makeDevices('Dispositivo SC BS', 'Banco IDvida', 2, 'Sem comunicação', 'badge-no-comm', 'Informação não está chegando') },
           { id:'uti-sc', title:'UTI', subtitle:'2 dispositivos sem comunicação.', badge:'2', badgeClass:'badge-no-comm',
             devices: makeDevices('Dispositivo SC UTI', 'UTI', 2, 'Sem comunicação', 'badge-no-comm', 'Informação não está chegando') },
           { id:'farmacia-sc', title:'Farmácia', subtitle:'1 dispositivo sem comunicação.', badge:'1', badgeClass:'badge-no-comm',
@@ -1891,13 +1891,13 @@ window.DRILL_CONTRATO_TREE = {
           areas:[
             {
               id:'total-banco-sangue',
-              title:'Banco de Sangue',
+              title:'Banco IDvida',
               subtitle:'Dispositivos IDSensor ativos na área.',
               badge:'40',
               badgeClass:'badge-blue',
               devices:[
-                { title:'Dispositivo IDSensor 01', subtitle:'Banco de Sangue · ativo', badge:'Ativo', badgeClass:'badge-green' },
-                { title:'Dispositivo IDSensor 02', subtitle:'Banco de Sangue · ativo', badge:'Ativo', badgeClass:'badge-green' }
+                { title:'Dispositivo IDSensor 01', subtitle:'Banco IDvida · ativo', badge:'Ativo', badgeClass:'badge-green' },
+                { title:'Dispositivo IDSensor 02', subtitle:'Banco IDvida · ativo', badge:'Ativo', badgeClass:'badge-green' }
               ]
             },
             {
@@ -1944,13 +1944,13 @@ window.DRILL_CONTRATO_TREE = {
           areas:[
             {
               id:'contrato-banco-sangue',
-              title:'Banco de Sangue',
+              title:'Banco IDvida',
               subtitle:'Dispositivos IDSensor em contrato na área.',
               badge:'35',
               badgeClass:'badge-green',
               devices:[
-                { title:'Dispositivo IDSensor 12', subtitle:'Banco de Sangue · ativo', badge:'Ativo', badgeClass:'badge-green' },
-                { title:'Dispositivo IDSensor 13', subtitle:'Banco de Sangue · ativo', badge:'Ativo', badgeClass:'badge-green' }
+                { title:'Dispositivo IDSensor 12', subtitle:'Banco IDvida · ativo', badge:'Ativo', badgeClass:'badge-green' },
+                { title:'Dispositivo IDSensor 13', subtitle:'Banco IDvida · ativo', badge:'Ativo', badgeClass:'badge-green' }
               ]
             },
             {
@@ -1997,7 +1997,7 @@ window.DRILL_CONTRATO_TREE = {
           areas:[
             {
               id:'aguardando-banco-sangue',
-              title:'Banco de Sangue',
+              title:'Banco IDvida',
               subtitle:'Dispositivos IDSensor aguardando na área.',
               badge:'7',
               badgeClass:'badge-yellow',
@@ -3383,7 +3383,7 @@ window.abrirDrill = function(tipo){
       hint: 'Exemplo de drill down: da área para a situação operacional do que está instalado nela.',
       html: `
         <div class="drill-list">
-          <div class="drill-item"><div><strong>Banco de Sangue</strong><span>30 em uso · 2 em manutenção</span></div><div class="drill-badge badge-blue">32</div></div>
+          <div class="drill-item"><div><strong>Banco IDvida</strong><span>30 em uso · 2 em manutenção</span></div><div class="drill-badge badge-blue">32</div></div>
           <div class="drill-item"><div><strong>Laboratório</strong><span>18 em uso · 7 em manutenção</span></div><div class="drill-badge badge-yellow">25</div></div>
           <div class="drill-item"><div><strong>Nutrição</strong><span>10 em uso · 1 em manutenção</span></div><div class="drill-badge badge-green">11</div></div>
           <div class="drill-item"><div><strong>Farmácia</strong><span>14 em uso · 3 em manutenção</span></div><div class="drill-badge badge-gray">17</div></div>
@@ -3601,7 +3601,7 @@ window.DRILL_CONFIG_TREE = {
       areas:[
         {
           id:'banco-sangue',
-          title:'Banco de Sangue',
+          title:'Banco IDvida',
           subtitle:'24 dispositivos cadastrados para configuração.',
           badge:'24',
           badgeClass:'badge-blue',
@@ -3888,8 +3888,8 @@ window.renderOrcamentoForm = function(tipo){
       <div class="orc-form">
         ${baseFields('<div class="orc-field"><label>Quantidade</label><input type="number" value="1"></div>')}
         <div class="orc-row">
-          <div class="orc-field"><label>Área de destino</label><select><option>UTI</option><option>Banco de Sangue</option><option>Farmácia</option></select></div>
-          <div class="orc-field"><label>Dispositivo de referência</label><select><option>Selecione uma referência</option><option>Geladeira UTI 02</option><option>Banco de Sangue 03</option></select></div>
+          <div class="orc-field"><label>Área de destino</label><select><option>UTI</option><option>Banco IDvida</option><option>Farmácia</option></select></div>
+          <div class="orc-field"><label>Dispositivo de referência</label><select><option>Selecione uma referência</option><option>Geladeira UTI 02</option><option>Banco IDvida 03</option></select></div>
         </div>
         <div class="orc-field"><label>Observações</label><textarea placeholder="Ex.: quero um dispositivo igual ao da UTI 02."></textarea></div>
         <div class="orc-actions"><button class="orc-btn">Cancelar</button><button class="orc-btn primary">Enviar solicitação</button></div>
@@ -3906,7 +3906,7 @@ window.renderOrcamentoForm = function(tipo){
       <div class="orc-form">
         ${baseFields('<div class="orc-field"><label>Tipo</label><select><option>Reposição</option><option>Reparo</option></select></div>')}
         <div class="orc-row">
-          <div class="orc-field"><label>Dispositivo afetado</label><select><option>Geladeira 3</option><option>Geladeira 8</option><option>Banco de Sangue 03</option></select></div>
+          <div class="orc-field"><label>Dispositivo afetado</label><select><option>Geladeira 3</option><option>Geladeira 8</option><option>Banco IDvida 03</option></select></div>
           <div class="orc-field"><label>Motivo</label><select><option>Falha técnica</option><option>Dano físico</option><option>Baixa performance</option></select></div>
         </div>
         <div class="orc-field"><label>Observações</label><textarea placeholder="Descreva o contexto da solicitação."></textarea></div>
@@ -3925,7 +3925,7 @@ window.renderOrcamentoForm = function(tipo){
         ${baseFields('<div class="orc-field"><label>Quantidade de dispositivos</label><input type="number" value="4"></div>')}
         <div class="orc-row">
           <div class="orc-field"><label>Nome da nova área</label><input value="Hemodinâmica"></div>
-          <div class="orc-field"><label>Dispositivo de referência</label><select><option>Geladeira UTI 02</option><option>Banco de Sangue 01</option><option>Nenhum</option></select></div>
+          <div class="orc-field"><label>Dispositivo de referência</label><select><option>Geladeira UTI 02</option><option>Banco IDvida 01</option><option>Nenhum</option></select></div>
         </div>
         <div class="orc-field"><label>Observações</label><textarea placeholder="Ex.: criar nova área com 4 dispositivos iguais ao da UTI 02."></textarea></div>
         <div class="orc-actions"><button class="orc-btn">Cancelar</button><button class="orc-btn primary">Enviar solicitação</button></div>
@@ -4395,7 +4395,7 @@ document.getElementById('infoMacOverlay')?.addEventListener('click', ()=> openIn
       master: 'Lab IDvida',
       admin1: 'Admin 1',
       admin2: 'Admin 2',
-      area: 'Usuário Banco de Sangue'
+      area: 'Usuário Banco IDvida'
     };
     currentUserLabel.textContent = labelMap[role] || 'Lab IDvida';
 
@@ -4403,8 +4403,8 @@ document.getElementById('infoMacOverlay')?.addEventListener('click', ()=> openIn
       if(gestaoBtn) gestaoBtn.style.display = '';
       if(chipAreas) chipAreas.style.display = '';
       if(chipClients) chipClients.style.display = '';
-      if(subtitleEl) subtitleEl.textContent = 'Laboratório IDvida · Banco de Sangue';
-      if(typeof selectedArea !== 'undefined') selectedArea = 'Banco de Sangue';
+      if(subtitleEl) subtitleEl.textContent = 'Laboratório IDvida · Banco IDvida';
+      if(typeof selectedArea !== 'undefined') selectedArea = 'Banco IDvida';
       if(typeof selectedClient !== 'undefined') selectedClient = 'Laboratório IDvida';
     }
 
@@ -4412,8 +4412,8 @@ document.getElementById('infoMacOverlay')?.addEventListener('click', ()=> openIn
       if(gestaoBtn) gestaoBtn.style.display = '';
       if(chipAreas) chipAreas.style.display = '';
       if(chipClients) chipClients.style.display = 'none';
-      if(subtitleEl) subtitleEl.textContent = 'Laboratório IDvida · Banco de Sangue';
-      if(typeof selectedArea !== 'undefined') selectedArea = 'Banco de Sangue';
+      if(subtitleEl) subtitleEl.textContent = 'Laboratório IDvida · Banco IDvida';
+      if(typeof selectedArea !== 'undefined') selectedArea = 'Banco IDvida';
       if(typeof selectedClient !== 'undefined') selectedClient = 'Laboratório IDvida';
     }
 
@@ -4421,8 +4421,8 @@ document.getElementById('infoMacOverlay')?.addEventListener('click', ()=> openIn
       if(gestaoBtn) gestaoBtn.style.display = '';
       if(chipAreas) chipAreas.style.display = '';
       if(chipClients) chipClients.style.display = 'none';
-      if(subtitleEl) subtitleEl.textContent = 'Laboratório IDvida · Banco de Sangue';
-      if(typeof selectedArea !== 'undefined') selectedArea = 'Banco de Sangue';
+      if(subtitleEl) subtitleEl.textContent = 'Laboratório IDvida · Banco IDvida';
+      if(typeof selectedArea !== 'undefined') selectedArea = 'Banco IDvida';
       if(typeof selectedClient !== 'undefined') selectedClient = 'Laboratório IDvida';
     }
 
@@ -4430,8 +4430,8 @@ document.getElementById('infoMacOverlay')?.addEventListener('click', ()=> openIn
       if(gestaoBtn) gestaoBtn.style.display = 'none';
       if(chipAreas) chipAreas.style.display = 'none';
       if(chipClients) chipClients.style.display = 'none';
-      if(subtitleEl) subtitleEl.textContent = 'Laboratório IDvida · Banco de Sangue';
-      if(typeof selectedArea !== 'undefined') selectedArea = 'Banco de Sangue';
+      if(subtitleEl) subtitleEl.textContent = 'Laboratório IDvida · Banco IDvida';
+      if(typeof selectedArea !== 'undefined') selectedArea = 'Banco IDvida';
       if(typeof selectedClient !== 'undefined') selectedClient = 'Laboratório IDvida';
     }
 
@@ -4750,13 +4750,13 @@ function clearIntegratedNocTimers(){
   integratedNocLive = null;
 }
 function getOccurrenceDevices(){
-  const area = 'Banco de Sangue';
+  const area = 'Banco IDvida';
   return devices.filter(d => d.sector === area && (d.state === 'warn' || d.state === 'crit'));
 }
 function getNocCounts(){
   const occ = getOccurrenceDevices();
   return {
-    area: [{key:'bs', title:'Banco de Sangue', count: occ.length}],
+    area: [{key:'bs', title:'Banco IDvida', count: occ.length}],
     client: [{key:'labidvida', title:'Laboratório IDvida', count: occ.length}],
     device: occ.map((d, idx) => ({key:'device_'+d.id, title:d.name, count:1, deviceId:d.id}))
   };
@@ -4837,7 +4837,7 @@ function startIntegratedNoc(){
   cards.forEach((card, idx) => {
     card.onclick = () => {
       if(integratedNocMode === 'area'){
-        openNocArea('Banco de Sangue');
+        openNocArea('Banco IDvida');
       } else if(integratedNocMode === 'client'){
         openNocClient('Laboratório IDvida');
       } else {
@@ -4882,7 +4882,7 @@ function startIntegratedLiveChanges(){
 function applyNocFilter(ids, openId){
   activeFilter = null;
   nocFilteredIds = Array.isArray(ids) ? [...ids] : null;
-  selectedArea = 'Banco de Sangue';
+  selectedArea = 'Banco IDvida';
   if(typeof renderGrid === 'function') renderGrid();
   closeNoc();
   // detalhe automático removido
@@ -5090,7 +5090,7 @@ document.addEventListener('DOMContentLoaded', function(){
   window.getNocCounts = function(){
     const occ = getFilteredOccurrenceDevices();
     return {
-      area: [{ key:'bs', title:'Banco de Sangue', count: occ.length }],
+      area: [{ key:'bs', title:'Banco IDvida', count: occ.length }],
       client: [{ key:'labidvida', title:'Laboratório IDvida', count: occ.length }],
       device: occ.map(d => ({ key:'device_' + d.id, title:d.name, count:1, deviceId:d.id }))
     };
@@ -5099,7 +5099,7 @@ document.addEventListener('DOMContentLoaded', function(){
   window.applyNocFilter = function(ids, openId){
     activeFilter = null;
     nocFilteredIds = Array.isArray(ids) ? [...ids] : null;
-    selectedArea = 'Banco de Sangue';
+    selectedArea = 'Banco IDvida';
     if(typeof renderGrid === 'function') renderGrid();
     closeNoc();
     // detalhe automático removido
@@ -5244,7 +5244,7 @@ window.getNocCounts = function(){
   }
 
   function getFilteredOccurrenceDevices(){
-    const allArea = getAreaDevices('Banco de Sangue');
+    const allArea = getAreaDevices('Banco IDvida');
     const cats = categoryListForDevices(allArea);
     const wanted = new Set(cats.map(x => x.key));
     return allArea.filter(d => (
@@ -5258,7 +5258,7 @@ window.getNocCounts = function(){
 
   window.getNocCounts = function(){
     const occ = getFilteredOccurrenceDevices();
-    const areaName = 'Banco de Sangue';
+    const areaName = 'Banco IDvida';
     const areaCats = categoryListForDevices(getAreaDevices(areaName));
     const total = areaCats.reduce((s, item) => s + item.count, 0);
 
@@ -5638,7 +5638,7 @@ window.getNocCounts = function(){
   function dedupe(arr){ return [...new Set(arr)]; }
 
   window.getNocCounts = function(){
-    const areaName = 'Banco de Sangue';
+    const areaName = 'Banco IDvida';
     const areaR = areaRotations(areaName);
     const areaTotal = areaR.reduce((s, x) => s + x.count, 0);
     const visibleAreaIds = dedupe(areaR.flatMap(x => x.visibleIds || []));
@@ -6614,7 +6614,7 @@ document.addEventListener('DOMContentLoaded', function(){
     const usuarioNome = String(nameInput?.value || '').trim();
     const usuarioEmail = String(emailInput?.value || '').trim();
     const unidadeId = areaInput?.value || 'unidade_banco_sangue';
-    const areaNome = areaInput?.dataset?.areaName || 'Banco de Sangue';
+    const areaNome = areaInput?.dataset?.areaName || 'Banco IDvida';
     const usuarioPerfil = profileInput?.value || 'area';
     const areaIds = isWideProfile(usuarioPerfil) ? [] : readAreaIds(areaInput);
 
