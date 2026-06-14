@@ -8916,7 +8916,7 @@ body.density-compact .critical-clock-copy strong{
 .telemetry-event.normal .telemetry-event-dot{background:#2db875}
 .telemetry-event.offline .telemetry-event-dot{background:#77869a}
 .telemetry-event.alert .telemetry-event-dot{background:#3b82e6}
-.telemetry-event.silence .telemetry-event-dot{background:#765bc9}
+.telemetry-event.silence .telemetry-event-dot{background:#94a3b8}
 
 .telemetry-event > div{
   display:grid;
@@ -8986,11 +8986,11 @@ body.density-compact .critical-clock-copy strong{
 .telemetry-active-card{
   align-items:center;
   border:1px solid;
-  border-radius:16px;
+  border-radius:14px;
   display:flex;
-  gap:14px;
-  margin-top:14px;
-  padding:15px 16px;
+  gap:12px;
+  margin-top:12px;
+  padding:12px 14px;
 }
 
 .telemetry-active-card.is-critical{
@@ -9021,14 +9021,14 @@ body.density-compact .critical-clock-copy strong{
   background:transparent;
   border:0;
   border-radius:0;
-  flex:0 0 46px;
-  height:46px;
-  width:46px;
+  flex:0 0 38px;
+  height:38px;
+  width:38px;
 }
 
 .telemetry-active-card .telemetry-active-icon svg{
-  height:42px;
-  width:42px;
+  height:36px;
+  width:36px;
 }
 
 .telemetry-active-card .telemetry-active-copy small{
@@ -9039,10 +9039,10 @@ body.density-compact .critical-clock-copy strong{
 
 .telemetry-active-card .telemetry-active-copy strong{
   color:#10213a;
-  font-size:26px;
+  font-size:22px;
   font-weight:900;
   letter-spacing:-.02em;
-  margin-top:4px;
+  margin-top:3px;
 }
 
 .telemetry-active-card .telemetry-active-copy em{
@@ -9055,52 +9055,53 @@ body.density-compact .critical-clock-copy strong{
 
 .telemetry-status-grid{
   display:grid;
-  gap:8px;
+  gap:7px;
   grid-template-columns:repeat(4,minmax(0,1fr));
-  margin-top:12px;
+  margin-top:10px;
 }
 
 .telemetry-status-card{
   align-items:center;
   background:#fff;
   border:1px solid #e1e8f2;
-  border-radius:14px;
+  border-radius:12px;
   display:grid;
-  gap:6px;
-  grid-template-columns:24px minmax(0,1fr);
-  min-height:62px;
-  padding:10px 8px;
+  gap:5px;
+  grid-template-columns:22px minmax(0,1fr);
+  min-height:50px;
+  padding:8px 7px;
 }
 
 .telemetry-status-icon{
   align-items:center;
   border-radius:999px;
   display:flex;
-  height:24px;
+  height:22px;
   justify-content:center;
-  width:24px;
+  width:22px;
 }
 
 .telemetry-status-icon svg{
-  height:21px;
-  width:21px;
+  height:19px;
+  width:19px;
 }
 
 .telemetry-status-card small{
   color:#64748b;
   display:block;
-  font-size:9px;
+  font-size:8px;
   font-weight:800;
   line-height:1.15;
+  overflow-wrap:anywhere;
 }
 
 .telemetry-status-card strong{
   color:#12233d;
   display:block;
-  font-size:17px;
+  font-size:15px;
   font-weight:900;
   line-height:1.05;
-  margin-top:3px;
+  margin-top:2px;
 }
 
 .telemetry-status-card.limit .telemetry-status-icon{color:#13a36b}
@@ -9119,7 +9120,7 @@ body.density-compact .critical-clock-copy strong{
 
 .telemetry-channel-grid{
   display:grid;
-  gap:10px;
+  gap:8px;
   grid-template-columns:repeat(3,minmax(0,1fr));
 }
 
@@ -9127,21 +9128,26 @@ body.density-compact .critical-clock-copy strong{
   align-items:center;
   background:#fff;
   border:1px solid #e0e8f3;
-  border-radius:13px;
+  border-radius:12px;
   display:grid;
-  gap:7px;
+  gap:8px;
   grid-template-columns:25px minmax(0,1fr) auto;
-  min-height:40px;
-  padding:8px 10px;
+  min-height:48px;
+  padding:8px 9px;
 }
 
-.telemetry-channel-card > span{
+.telemetry-channel-card > span:first-child{
   align-items:center;
   border-radius:9px;
   display:flex;
   height:25px;
   justify-content:center;
   width:25px;
+}
+
+.telemetry-channel-card > span:nth-child(2){
+  display:grid;
+  min-width:0;
 }
 
 .telemetry-channel-card svg{
@@ -9153,44 +9159,56 @@ body.density-compact .critical-clock-copy strong{
   color:#21344d;
   font-size:11px;
   font-weight:900;
+  line-height:1.05;
+}
+
+.telemetry-channel-card em{
+  color:#6f7f95;
+  font-size:8px;
+  font-style:normal;
+  font-weight:800;
+  line-height:1.15;
+  margin-top:3px;
+  overflow-wrap:anywhere;
 }
 
 .telemetry-channel-card strong{
   color:#10213a;
-  font-size:18px;
+  font-size:17px;
   font-weight:900;
+  justify-self:end;
 }
 
-.telemetry-channel-card.sms > span{background:#ebf3ff;color:#2f80ff}
-.telemetry-channel-card.email > span{background:#edf4ff;color:#2f80ff}
-.telemetry-channel-card.whatsapp > span{background:#eafaf0;color:#20b66b}
+.telemetry-channel-card.sms > span:first-child{background:#ebf3ff;color:#2f80ff}
+.telemetry-channel-card.email > span:first-child{background:#edf4ff;color:#2f80ff}
+.telemetry-channel-card.whatsapp > span:first-child{background:#eafaf0;color:#20b66b}
 
 .telemetry-silence-card{
   align-items:center;
-  background:linear-gradient(180deg,#f3f8ff,#edf5ff);
-  border:1px solid #d4e4f8;
-  border-radius:16px;
+  background:linear-gradient(180deg,#fbfcfe,#f3f6fa);
+  border:1px solid #dfe7f0;
+  border-radius:14px;
   display:grid;
-  gap:12px;
-  grid-template-columns:48px minmax(0,1fr);
-  margin-top:12px;
-  padding:11px 14px;
+  gap:11px;
+  grid-template-columns:42px minmax(0,1fr);
+  margin-top:10px;
+  padding:10px 12px;
 }
 
 .telemetry-silence-icon{
   align-items:center;
-  background:#dbeaff;
+  background:#edf2f7;
   border-radius:999px;
-  color:#3c83e6;
+  color:#64748b;
   display:flex;
-  height:48px;
+  height:42px;
   justify-content:center;
-  width:48px;
+  width:42px;
 }
 
 .telemetry-silence-icon svg{
-  height:27px;
-  width:27px;
+  height:24px;
+  width:24px;
 }
 
 .telemetry-silence-card > span:last-child{
@@ -9216,18 +9234,18 @@ body.density-compact .critical-clock-copy strong{
 .telemetry-variation-strip{
   background:#fff;
   border:1px solid #e0e8f3;
-  border-radius:15px;
+  border-radius:14px;
   display:grid;
   grid-template-columns:repeat(4,minmax(0,1fr));
-  margin-top:12px;
+  margin-top:10px;
   overflow:hidden;
 }
 
 .telemetry-variation-strip > span{
   display:grid;
-  gap:4px;
-  min-height:56px;
-  padding:10px 8px;
+  gap:3px;
+  min-height:52px;
+  padding:9px 7px;
   text-align:center;
 }
 
@@ -9237,13 +9255,14 @@ body.density-compact .critical-clock-copy strong{
 
 .telemetry-variation-strip small{
   color:#667792;
-  font-size:9px;
+  font-size:8px;
   font-weight:900;
+  line-height:1.15;
 }
 
 .telemetry-variation-strip strong{
   color:#11233e;
-  font-size:18px;
+  font-size:17px;
   font-weight:900;
   line-height:1.1;
 }
@@ -9293,8 +9312,8 @@ body.density-compact .critical-clock-copy strong{
 }
 
 .telemetry-event.limit .telemetry-event-dot{background:#13a36b}
-.telemetry-event.maintenance .telemetry-event-dot{background:#98a2b3}
-.telemetry-event.defrost .telemetry-event-dot{background:#7f69c6}
+.telemetry-event.maintenance .telemetry-event-dot,
+.telemetry-event.defrost .telemetry-event-dot{background:#98a2b3}
 
 @media (max-width:1260px){
   .telemetry-status-grid,
