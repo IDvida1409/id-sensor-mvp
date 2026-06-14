@@ -43,7 +43,7 @@ function baseDevice(index, area) {
     max: 8,
     online: true,
     battery: Math.max(8, battery),
-    humidity: 58 + (index % 9),
+    humidity: 20 + (index % 10),
     powerMode,
     inContract: id <= 20,
     pendingActivation: id > 20 && id <= 22,

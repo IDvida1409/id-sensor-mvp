@@ -1,6 +1,6 @@
 /* ===== SCRIPT BLOCK 1 | (sem-id) ===== */
 const devices = [
-  {id:1,name:'Geladeira 1',sector:'Banco IDvida',temp:5.4,dailyMin:4.8,dailyMax:5.6,min:2,max:8,status:'NORMAL',state:'blue',online:true,battery:92,hum1:62,hum2:64,updated:'agora',timerLabel:'Dentro da faixa segura',timer:0,fill:52,range:36,events:['Sem alerta ativo'],chart:[5.2,5.1,5.2,5.3,5.4,5.3,5.2,5.4,5.5,5.4,5.3,5.4]},
+  {id:1,name:'Geladeira 1',sector:'Banco IDvida',temp:5.4,dailyMin:4.8,dailyMax:5.6,min:2,max:8,status:'NORMAL',state:'blue',online:true,battery:92,hum1:22,hum2:24,updated:'agora',timerLabel:'Dentro da faixa segura',timer:0,fill:52,range:36,events:['Sem alerta ativo'],chart:[5.2,5.1,5.2,5.3,5.4,5.3,5.2,5.4,5.5,5.4,5.3,5.4]},
   {id:2,name:'Geladeira 2',sector:'Banco IDvida',temp:3.2,dailyMin:3.2,dailyMax:7.5,min:2,max:8,status:'NORMAL',state:'blue',online:false,battery:45,hum1:61,hum2:61,updated:'agora',timerLabel:'Dentro da faixa segura',timer:0,fill:40,range:28,events:['Sem alerta ativo'],commText:'Sem comunicação há 15 min',chart:[3.1,3.2,3.1,3.0,3.1,3.2,3.3,3.2,3.2,3.1,3.2,3.2]},
   {id:3,name:'Geladeira 3',sector:'Banco IDvida',temp:8.6,dailyMin:7.0,dailyMax:8.9,min:2,max:8,status:'ATENÇÃO',state:'warn',online:true,battery:82,hum1:61,hum2:67,updated:'há 7 min',timerLabel:'Fora do limite há 8 min · alerta em 22 min',timer:26,fill:64,range:82,events:['Fora do limite há 8 min','Alerta previsto em 22 min'],chart:[7.1,7.2,7.0,7.3,7.5,7.9,8.1,8.0,8.2,8.3,8.4,8.6]},
   {id:4,name:'Geladeira 4',sector:'Banco IDvida',temp:5.1,dailyMin:4.7,dailyMax:5.4,min:2,max:8,status:'NORMAL',state:'blue',online:true,battery:90,hum1:64,hum2:66,updated:'agora',timerLabel:'Dentro da faixa segura',timer:0,fill:50,range:34,events:['Sem alerta ativo'],chart:[5.0,5.1,5.1,5.2,5.0,4.9,5.1,5.2,5.2,5.1,5.0,5.1]},
@@ -65,7 +65,16 @@ const stateMeta = {
 };
 
 function tempLabel(v){ return v === null ? '--' : `${v.toFixed(1)}°C`; }
-function humLabel(v){ return v === null ? '--' : `${v}%`; }
+function normalizeHumidityTemperatureValue(value){
+  if(value === null || value === undefined || value === '') return null;
+  const numeric = Number(value);
+  if(!Number.isFinite(numeric)) return null;
+  return numeric > 40 ? Math.min(29, Math.max(18, numeric - 40)) : numeric;
+}
+function humLabel(v){
+  const value = normalizeHumidityTemperatureValue(v);
+  return value === null ? '--' : `${value.toFixed(1)}°C`;
+}
 function battLabel(v){ return v === null ? '--' : `${v}%`; }
 function getCommunicationLabel(d){
   return d.online ? '' : `Sem comunicação · ${d.updated}`;
@@ -271,7 +280,7 @@ function buildDetail(d){
       <div class="rows">
         ${(d.events || ['Sem alerta ativo']).map(ev => `<div class="row"><div class="ico">${meta.icon}</div>${ev}</div>`).join('')}
         <div class="row"><div class="ico"><svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="2.5" y="4.5" width="10" height="7" rx="1.8" stroke-width="1.5"/><path d="M12.8 6.3h.8c.5 0 .9.4.9.9v1.6c0 .5-.4.9-.9.9h-.8" stroke-width="1.5" stroke-linecap="round"/></svg></div>Bateria ${battLabel(d.battery)}</div>
-        <div class="row"><div class="ico"><svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8 2.5c-1.9 2.6-3.5 4.3-3.5 6.3a3.5 3.5 0 1 0 7 0c0-2-1.6-3.7-3.5-6.3Z" stroke-width="1.5" stroke-linejoin="round"/></svg></div>Humidade ${humLabel(d.hum2 ?? d.hum1)}</div>
+        <div class="row"><div class="ico"><svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8 2.5c-1.9 2.6-3.5 4.3-3.5 6.3a3.5 3.5 0 1 0 7 0c0-2-1.6-3.7-3.5-6.3Z" stroke-width="1.5" stroke-linejoin="round"/></svg></div>Umidade ${humLabel(d.hum2 ?? d.hum1)}</div>
         <div class="row"><div class="ico"><svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="4.5" stroke-width="1.5"/></svg></div>${d.online ? 'Em uso' : 'Em uso'}</div>
         ${d.commText ? `<div class="row comm-status-row"><div class="ico"><svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="4.5" stroke-width="1.5"/></svg><span class="status-dot"></span></div>${d.commText}</div>` 
 : (d.state !== 'maint' ? `<div class="row comm-status-row"><div class="ico"><svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="4.5" stroke-width="1.5"/></svg><span class="status-dot green"></span></div>Comunicando</div>` : '')}
@@ -1426,6 +1435,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function asPanelDevice(card, index){
     const panelId = Number(card.panelId || card.id || index + 1);
+    const humidityTemperature = normalizeHumidityTemperatureValue(card.humidity ?? card.hum2 ?? card.hum1);
     return {
       ...card,
       id: Number.isFinite(panelId) ? panelId : index + 1,
@@ -1437,6 +1447,8 @@ document.addEventListener("DOMContentLoaded", () => {
       online: card.online !== false,
       events: Array.isArray(card.events) ? card.events : ['Sem alerta ativo'],
       chart: Array.isArray(card.chart) ? card.chart : [],
+      hum1: humidityTemperature,
+      hum2: humidityTemperature,
       code: card.code || card.qrCode
     };
   }
