@@ -272,6 +272,11 @@
                 <button class="switch" id="toggleAutoRefresh" aria-label="Ativar atualização automática"></button>
               </div>
               <div class="acc-mini-status" id="autoRefreshMiniStatus"></div>
+              <div class="acc-option scheduled-collection-entry" id="scheduledCollectionEntry">
+                <div class="acc-option-copy"><strong>Coleta programada</strong><span>Define quais leituras entram nos relatórios da área selecionada.</span></div>
+                <button class="bind-device-plus scheduled-collection-plus" id="openScheduledCollectionModal" type="button" aria-label="Configurar coleta programada">+</button>
+              </div>
+              <div class="acc-mini-status scheduled-collection-mini-status" id="scheduledCollectionMiniStatus"></div>
               <div class="acc-option bind-device-entry" id="bindDeviceEntry">
                 <div class="acc-option-copy"><strong>Vincular dispositivo</strong><span>Gera um código para vincular um smartphone aos alertas da área selecionada.</span></div>
                 <button class="bind-device-plus" id="openBindDeviceModal" type="button" aria-label="Vincular dispositivo">+</button>
@@ -594,6 +599,72 @@
     <button class="drill-back" type="button" onclick="voltarResumoDrill()">← Voltar ao resumo</button>
     <div class="drill-hint" id="drillHint">Clique nos cards da gestão para explorar os detalhes.</div>
     <div id="drillContent"></div>
+  </div>
+</div>
+
+
+<div class="info-overlay bind-device-overlay scheduled-collection-overlay" id="scheduledCollectionOverlay">
+  <div class="info-modal bind-device-modal scheduled-collection-modal" role="dialog" aria-modal="true" aria-labelledby="scheduledCollectionTitle">
+    <button class="info-modal-close" id="closeScheduledCollectionModal" type="button" aria-label="Fechar">×</button>
+    <h2 id="scheduledCollectionTitle">Coleta programada</h2>
+    <p class="bind-device-subtitle">Configure a rotina usada para registrar leituras no relatório da área selecionada.</p>
+    <form id="scheduledCollectionForm">
+      <div class="info-field">
+        <label>Frequência da coleta</label>
+        <div class="scheduled-choice-grid scheduled-frequency-grid" id="scheduledFrequencyOptions" aria-label="Frequência da coleta">
+          <button class="scheduled-choice active" type="button" data-hours="1">1 hora</button>
+          <button class="scheduled-choice" type="button" data-hours="2">2 horas</button>
+          <button class="scheduled-choice" type="button" data-hours="3">3 horas</button>
+          <button class="scheduled-choice" type="button" data-hours="4">4 horas</button>
+          <button class="scheduled-choice" type="button" data-hours="6">6 horas</button>
+          <button class="scheduled-choice" type="button" data-hours="12">12 horas</button>
+        </div>
+        <div class="bind-device-help">O intervalo mínimo para a rotina é de 1 hora.</div>
+      </div>
+
+      <div class="info-field">
+        <label>Dispositivos da coleta</label>
+        <div class="scheduled-segmented" id="scheduledScopeOptions">
+          <button class="active" type="button" data-scope="all">Todos da área</button>
+          <button type="button" data-scope="selected">Selecionar dispositivos</button>
+        </div>
+        <div class="scheduled-device-list" id="scheduledDeviceList" hidden></div>
+        <div class="bind-device-help" id="scheduledDeviceHelp">A rotina será aplicada em todos os dispositivos da área atual.</div>
+      </div>
+
+      <div class="info-field">
+        <label>Dados registrados</label>
+        <div class="scheduled-metric-grid" id="scheduledMetricOptions">
+          <label class="scheduled-check-card active">
+            <input type="checkbox" value="temperature" checked>
+            <span>Temperatura no horário</span>
+            <small>Registra a leitura exibida no momento da coleta.</small>
+          </label>
+          <label class="scheduled-check-card">
+            <input type="checkbox" value="min">
+            <span>Mínima no horário</span>
+            <small>Registra a mínima exibida no momento da coleta.</small>
+          </label>
+          <label class="scheduled-check-card">
+            <input type="checkbox" value="max">
+            <span>Máxima no horário</span>
+            <small>Registra a máxima exibida no momento da coleta.</small>
+          </label>
+          <label class="scheduled-check-card">
+            <input type="checkbox" value="average">
+            <span>Média do período</span>
+            <small>Calcula a média usando o intervalo configurado.</small>
+          </label>
+        </div>
+      </div>
+
+      <div class="scheduled-collection-summary" id="scheduledCollectionSummary"></div>
+      <div class="info-feedback bind-device-feedback" id="scheduledCollectionFeedback"></div>
+      <div class="info-actions bind-device-actions">
+        <button class="info-btn secondary" id="cancelScheduledCollection" type="button">Cancelar</button>
+        <button class="info-btn primary" id="saveScheduledCollection" type="submit">Salvar coleta</button>
+      </div>
+    </form>
   </div>
 </div>
 

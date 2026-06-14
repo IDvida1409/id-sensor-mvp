@@ -4437,6 +4437,7 @@ document.getElementById('infoMacOverlay')?.addEventListener('click', ()=> openIn
 
     if(typeof renderGrid === 'function') renderGrid();
     if(typeof syncCloneButtonVisibility === 'function') syncCloneButtonVisibility();
+    if(typeof window.updateScheduledCollectionVisibility === 'function') window.updateScheduledCollectionVisibility();
     if(typeof window.updateBindDeviceVisibility === 'function') window.updateBindDeviceVisibility();
   }
 
@@ -6490,6 +6491,358 @@ document.addEventListener('DOMContentLoaded', function(){
       pushAuditEntry(d, {scope:'painel', field:label, description});
     });
   };
+})();
+
+/* ===== SCRIPT BLOCK 37A | scheduled-collection-modal ===== */
+(function(){
+  const allowedRoles = new Set(['master', 'admin1', 'admin2']);
+  const storageKey = 'idsensor.scheduledCollection.v1';
+  const defaultConfig = {
+    areaName: 'Banco IDvida',
+    hours: 1,
+    scope: 'all',
+    deviceIds: [],
+    metrics: ['temperature'],
+    updatedAt: null
+  };
+  const metricNames = {
+    temperature: 'temperatura',
+    min: 'mínima',
+    max: 'máxima',
+    average: 'média'
+  };
+  const snapshotMetricNames = {
+    temperature: 'a temperatura',
+    min: 'a mínima',
+    max: 'a máxima'
+  };
+
+  function getEl(id){ return document.getElementById(id); }
+
+  function escapeHtml(value){
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function canConfigureScheduledCollection(){
+    return allowedRoles.has(String(window.currentRole || 'master').toLowerCase());
+  }
+
+  function currentAreaName(){
+    if(typeof selectedArea !== 'undefined' && selectedArea) return selectedArea;
+    return 'Banco IDvida';
+  }
+
+  function getDeviceRows(){
+    const allDevices = window.devices || (typeof devices !== 'undefined' ? devices : []);
+    const area = currentAreaName();
+    if(!Array.isArray(allDevices)) return [];
+    if(!area) return allDevices;
+    return allDevices.filter(device => device.sector === area);
+  }
+
+  function formatHours(hours){
+    const safe = Number(hours) || 1;
+    return safe === 1 ? '1 hora' : `${safe} horas`;
+  }
+
+  function joinPt(parts){
+    const list = parts.filter(Boolean);
+    if(list.length <= 1) return list[0] || '';
+    if(list.length === 2) return `${list[0]} e ${list[1]}`;
+    return `${list.slice(0, -1).join(', ')} e ${list[list.length - 1]}`;
+  }
+
+  function selectedDeviceLabel(count){
+    if(count === 1) return '1 dispositivo selecionado';
+    if(!count) return 'nenhum dispositivo selecionado';
+    return `${count} dispositivos selecionados`;
+  }
+
+  function normalizeConfig(config){
+    const raw = config && typeof config === 'object' ? config : {};
+    const hours = [1,2,3,4,6,12].includes(Number(raw.hours)) ? Number(raw.hours) : defaultConfig.hours;
+    const scope = raw.scope === 'selected' ? 'selected' : 'all';
+    const metrics = Array.isArray(raw.metrics)
+      ? raw.metrics.filter(metric => Object.prototype.hasOwnProperty.call(metricNames, metric))
+      : defaultConfig.metrics.slice();
+    return {
+      areaName: raw.areaName || currentAreaName(),
+      hours,
+      scope,
+      deviceIds: Array.isArray(raw.deviceIds) ? raw.deviceIds.map(String) : [],
+      metrics: metrics.length ? Array.from(new Set(metrics)) : defaultConfig.metrics.slice(),
+      updatedAt: raw.updatedAt || null
+    };
+  }
+
+  function loadConfig(){
+    try {
+      return normalizeConfig(JSON.parse(localStorage.getItem(storageKey) || 'null'));
+    } catch(e) {
+      return normalizeConfig(defaultConfig);
+    }
+  }
+
+  function saveConfig(config){
+    const next = normalizeConfig({
+      ...config,
+      areaName: currentAreaName(),
+      updatedAt: new Date().toISOString()
+    });
+    localStorage.setItem(storageKey, JSON.stringify(next));
+    return next;
+  }
+
+  function selectedHours(){
+    const active = getEl('scheduledFrequencyOptions')?.querySelector('.scheduled-choice.active');
+    return Number(active?.dataset?.hours || defaultConfig.hours);
+  }
+
+  function selectedScope(){
+    const active = getEl('scheduledScopeOptions')?.querySelector('button.active');
+    return active?.dataset?.scope === 'selected' ? 'selected' : 'all';
+  }
+
+  function selectedMetrics(){
+    return Array.from(document.querySelectorAll('#scheduledMetricOptions input[type="checkbox"]:checked'))
+      .map(input => input.value)
+      .filter(value => Object.prototype.hasOwnProperty.call(metricNames, value));
+  }
+
+  function selectedDeviceIds(){
+    return Array.from(document.querySelectorAll('#scheduledDeviceList input[type="checkbox"]:checked'))
+      .map(input => String(input.value));
+  }
+
+  function setFeedback(message, type){
+    const feedback = getEl('scheduledCollectionFeedback');
+    if(!feedback) return;
+    feedback.textContent = message || '';
+    feedback.classList.toggle('show', !!message);
+    feedback.classList.toggle('error', type === 'error');
+  }
+
+  function renderDeviceList(config){
+    const list = getEl('scheduledDeviceList');
+    if(!list) return;
+    const rows = getDeviceRows();
+    const checkedIds = new Set((config?.deviceIds || []).map(String));
+    if(!rows.length){
+      list.innerHTML = '<div class="scheduled-device-empty">Nenhum dispositivo encontrado para esta área.</div>';
+      return;
+    }
+    list.innerHTML = rows.map(device => {
+      const id = String(device.id);
+      const checked = checkedIds.has(id) ? ' checked' : '';
+      return `
+        <label class="scheduled-device-option">
+          <input type="checkbox" value="${escapeHtml(id)}"${checked}>
+          <span>${escapeHtml(device.name || `Dispositivo ${id}`)}</span>
+          <small>${escapeHtml(device.sector || currentAreaName())}</small>
+        </label>
+      `;
+    }).join('');
+  }
+
+  function updateDeviceVisibility(){
+    const list = getEl('scheduledDeviceList');
+    const help = getEl('scheduledDeviceHelp');
+    const scope = selectedScope();
+    const rows = getDeviceRows();
+    if(list) list.hidden = scope !== 'selected';
+    if(help){
+      if(scope === 'selected'){
+        const count = selectedDeviceIds().length;
+        help.textContent = count
+          ? `${selectedDeviceLabel(count)} para a rotina.`
+          : 'Selecione pelo menos um dispositivo da área atual.';
+      } else {
+        help.textContent = `A rotina será aplicada em todos os dispositivos da área atual (${rows.length}).`;
+      }
+    }
+  }
+
+  function buildSummaryText(){
+    const hours = selectedHours();
+    const scope = selectedScope();
+    const metrics = selectedMetrics();
+    const snapshotMetrics = metrics.filter(metric => metric !== 'average');
+    const hasAverage = metrics.includes('average');
+    const rows = getDeviceRows();
+    const selectedCount = scope === 'selected' ? selectedDeviceIds().length : rows.length;
+
+    if(!metrics.length){
+      return 'Selecione pelo menos um dado para montar a coleta programada.';
+    }
+
+    const scopeText = scope === 'selected'
+      ? `A coleta será aplicada em ${selectedDeviceLabel(selectedCount)}.`
+      : `A coleta será aplicada em todos os dispositivos da área atual (${rows.length}).`;
+    const pieces = [scopeText, `A rotina será executada a cada ${formatHours(hours)}.`];
+
+    if(snapshotMetrics.length){
+      pieces.push(`No horário programado, o sistema registra ${joinPt(snapshotMetrics.map(metric => snapshotMetricNames[metric]))} com os valores exibidos naquele momento.`);
+    }
+    if(hasAverage){
+      pieces.push(`A média considera as últimas ${formatHours(hours)} antes da coleta.`);
+    }
+
+    return pieces.join(' ');
+  }
+
+  function updateMetricCards(){
+    document.querySelectorAll('#scheduledMetricOptions .scheduled-check-card').forEach(card => {
+      const input = card.querySelector('input[type="checkbox"]');
+      card.classList.toggle('active', !!input?.checked);
+    });
+  }
+
+  function updateSummary(){
+    updateMetricCards();
+    updateDeviceVisibility();
+    const summary = getEl('scheduledCollectionSummary');
+    if(!summary) return;
+    const metrics = selectedMetrics();
+    const metricLabel = metrics.length
+      ? joinPt(metrics.map(metric => metricNames[metric]))
+      : 'nenhum dado selecionado';
+    summary.innerHTML = `
+      <strong>Resumo da configuração</strong>
+      <span>${escapeHtml(buildSummaryText())}</span>
+      <small>Dados selecionados: ${escapeHtml(metricLabel)}.</small>
+    `;
+  }
+
+  function updateMiniStatus(config){
+    const entry = getEl('scheduledCollectionEntry');
+    const mini = getEl('scheduledCollectionMiniStatus');
+    const allowed = canConfigureScheduledCollection();
+    if(entry) entry.hidden = !allowed;
+    if(!mini) return;
+    if(!allowed){
+      mini.classList.remove('show');
+      mini.textContent = '';
+      return;
+    }
+    const current = normalizeConfig(config || loadConfig());
+    if(!current.updatedAt){
+      mini.classList.remove('show');
+      mini.textContent = '';
+      return;
+    }
+    const metricLabel = joinPt(current.metrics.map(metric => metricNames[metric]));
+    const scopeLabel = current.scope === 'selected'
+      ? `${current.deviceIds.length} dispositivo${current.deviceIds.length === 1 ? '' : 's'}`
+      : 'todos os dispositivos';
+    mini.textContent = `Coleta programada: ${formatHours(current.hours)} · ${scopeLabel} · ${metricLabel}.`;
+    mini.classList.add('show');
+  }
+
+  function applyConfig(config){
+    const current = normalizeConfig(config || loadConfig());
+    document.querySelectorAll('#scheduledFrequencyOptions .scheduled-choice').forEach(button => {
+      button.classList.toggle('active', Number(button.dataset.hours) === current.hours);
+    });
+    document.querySelectorAll('#scheduledScopeOptions button').forEach(button => {
+      button.classList.toggle('active', button.dataset.scope === current.scope);
+    });
+    document.querySelectorAll('#scheduledMetricOptions input[type="checkbox"]').forEach(input => {
+      input.checked = current.metrics.includes(input.value);
+    });
+    renderDeviceList(current);
+    updateSummary();
+  }
+
+  function openModal(){
+    if(!canConfigureScheduledCollection()) return;
+    const menu = getEl('panelConfigMenu');
+    const btn = getEl('panelConfigBtn');
+    if(menu) menu.classList.remove('show');
+    if(btn) btn.setAttribute('aria-expanded','false');
+    setFeedback('');
+    applyConfig(loadConfig());
+    getEl('scheduledCollectionOverlay')?.classList.add('show');
+    setTimeout(() => getEl('scheduledFrequencyOptions')?.querySelector('.scheduled-choice.active')?.focus(), 40);
+  }
+
+  function closeModal(){
+    getEl('scheduledCollectionOverlay')?.classList.remove('show');
+  }
+
+  function submitForm(event){
+    event.preventDefault();
+    if(!canConfigureScheduledCollection()) return;
+    const metrics = selectedMetrics();
+    const scope = selectedScope();
+    const deviceIds = scope === 'selected' ? selectedDeviceIds() : [];
+    if(!metrics.length){
+      setFeedback('Selecione pelo menos um dado para registrar na coleta.', 'error');
+      updateSummary();
+      return;
+    }
+    if(scope === 'selected' && !deviceIds.length){
+      setFeedback('Selecione pelo menos um dispositivo ou aplique para todos da área.', 'error');
+      updateSummary();
+      return;
+    }
+    const saved = saveConfig({
+      hours: selectedHours(),
+      scope,
+      deviceIds,
+      metrics
+    });
+    setFeedback('Coleta programada salva para esta área.');
+    updateMiniStatus(saved);
+    updateSummary();
+  }
+
+  function updateScheduledCollectionVisibility(){
+    updateMiniStatus(loadConfig());
+  }
+
+  window.updateScheduledCollectionVisibility = updateScheduledCollectionVisibility;
+
+  document.addEventListener('DOMContentLoaded', function(){
+    getEl('openScheduledCollectionModal')?.addEventListener('click', function(event){
+      event.preventDefault();
+      event.stopPropagation();
+      openModal();
+    });
+    getEl('closeScheduledCollectionModal')?.addEventListener('click', closeModal);
+    getEl('cancelScheduledCollection')?.addEventListener('click', closeModal);
+    getEl('scheduledCollectionOverlay')?.addEventListener('click', function(event){
+      if(event.target === event.currentTarget) closeModal();
+    });
+    getEl('scheduledFrequencyOptions')?.addEventListener('click', function(event){
+      const button = event.target?.closest?.('.scheduled-choice');
+      if(!button) return;
+      this.querySelectorAll('.scheduled-choice').forEach(item => item.classList.toggle('active', item === button));
+      setFeedback('');
+      updateSummary();
+    });
+    getEl('scheduledScopeOptions')?.addEventListener('click', function(event){
+      const button = event.target?.closest?.('button[data-scope]');
+      if(!button) return;
+      this.querySelectorAll('button[data-scope]').forEach(item => item.classList.toggle('active', item === button));
+      setFeedback('');
+      updateSummary();
+    });
+    getEl('scheduledMetricOptions')?.addEventListener('change', function(){
+      setFeedback('');
+      updateSummary();
+    });
+    getEl('scheduledDeviceList')?.addEventListener('change', function(){
+      setFeedback('');
+      updateSummary();
+    });
+    getEl('scheduledCollectionForm')?.addEventListener('submit', submitForm);
+    updateScheduledCollectionVisibility();
+  });
 })();
 
 /* ===== SCRIPT BLOCK 37B | bind-device-modal ===== */
