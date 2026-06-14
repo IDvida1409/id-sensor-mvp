@@ -647,12 +647,12 @@ function buildScheduledCollectionCard(d, values){
 
   const snapshotPanel = showSnapshot ? `
     <div class="graph-schedule-reading-panel">
-      <span class="graph-schedule-panel-label">Leitura no horário</span>
+      <span class="graph-schedule-panel-label">Temperatura coletada</span>
       ${selectedMetrics.includes('temperature') ? `<strong class="graph-schedule-main-value">${tempLabel(current)}</strong>` : ''}
       ${selectedMetrics.includes('minMax') ? `
         <div class="graph-schedule-minmax">
-          <div><span>Mínima</span><strong>${tempLabel(snapshotMin)}</strong></div>
-          <div><span>Máxima</span><strong>${tempLabel(snapshotMax)}</strong></div>
+          <div><span>Mín.</span><strong>${tempLabel(snapshotMin)}</strong></div>
+          <div><span>Máx.</span><strong>${tempLabel(snapshotMax)}</strong></div>
         </div>
       ` : ''}
     </div>
@@ -660,12 +660,11 @@ function buildScheduledCollectionCard(d, values){
 
   const averagePanel = showAverage ? `
     <div class="graph-schedule-reading-panel">
-      <span class="graph-schedule-panel-label">Resumo das últimas ${formatScheduledHours(config.hours)}</span>
+      <span class="graph-schedule-panel-label">Média da temperatura (${config.hours}h)</span>
       <strong class="graph-schedule-main-value">${tempLabel(intervalAverage)}</strong>
-      <small class="graph-schedule-value-caption">Média da temperatura</small>
       <div class="graph-schedule-minmax">
-        <div><span>Mínima</span><strong>${tempLabel(intervalMin)}</strong></div>
-        <div><span>Máxima</span><strong>${tempLabel(intervalMax)}</strong></div>
+        <div><span>Mín.</span><strong>${tempLabel(intervalMin)}</strong></div>
+        <div><span>Máx.</span><strong>${tempLabel(intervalMax)}</strong></div>
       </div>
     </div>
   ` : '';
@@ -676,12 +675,9 @@ function buildScheduledCollectionCard(d, values){
         <h3 class="graph-mini-title">Coleta programada</h3>
         <span class="graph-schedule-pill">A cada ${formatScheduledHours(config.hours)}</span>
       </div>
-      <div class="graph-mini-sub">Mostra a leitura do horário e o resumo do intervalo selecionado.</div>
+      <div class="graph-mini-sub">Mostra a temperatura coletada e a média do intervalo selecionado.</div>
       <div class="graph-schedule-last-head">
-        <div>
-          <span>Última coleta</span>
-          <strong>${formatScheduleClock(lastCollection)}</strong>
-        </div>
+        <span>Última coleta <strong>${formatScheduleClock(lastCollection)}</strong></span>
         <small>${formatScheduleDate(lastCollection)}</small>
       </div>
       <div class="graph-schedule-readings ${showSnapshot && showAverage ? '' : 'single'}">
