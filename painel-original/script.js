@@ -875,43 +875,84 @@ function getReportIcon(){
 
 function getOperationalTelemetryIcon(kind){
   const icons = {
+    limit: `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="8.5" stroke="currentColor" stroke-width="1.8"/><path d="m8.2 12.2 2.4 2.4 5.1-5.4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+    attention: `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 4 21 19H3L12 4Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M12 9v4.3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="16.4" r="1" fill="currentColor"/></svg>`,
+    critical: `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="8.5" stroke="currentColor" stroke-width="1.8"/><path d="M12 7.7v5.1" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="16.2" r="1.1" fill="currentColor"/></svg>`,
     communication: `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 16.5a10.5 10.5 0 0 1 14 0M8 13a6.2 6.2 0 0 1 8 0M10.7 9.8a2.3 2.3 0 0 1 2.6 0" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="19" r="1.4" fill="currentColor"/></svg>`,
     variation: `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 16.5 8.4 12l3.2 2.8L19.5 7" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><path d="M15.5 7h4v4" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
     alerts: `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M18 9a6 6 0 0 0-12 0v3.2c0 1-.3 1.9-.9 2.7L4 16.5h16l-1.1-1.6a4.6 4.6 0 0 1-.9-2.7V9Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M9.5 19a2.7 2.7 0 0 0 5 0" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`,
-    silence: `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m5 5 14 14M8.2 8.2A5.8 5.8 0 0 0 6 12v2.2c0 .8-.3 1.6-.8 2.3L4 18h12M10 21h4M16.7 13.7V12a5.8 5.8 0 0 0-7.9-5.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+    silence: `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m5 5 14 14M8.2 8.2A5.8 5.8 0 0 0 6 12v2.2c0 .8-.3 1.6-.8 2.3L4 18h12M10 21h4M16.7 13.7V12a5.8 5.8 0 0 0-7.9-5.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+    sms: `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 6.5h14a2 2 0 0 1 2 2v6.2a2 2 0 0 1-2 2h-7.2L7.4 20v-3.3H5a2 2 0 0 1-2-2V8.5a2 2 0 0 1 2-2Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M7.3 10.2h9.4M7.3 13h6.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`,
+    email: `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3.5" y="6" width="17" height="12" rx="2.2" stroke="currentColor" stroke-width="1.8"/><path d="m4.5 7.5 7.5 5.6 7.5-5.6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+    whatsapp: `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5.4 19.1 6.5 15.6A7.3 7.3 0 1 1 9 18.1L5.4 19.1Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M9.5 9.2c.5 2.5 2.1 4 4.8 4.9l1.2-1.1" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`,
+    maintenance: `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M14.7 5.3a4 4 0 0 0 4 5.1l-7.5 7.5a2.1 2.1 0 1 1-3-3l7.5-7.5a4 4 0 0 0-1-2.1Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+    defrost: `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3v18M5.6 6.4l12.8 11.2M18.4 6.4 5.6 17.6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M8.8 3.8 12 6.1l3.2-2.3M8.8 20.2 12 17.9l3.2 2.3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`
   };
-  return icons[kind] || icons.variation;
+  return icons[kind] || icons.limit;
+}
+
+function formatTelemetryShortDuration(totalSeconds){
+  const safe = Math.max(0, Math.floor(Number(totalSeconds) || 0));
+  if(safe < 60) return `${safe}s`;
+  const totalMinutes = Math.floor(safe / 60);
+  if(totalMinutes < 60) return `${totalMinutes} min`;
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return minutes ? `${hours}h ${minutes}min` : `${hours}h`;
 }
 
 function buildOperationalTelemetryCard(d, values){
   const safeValues = (Array.isArray(values) ? values : []).map(Number).filter(Number.isFinite);
   const latest = safeValues.length ? safeValues[safeValues.length - 1] : Number(d.temp) || 0;
-  const initial = safeValues.length ? safeValues[Math.max(0, safeValues.length - 4)] : latest;
+  const initial = safeValues.length ? safeValues[0] : latest;
   const maximum = safeValues.length ? Math.max(...safeValues) : latest;
-  const variation = latest - initial;
+  const minimum = safeValues.length ? Math.min(...safeValues) : latest;
+  const rise = maximum - initial;
+  const fall = initial - minimum;
+  const variationIsUp = rise >= fall;
+  const variationTarget = variationIsUp ? maximum : minimum;
+  const variation = variationTarget - initial;
   const variationLabel = `${variation >= 0 ? '+' : ''}${variation.toFixed(1)}°C`;
-  const rapidVariation = Math.abs(variation) >= 1;
+  const variationTargetLabel = variationIsUp ? 'Máxima' : 'Mínima';
+  const variationClass = variation >= 0 ? 'up' : 'down';
+  const criticalElapsed = getCriticalElapsedSeconds(d);
+  const criticalTotalLabel = d.state === 'crit' ? formatTelemetryShortDuration(criticalElapsed) : '32 min';
+  const normalizingTime = d.state === 'crit' ? 'Em curso' : '1h20';
   const isCritical = d.state === 'crit';
-  const statusClass = isCritical ? 'is-critical' : (d.state === 'warn' ? 'is-attention' : 'is-normal');
-  const statusLabel = isCritical ? 'CRÍTICO EM ANDAMENTO' : (d.state === 'warn' ? 'ATENÇÃO EM ANDAMENTO' : 'OPERAÇÃO NORMAL');
-  const statusValue = isCritical
-    ? `<strong data-critical-timer="${d.id}">${formatOperationalElapsed(getCriticalElapsedSeconds(d))}</strong>`
-    : `<strong>${d.state === 'warn' ? '00:18:24' : 'Dentro do limite'}</strong>`;
-  const communicationValue = d.online === false ? 'Interrompida' : 'Restabelecida';
-  const communicationDetail = d.online === false ? 'Sem comunicação há 15 min' : 'Interrupção de 6 min · retorno às 14:41';
+  const isAttention = d.state === 'warn';
+  const isOffline = d.online === false;
+  const statusClass = isCritical ? 'is-critical' : (isAttention ? 'is-attention' : (isOffline ? 'is-offline' : 'is-normal'));
+  const statusLabel = isCritical ? 'CRÍTICO EM ANDAMENTO' : (isAttention ? 'ATENÇÃO EM ANDAMENTO' : (isOffline ? 'SEM COMUNICAÇÃO' : 'DENTRO DO LIMITE'));
+  const statusMain = isCritical
+    ? `<strong data-critical-timer="${d.id}">${formatOperationalElapsed(criticalElapsed)}</strong>`
+    : (isAttention ? '<strong>00:18:24</strong>' : (isOffline ? '<strong>00:15:00</strong>' : `<strong>${tempLabel(latest)}</strong>`));
+  const statusSub = isCritical
+    ? 'Início 14:32'
+    : (isAttention ? 'Início 15:06' : (isOffline ? 'Última comunicação 14:35' : 'Última normalização 15:45'));
   const smsCount = 2 + ((Number(d.id) || 1) % 2);
   const emailCount = 1 + ((Number(d.id) || 1) % 2);
   const whatsappCount = 2 + ((Number(d.id) || 1) % 3);
+  const statusCards = [
+    {tone:'limit', icon:'limit', label:'Dentro do limite', value:'19h40'},
+    {tone:'attention', icon:'attention', label:'Atenção', value:'48 min'},
+    {tone:'critical', icon:'critical', label:'Crítico', value:criticalTotalLabel},
+    {tone:'offline', icon:'communication', label:'Sem comunicação', value:'15 min'}
+  ];
   const timelineEvents = [
-    {time:'15:25', tone:'neutral', title:'Silêncio encerrado', detail:'Painel voltou a emitir alertas sonoros.'},
-    {time:'15:22', tone:'critical', title:`Temperatura máxima: ${tempLabel(maximum)}`, detail:'Maior valor registrado durante a ocorrência.'},
-    {time:'15:10', tone:'silence', title:'Painel silenciado', detail:'Silêncio de 15 minutos, sem identificação de pessoa.'},
-    {time:'14:50', tone:'critical', title:'Crítico iniciado', detail:'Permanência fora do limite atingiu a regra configurada.'},
+    {time:'15:45', tone:'normal', title:'Voltou ao limite', detail:'Temperatura retornou para dentro do limite configurado.'},
+    {time:'15:38', tone:'critical', title:'Saiu do crítico', detail:'Encerrada a permanência em nível crítico.'},
+    {time:'15:30', tone:'normal', title:'Comunicação restabelecida', detail:'Transmissão retomada após 6 minutos.'},
+    {time:'15:22', tone:'critical', title:`${variationTargetLabel}: ${tempLabel(variationTarget)}`, detail:`Variação total de ${variationLabel}.`},
+    {time:'15:10', tone:'silence', title:'Painel silenciado', detail:'Alerta sonoro do painel pausado por 15 minutos.'},
+    {time:'15:00', tone:'offline', title:'Comunicação interrompida', detail:'O painel deixou de receber novas leituras.'},
     {time:'14:50', tone:'alert', title:'Alertas enviados', detail:`SMS ${smsCount} · E-mail ${emailCount} · WhatsApp ${whatsappCount}`},
-    {time:'14:41', tone:'normal', title:'Comunicação restabelecida', detail:'Transmissão retomada após 6 minutos.'},
-    {time:'14:35', tone:'offline', title:'Comunicação interrompida', detail:'O painel deixou de receber novas leituras.'},
-    {time:'14:28', tone:rapidVariation ? 'attention' : 'normal', title:rapidVariation ? 'Variação rápida detectada' : 'Variação estável', detail:`Mudança de ${variationLabel} em 18 minutos.`},
-    {time:'14:20', tone:'attention', title:'Atenção iniciada', detail:'Temperatura saiu do limite configurado.'}
+    {time:'14:50', tone:'critical', title:'Crítico iniciado', detail:'Permanência fora do limite atingiu a regra configurada.'},
+    {time:'14:20', tone:'attention', title:'Atenção iniciada', detail:'Temperatura saiu do limite configurado.'},
+    {time:'14:20', tone:'limit', title:'Saiu do limite', detail:'Primeiro ponto fora do intervalo permitido.'},
+    {time:'13:40', tone:'defrost', title:'Degelo encerrado', detail:'Ação operacional finalizada.'},
+    {time:'13:10', tone:'defrost', title:'Degelo iniciado', detail:'Evento operacional registrado no equipamento.'},
+    {time:'12:55', tone:'maintenance', title:'Manutenção encerrada', detail:'Equipamento voltou para monitoramento.'},
+    {time:'12:30', tone:'maintenance', title:'Manutenção iniciada', detail:'Ação operacional registrada na linha do tempo.'}
   ];
 
   return `
@@ -925,43 +966,51 @@ function buildOperationalTelemetryCard(d, values){
           </span>
           <span class="telemetry-chevron" aria-hidden="true">⌄</span>
         </span>
-        <span class="telemetry-active ${statusClass}">
-          <span class="telemetry-active-icon">${getStopwatchIcon()}</span>
-          <span class="telemetry-active-copy"><small>${statusLabel}</small>${statusValue}</span>
+        <span class="telemetry-active-card ${statusClass}">
+          <span class="telemetry-active-icon">${isCritical ? getStopwatchIcon() : getOperationalTelemetryIcon(isAttention ? 'attention' : (isOffline ? 'communication' : 'limit'))}</span>
+          <span class="telemetry-active-copy"><small>${statusLabel}</small>${statusMain}<em>${statusSub}</em></span>
         </span>
-        <span class="telemetry-quick-grid">
-          <span class="telemetry-quick-item">
-            <span class="telemetry-quick-icon communication">${getOperationalTelemetryIcon('communication')}</span>
-            <span><small>Comunicação</small><strong>${communicationValue}</strong><em>${communicationDetail}</em></span>
+        <span class="telemetry-status-grid">
+          ${statusCards.map(item => `
+            <span class="telemetry-status-card ${item.tone}">
+              <span class="telemetry-status-icon">${getOperationalTelemetryIcon(item.icon)}</span>
+              <span><small>${item.label}</small><strong>${item.value}</strong></span>
+            </span>
+          `).join('')}
+        </span>
+        <span class="telemetry-section-label">Canais de alerta</span>
+        <span class="telemetry-channel-grid">
+          <span class="telemetry-channel-card sms">
+            <span>${getOperationalTelemetryIcon('sms')}</span>
+            <small>SMS</small>
+            <strong>${smsCount}</strong>
           </span>
-          <span class="telemetry-quick-item">
-            <span class="telemetry-quick-icon variation">${getOperationalTelemetryIcon('variation')}</span>
-            <span><small>Variação rápida</small><strong>${rapidVariation ? variationLabel : 'Não detectada'}</strong><em>${rapidVariation ? 'em 18 minutos' : 'Comportamento estável'}</em></span>
+          <span class="telemetry-channel-card email">
+            <span>${getOperationalTelemetryIcon('email')}</span>
+            <small>E-mail</small>
+            <strong>${emailCount}</strong>
           </span>
-          <span class="telemetry-quick-item">
-            <span class="telemetry-quick-icon alerts">${getOperationalTelemetryIcon('alerts')}</span>
-            <span><small>Alertas enviados</small><strong>${smsCount + emailCount + whatsappCount}</strong><em>SMS, e-mail e WhatsApp</em></span>
+          <span class="telemetry-channel-card whatsapp">
+            <span>${getOperationalTelemetryIcon('whatsapp')}</span>
+            <small>WhatsApp</small>
+            <strong>${whatsappCount}</strong>
           </span>
+        </span>
+        <span class="telemetry-silence-card">
+          <span class="telemetry-silence-icon">${getOperationalTelemetryIcon('silence')}</span>
+          <span><strong>Painel silenciado</strong><small>15:10 às 15:25 · duração 15 min</small><em>Alertas sonoros do painel durante o silêncio: 2</em></span>
+        </span>
+        <span class="telemetry-variation-strip">
+          <span><small>Inicial</small><strong>${tempLabel(initial)}</strong></span>
+          <span><small>${variationTargetLabel}</small><strong>${tempLabel(variationTarget)}</strong></span>
+          <span><small>Variação total</small><strong class="${variationClass}">${variationLabel}</strong></span>
+          <span><small>Tempo até normalizar</small><strong>${normalizingTime}</strong></span>
         </span>
         <span class="telemetry-expand-hint">Clique para expandir a linha do tempo</span>
       </summary>
       <div class="telemetry-expanded-content">
-        <div class="telemetry-detail-grid">
-          <div class="telemetry-detail-card">
-            <span class="telemetry-detail-icon variation">${getOperationalTelemetryIcon('variation')}</span>
-            <div><small>Variação térmica</small><strong>${tempLabel(initial)} → ${tempLabel(latest)}</strong><span>${variationLabel} em 18 minutos · sem cálculo de média</span></div>
-          </div>
-          <div class="telemetry-detail-card">
-            <span class="telemetry-detail-icon alerts">${getOperationalTelemetryIcon('alerts')}</span>
-            <div><small>Canais acionados</small><strong>SMS ${smsCount} · E-mail ${emailCount}</strong><span>WhatsApp ${whatsappCount}</span></div>
-          </div>
-          <div class="telemetry-detail-card">
-            <span class="telemetry-detail-icon silence">${getOperationalTelemetryIcon('silence')}</span>
-            <div><small>Painel silenciado</small><strong>15:10 às 15:25</strong><span>Duração 15 min · 2 alertas registrados</span></div>
-          </div>
-        </div>
         <div class="telemetry-timeline-head">
-          <div><strong>Linha do tempo operacional</strong><small>Ocorrências em ordem da mais recente para a mais antiga.</small></div>
+          <div><strong>Linha do tempo</strong><small>Últimas 24 horas, com ocorrências e ações operacionais.</small></div>
           <span>Últimas 24h</span>
         </div>
         <div class="telemetry-timeline">
