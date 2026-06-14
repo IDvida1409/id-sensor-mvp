@@ -8283,6 +8283,65 @@ svg defs #cbWarnPattern rect, svg defs #cbCritPattern rect { shape-rendering:cri
   display:none !important;
 }
 
+.scheduled-cycle-status{
+  align-items:center;
+  background:linear-gradient(180deg,#fffaf0,#fff5dd);
+  border:1px solid #f1d69a;
+  border-radius:16px;
+  display:flex;
+  gap:12px;
+  justify-content:space-between;
+  margin-bottom:14px;
+  padding:12px 14px;
+}
+
+.scheduled-cycle-status[hidden]{
+  display:none !important;
+}
+
+.scheduled-cycle-status > div{
+  display:grid;
+  gap:3px;
+}
+
+.scheduled-cycle-status strong{
+  color:#744b08;
+  font-size:12px;
+  font-weight:900;
+}
+
+.scheduled-cycle-status span{
+  color:#826124;
+  font-size:11px;
+  font-weight:700;
+  line-height:1.4;
+}
+
+.scheduled-cycle-status button{
+  background:#fff;
+  border:1px solid #e4c477;
+  border-radius:10px;
+  color:#845b0c;
+  cursor:pointer;
+  flex:0 0 auto;
+  font-size:11px;
+  font-weight:900;
+  min-height:34px;
+  padding:0 11px;
+}
+
+.graph-schedule-pending-note{
+  background:#fff7df;
+  border:1px solid #efd79b;
+  border-radius:10px;
+  color:#7d5b18;
+  font-size:10px;
+  font-weight:800;
+  line-height:1.35;
+  margin-top:9px;
+  padding:8px 10px;
+}
+
 .scheduled-device-option{
   align-items:center;
   background:#fff;
@@ -8450,6 +8509,11 @@ svg defs #cbWarnPattern rect, svg defs #cbCritPattern rect { shape-rendering:cri
 
   .scheduled-segmented{
     grid-template-columns:1fr;
+  }
+
+  .scheduled-cycle-status{
+    align-items:stretch;
+    flex-direction:column;
   }
 }
 

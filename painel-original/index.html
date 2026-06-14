@@ -237,7 +237,7 @@
 
 
 
-<link rel='stylesheet' href='./styles.css?v=20260614-1625' />
+<link rel='stylesheet' href='./styles.css?v=20260614-1728' />
 </head>
 <body>
   <div class="app">
@@ -609,6 +609,13 @@
     <h2 id="scheduledCollectionTitle">Coleta programada</h2>
     <p class="bind-device-subtitle">Configure a rotina usada para registrar leituras no relatório da área selecionada.</p>
     <form id="scheduledCollectionForm">
+      <div class="scheduled-cycle-status" id="scheduledCollectionCycleStatus" hidden>
+        <div>
+          <strong id="scheduledCollectionCycleTitle">Configuração ativa</strong>
+          <span id="scheduledCollectionCycleText"></span>
+        </div>
+        <button id="cancelPendingScheduledCollection" type="button" hidden>Cancelar alteração pendente</button>
+      </div>
       <div class="info-field">
         <label>Frequência da coleta</label>
         <div class="scheduled-choice-grid scheduled-frequency-grid" id="scheduledFrequencyOptions" aria-label="Frequência da coleta">
@@ -1187,7 +1194,7 @@
 
 
 
-<script src='./script.js?v=20260614-1702'></script>
+<script src='./script.js?v=20260614-1728'></script>
 </body>
 </html>
 

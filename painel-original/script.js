@@ -556,21 +556,56 @@ function normalizeScheduledMetrics(metrics){
   return unique.length ? unique : ['temperature'];
 }
 
-function getScheduledCollectionConfig(){
+function normalizeScheduledConfigValue(config){
+  const raw = config && typeof config === 'object' ? config : {};
+  const hours = [1,2,3,4,6,12].includes(Number(raw.hours)) ? Number(raw.hours) : 1;
+  return {
+    ...raw,
+    areaName: raw.areaName || 'Banco IDvida',
+    hours,
+    scope: raw.scope === 'selected' ? 'selected' : 'all',
+    deviceIds: Array.isArray(raw.deviceIds) ? raw.deviceIds.map(String) : [],
+    metrics: normalizeScheduledMetrics(raw.metrics),
+    updatedAt: raw.updatedAt || null
+  };
+}
+
+function writeScheduledCollectionState(state){
+  localStorage.setItem('idsensor.scheduledCollection.v1', JSON.stringify({
+    version: 2,
+    active: state?.active || null,
+    pending: state?.pending || null
+  }));
+}
+
+function readScheduledCollectionState(){
   try {
     const parsed = JSON.parse(localStorage.getItem('idsensor.scheduledCollection.v1') || 'null');
-    if(!parsed || !parsed.updatedAt) return null;
-    const hours = [1,2,3,4,6,12].includes(Number(parsed.hours)) ? Number(parsed.hours) : 1;
-    return {
-      ...parsed,
-      hours,
-      scope: parsed.scope === 'selected' ? 'selected' : 'all',
-      deviceIds: Array.isArray(parsed.deviceIds) ? parsed.deviceIds.map(String) : [],
-      metrics: normalizeScheduledMetrics(parsed.metrics)
-    };
+    if(!parsed) return { active:null, pending:null };
+    const isVersioned = parsed.version === 2 || Object.prototype.hasOwnProperty.call(parsed, 'active') || Object.prototype.hasOwnProperty.call(parsed, 'pending');
+    let active = isVersioned && parsed.active ? normalizeScheduledConfigValue(parsed.active) : null;
+    let pending = isVersioned && parsed.pending ? normalizeScheduledConfigValue(parsed.pending) : null;
+    if(!isVersioned && parsed.updatedAt) active = normalizeScheduledConfigValue(parsed);
+
+    const effectiveAt = pending?.effectiveAt ? new Date(pending.effectiveAt) : null;
+    if(pending && effectiveAt && !Number.isNaN(effectiveAt.getTime()) && effectiveAt <= new Date()){
+      active = normalizeScheduledConfigValue({
+        ...pending,
+        updatedAt: pending.effectiveAt
+      });
+      delete active.effectiveAt;
+      delete active.requestedAt;
+      pending = null;
+      writeScheduledCollectionState({ active, pending });
+    }
+    return { active, pending };
   } catch(e) {
-    return null;
+    return { active:null, pending:null };
   }
+}
+
+function getScheduledCollectionConfig(){
+  return readScheduledCollectionState().active;
 }
 
 function formatScheduledHours(hours){
@@ -660,6 +695,8 @@ function buildScheduledCollectionCard(d, values){
   const snapshotMax = Math.max(...snapshotValues);
   const intervalValues = getScheduledIntervalValues(values, config.hours);
   const intervalAverage = averageTemperature(intervalValues);
+  const intervalMin = intervalValues.length ? Math.min(...intervalValues) : null;
+  const intervalMax = intervalValues.length ? Math.max(...intervalValues) : null;
   const humidityValues = [d.hum1, d.hum2].filter(value => Number.isFinite(Number(value))).map(Number);
   const currentHumidity = Number.isFinite(Number(d.hum2 ?? d.hum1)) ? Number(d.hum2 ?? d.hum1) : null;
   const humidityAverage = averageMetric(humidityValues);
@@ -671,11 +708,20 @@ function buildScheduledCollectionCard(d, values){
   const showHumiditySnapshot = selectedMetrics.includes('humidity') || selectedMetrics.includes('humidityMinMax');
   const showHumidityAverage = selectedMetrics.includes('humidityAverage');
   const showAverage = showTemperatureAverage || showHumidityAverage;
+  const hasTemperatureMetrics = showTemperatureSnapshot || showTemperatureAverage;
+  const hasHumidityMetrics = showHumiditySnapshot || showHumidityAverage;
+  const cardDescription = hasTemperatureMetrics && hasHumidityMetrics
+    ? 'Mostra a temperatura e a umidade coletadas e as médias do intervalo selecionado.'
+    : hasHumidityMetrics
+      ? 'Mostra a umidade coletada e a média do intervalo selecionado.'
+      : 'Mostra a temperatura coletada e a média do intervalo selecionado.';
   const remainingText = timing.remaining === 1 ? 'Falta 1 coleta' : `Faltam ${timing.remaining} coletas`;
   const lastCollection = timing.last || new Date(config.updatedAt);
   const intervalEnd = lastCollection;
   const intervalStart = new Date(intervalEnd.getTime() - config.hours * 60 * 60 * 1000);
   const collectionCount = `${timing.completed} de ${timing.totalDaily}`;
+  const collectionState = readScheduledCollectionState();
+  const pendingEffectiveAt = collectionState.pending?.effectiveAt ? new Date(collectionState.pending.effectiveAt) : null;
 
   const panels = [];
 
@@ -694,8 +740,12 @@ function buildScheduledCollectionCard(d, values){
 
   if(showTemperatureAverage) panels.push(`
     <div class="graph-schedule-reading-panel">
-      <span class="graph-schedule-panel-label">Média da temperatura</span>
+      <span class="graph-schedule-panel-label">Média coletada</span>
       <strong class="graph-schedule-main-value">${tempLabel(intervalAverage)}</strong>
+      <div class="graph-schedule-minmax">
+        <div><span>Mín.</span><strong>${tempLabel(intervalMin)}</strong></div>
+        <div><span>Máx.</span><strong>${tempLabel(intervalMax)}</strong></div>
+      </div>
     </div>
   `);
 
@@ -714,8 +764,12 @@ function buildScheduledCollectionCard(d, values){
 
   if(showHumidityAverage) panels.push(`
     <div class="graph-schedule-reading-panel">
-      <span class="graph-schedule-panel-label">Média da umidade</span>
+      <span class="graph-schedule-panel-label">Média coletada da umidade</span>
       <strong class="graph-schedule-main-value">${humLabel(humidityAverage)}</strong>
+      <div class="graph-schedule-minmax">
+        <div><span>Mín.</span><strong>${humLabel(humidityMin)}</strong></div>
+        <div><span>Máx.</span><strong>${humLabel(humidityMax)}</strong></div>
+      </div>
     </div>
   `);
 
@@ -725,7 +779,10 @@ function buildScheduledCollectionCard(d, values){
         <h3 class="graph-mini-title">Coleta programada</h3>
         <span class="graph-schedule-pill">A cada ${formatScheduledHours(config.hours)}</span>
       </div>
-      <div class="graph-mini-sub">Mostra somente os dados escolhidos para cada coleta programada.</div>
+      <div class="graph-mini-sub">${cardDescription}</div>
+      ${collectionState.pending && pendingEffectiveAt && !Number.isNaN(pendingEffectiveAt.getTime()) ? `
+        <div class="graph-schedule-pending-note">Alteração pendente para o próximo ciclo, às ${formatScheduleClock(pendingEffectiveAt)}.</div>
+      ` : ''}
       <div class="graph-schedule-last-head">
         <span>Última coleta <strong>${formatScheduleClock(lastCollection)}</strong></span>
         <small>${formatScheduleDate(lastCollection)}</small>
@@ -6738,7 +6795,6 @@ document.addEventListener('DOMContentLoaded', function(){
 /* ===== SCRIPT BLOCK 37A | scheduled-collection-modal ===== */
 (function(){
   const allowedRoles = new Set(['master', 'admin1', 'admin2']);
-  const storageKey = 'idsensor.scheduledCollection.v1';
   const defaultConfig = {
     areaName: 'Banco IDvida',
     hours: 1,
@@ -6811,44 +6867,65 @@ document.addEventListener('DOMContentLoaded', function(){
   }
 
   function normalizeConfig(config){
-    const raw = config && typeof config === 'object' ? config : {};
-    const hours = [1,2,3,4,6,12].includes(Number(raw.hours)) ? Number(raw.hours) : defaultConfig.hours;
-    const scope = raw.scope === 'selected' ? 'selected' : 'all';
-    const rawMetrics = Array.isArray(raw.metrics) ? raw.metrics : defaultConfig.metrics.slice();
-    const legacyAliases = {
-      min: 'temperatureMinMax',
-      max: 'temperatureMinMax',
-      minMax: 'temperatureMinMax',
-      average: 'temperatureAverage'
-    };
-    const migratedMetrics = rawMetrics.map(metric => legacyAliases[metric] || metric);
-    const metrics = migratedMetrics.filter(metric => Object.prototype.hasOwnProperty.call(metricNames, metric));
+    return normalizeScheduledConfigValue({
+      ...defaultConfig,
+      ...(config && typeof config === 'object' ? config : {}),
+      areaName: config?.areaName || currentAreaName()
+    });
+  }
+
+  function loadState(){
+    const state = readScheduledCollectionState();
     return {
-      areaName: raw.areaName || currentAreaName(),
-      hours,
-      scope,
-      deviceIds: Array.isArray(raw.deviceIds) ? raw.deviceIds.map(String) : [],
-      metrics: metrics.length ? Array.from(new Set(metrics)) : defaultConfig.metrics.slice(),
-      updatedAt: raw.updatedAt || null
+      active: state.active ? normalizeConfig(state.active) : null,
+      pending: state.pending ? normalizeConfig(state.pending) : null
     };
   }
 
   function loadConfig(){
-    try {
-      return normalizeConfig(JSON.parse(localStorage.getItem(storageKey) || 'null'));
-    } catch(e) {
-      return normalizeConfig(defaultConfig);
-    }
+    const state = loadState();
+    return normalizeConfig(state.pending || state.active || defaultConfig);
+  }
+
+  function configSignature(config){
+    const normalized = normalizeConfig(config);
+    return JSON.stringify({
+      hours: normalized.hours,
+      scope: normalized.scope,
+      deviceIds: normalized.deviceIds.slice().sort(),
+      metrics: normalized.metrics.slice().sort()
+    });
   }
 
   function saveConfig(config){
-    const next = normalizeConfig({
+    const state = loadState();
+    const now = new Date();
+    const draft = normalizeConfig({
       ...config,
-      areaName: currentAreaName(),
-      updatedAt: new Date().toISOString()
+      areaName: currentAreaName()
     });
-    localStorage.setItem(storageKey, JSON.stringify(next));
-    return next;
+
+    if(!state.active){
+      const active = normalizeConfig({ ...draft, updatedAt: now.toISOString() });
+      writeScheduledCollectionState({ active, pending:null });
+      return { mode:'active', active, pending:null };
+    }
+
+    if(configSignature(draft) === configSignature(state.active)){
+      writeScheduledCollectionState({ active:state.active, pending:null });
+      return { mode:'unchanged', active:state.active, pending:null };
+    }
+
+    const timing = getScheduledCollectionTiming(state.active);
+    const effectiveAt = state.pending?.effectiveAt || timing.next.toISOString();
+    const pending = normalizeConfig({
+      ...draft,
+      updatedAt: null,
+      requestedAt: now.toISOString(),
+      effectiveAt
+    });
+    writeScheduledCollectionState({ active:state.active, pending });
+    return { mode:'pending', active:state.active, pending };
   }
 
   function selectedHours(){
@@ -6878,6 +6955,39 @@ document.addEventListener('DOMContentLoaded', function(){
     feedback.textContent = message || '';
     feedback.classList.toggle('show', !!message);
     feedback.classList.toggle('error', type === 'error');
+  }
+
+  function updateCycleStatus(state){
+    const currentState = state || loadState();
+    const wrapper = getEl('scheduledCollectionCycleStatus');
+    const title = getEl('scheduledCollectionCycleTitle');
+    const text = getEl('scheduledCollectionCycleText');
+    const cancelButton = getEl('cancelPendingScheduledCollection');
+    const saveButton = getEl('saveScheduledCollection');
+    if(!wrapper || !title || !text || !cancelButton || !saveButton) return;
+
+    if(!currentState.active){
+      wrapper.hidden = true;
+      cancelButton.hidden = true;
+      saveButton.textContent = 'Salvar coleta';
+      return;
+    }
+
+    wrapper.hidden = false;
+    if(currentState.pending){
+      const effectiveAt = new Date(currentState.pending.effectiveAt);
+      title.textContent = 'Alteração pendente';
+      text.textContent = `A configuração ativa continua até a coleta das ${formatScheduleClock(effectiveAt)}. Você pode corrigir ou cancelar a alteração antes desse horário.`;
+      cancelButton.hidden = false;
+      saveButton.textContent = 'Atualizar alteração';
+      return;
+    }
+
+    const timing = getScheduledCollectionTiming(currentState.active);
+    title.textContent = 'Configuração ativa';
+    text.textContent = `Qualquer mudança será aplicada somente após a próxima coleta, às ${formatScheduleClock(timing.next)}.`;
+    cancelButton.hidden = true;
+    saveButton.textContent = 'Programar alteração';
   }
 
   function renderDeviceList(config){
@@ -6990,8 +7100,9 @@ document.addEventListener('DOMContentLoaded', function(){
       mini.textContent = '';
       return;
     }
-    const current = normalizeConfig(config || loadConfig());
-    if(!current.updatedAt){
+    const state = config?.active || config?.pending ? config : loadState();
+    const current = state.active ? normalizeConfig(state.active) : null;
+    if(!current?.updatedAt){
       mini.classList.remove('show');
       mini.textContent = '';
       return;
@@ -7000,7 +7111,10 @@ document.addEventListener('DOMContentLoaded', function(){
     const scopeLabel = current.scope === 'selected'
       ? `${current.deviceIds.length} dispositivo${current.deviceIds.length === 1 ? '' : 's'}`
       : 'todos os dispositivos';
-    mini.textContent = `Coleta programada: ${formatHours(current.hours)} · ${scopeLabel} · ${metricLabel}.`;
+    const pendingLabel = state.pending?.effectiveAt
+      ? ` Alteração pendente para ${formatScheduleClock(new Date(state.pending.effectiveAt))}.`
+      : '';
+    mini.textContent = `Coleta programada: ${formatHours(current.hours)} · ${scopeLabel} · ${metricLabel}.${pendingLabel}`;
     mini.classList.add('show');
   }
 
@@ -7026,7 +7140,9 @@ document.addEventListener('DOMContentLoaded', function(){
     if(menu) menu.classList.remove('show');
     if(btn) btn.setAttribute('aria-expanded','false');
     setFeedback('');
-    applyConfig(loadConfig());
+    const state = loadState();
+    applyConfig(state.pending || state.active || defaultConfig);
+    updateCycleStatus(state);
     getEl('scheduledCollectionOverlay')?.classList.add('show');
     setTimeout(() => getEl('scheduledFrequencyOptions')?.querySelector('.scheduled-choice.active')?.focus(), 40);
   }
@@ -7057,13 +7173,33 @@ document.addEventListener('DOMContentLoaded', function(){
       deviceIds,
       metrics
     });
-    setFeedback('Coleta programada salva para esta área.');
-    updateMiniStatus(saved);
+    if(saved.mode === 'active'){
+      setFeedback('Coleta programada salva e ativada para esta área.');
+    } else if(saved.mode === 'unchanged'){
+      setFeedback('A alteração pendente foi cancelada. A configuração ativa foi mantida.');
+    } else {
+      const effectiveAt = new Date(saved.pending.effectiveAt);
+      setFeedback(`Alteração programada. A nova configuração será aplicada após a coleta das ${formatScheduleClock(effectiveAt)}.`);
+    }
+    const state = loadState();
+    updateCycleStatus(state);
+    updateMiniStatus(state);
     updateSummary();
   }
 
+  function cancelPendingChange(){
+    const state = loadState();
+    if(!state.pending || !state.active) return;
+    writeScheduledCollectionState({ active:state.active, pending:null });
+    const nextState = loadState();
+    applyConfig(nextState.active);
+    updateCycleStatus(nextState);
+    updateMiniStatus(nextState);
+    setFeedback('Alteração pendente cancelada. A configuração ativa foi mantida.');
+  }
+
   function updateScheduledCollectionVisibility(){
-    updateMiniStatus(loadConfig());
+    updateMiniStatus(loadState());
   }
 
   window.updateScheduledCollectionVisibility = updateScheduledCollectionVisibility;
@@ -7076,6 +7212,7 @@ document.addEventListener('DOMContentLoaded', function(){
     });
     getEl('closeScheduledCollectionModal')?.addEventListener('click', closeModal);
     getEl('cancelScheduledCollection')?.addEventListener('click', closeModal);
+    getEl('cancelPendingScheduledCollection')?.addEventListener('click', cancelPendingChange);
     getEl('scheduledCollectionOverlay')?.addEventListener('click', function(event){
       if(event.target === event.currentTarget) closeModal();
     });
