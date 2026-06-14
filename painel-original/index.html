@@ -634,31 +634,23 @@
 
       <div class="info-field">
         <label>Dados registrados</label>
+        <div class="scheduled-collection-summary" id="scheduledCollectionSummary"></div>
         <div class="scheduled-metric-grid" id="scheduledMetricOptions">
           <label class="scheduled-check-card active">
             <input type="checkbox" value="temperature" checked>
-            <span>Temperatura no horário</span>
-            <small>Registra a leitura exibida no momento da coleta.</small>
+            <span>Temperatura da coleta</span>
           </label>
           <label class="scheduled-check-card">
-            <input type="checkbox" value="min">
-            <span>Mínima no horário</span>
-            <small>Registra a mínima exibida no momento da coleta.</small>
-          </label>
-          <label class="scheduled-check-card">
-            <input type="checkbox" value="max">
-            <span>Máxima no horário</span>
-            <small>Registra a máxima exibida no momento da coleta.</small>
+            <input type="checkbox" value="minMax">
+            <span>Mín. e Máx.</span>
           </label>
           <label class="scheduled-check-card">
             <input type="checkbox" value="average">
             <span>Média do período</span>
-            <small>Calcula a média usando o intervalo configurado.</small>
           </label>
         </div>
       </div>
 
-      <div class="scheduled-collection-summary" id="scheduledCollectionSummary"></div>
       <div class="info-feedback bind-device-feedback" id="scheduledCollectionFeedback"></div>
       <div class="info-actions bind-device-actions">
         <button class="info-btn secondary" id="cancelScheduledCollection" type="button">Cancelar</button>

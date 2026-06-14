@@ -6506,15 +6506,18 @@ document.addEventListener('DOMContentLoaded', function(){
     updatedAt: null
   };
   const metricNames = {
+    temperature: 'temperatura da coleta',
+    minMax: 'mínima e máxima',
+    average: 'média do período'
+  };
+  const metricShortNames = {
     temperature: 'temperatura',
-    min: 'mínima',
-    max: 'máxima',
+    minMax: 'mín. e máx.',
     average: 'média'
   };
   const snapshotMetricNames = {
-    temperature: 'a temperatura',
-    min: 'a mínima',
-    max: 'a máxima'
+    temperature: ['a temperatura'],
+    minMax: ['a mínima', 'a máxima']
   };
 
   function getEl(id){ return document.getElementById(id); }
@@ -6567,9 +6570,9 @@ document.addEventListener('DOMContentLoaded', function(){
     const raw = config && typeof config === 'object' ? config : {};
     const hours = [1,2,3,4,6,12].includes(Number(raw.hours)) ? Number(raw.hours) : defaultConfig.hours;
     const scope = raw.scope === 'selected' ? 'selected' : 'all';
-    const metrics = Array.isArray(raw.metrics)
-      ? raw.metrics.filter(metric => Object.prototype.hasOwnProperty.call(metricNames, metric))
-      : defaultConfig.metrics.slice();
+    const rawMetrics = Array.isArray(raw.metrics) ? raw.metrics : defaultConfig.metrics.slice();
+    const migratedMetrics = rawMetrics.flatMap(metric => (metric === 'min' || metric === 'max') ? ['minMax'] : [metric]);
+    const metrics = migratedMetrics.filter(metric => Object.prototype.hasOwnProperty.call(metricNames, metric));
     return {
       areaName: raw.areaName || currentAreaName(),
       hours,
@@ -6686,10 +6689,14 @@ document.addEventListener('DOMContentLoaded', function(){
     const pieces = [scopeText, `A rotina será executada a cada ${formatHours(hours)}.`];
 
     if(snapshotMetrics.length){
-      pieces.push(`No horário programado, o sistema registra ${joinPt(snapshotMetrics.map(metric => snapshotMetricNames[metric]))} com os valores exibidos naquele momento.`);
+      const snapshotLabel = joinPt(snapshotMetrics.flatMap(metric => snapshotMetricNames[metric] || []));
+      pieces.push(`No horário da coleta, o sistema registra ${snapshotLabel} com os valores exibidos naquele momento.`);
     }
     if(hasAverage){
-      pieces.push(`A média considera as últimas ${formatHours(hours)} antes da coleta.`);
+      const averageBase = snapshotMetrics.length
+        ? 'os dados selecionados'
+        : 'a temperatura dos dispositivos selecionados';
+      pieces.push(`A média considera as últimas ${formatHours(hours)} antes da coleta e usa ${averageBase} como base.`);
     }
 
     return pieces.join(' ');
@@ -6709,7 +6716,7 @@ document.addEventListener('DOMContentLoaded', function(){
     if(!summary) return;
     const metrics = selectedMetrics();
     const metricLabel = metrics.length
-      ? joinPt(metrics.map(metric => metricNames[metric]))
+      ? metrics.map(metric => metricNames[metric]).join('; ')
       : 'nenhum dado selecionado';
     summary.innerHTML = `
       <strong>Resumo da configuração</strong>
@@ -6735,7 +6742,7 @@ document.addEventListener('DOMContentLoaded', function(){
       mini.textContent = '';
       return;
     }
-    const metricLabel = joinPt(current.metrics.map(metric => metricNames[metric]));
+    const metricLabel = joinPt(current.metrics.map(metric => metricShortNames[metric] || metricNames[metric]));
     const scopeLabel = current.scope === 'selected'
       ? `${current.deviceIds.length} dispositivo${current.deviceIds.length === 1 ? '' : 's'}`
       : 'todos os dispositivos';

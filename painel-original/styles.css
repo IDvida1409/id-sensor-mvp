@@ -8034,18 +8034,19 @@ svg defs #cbWarnPattern rect, svg defs #cbCritPattern rect { shape-rendering:cri
 .scheduled-metric-grid{
   display:grid;
   gap:10px;
-  grid-template-columns:1fr 1fr;
+  grid-template-columns:repeat(3, minmax(0, 1fr));
 }
 
 .scheduled-check-card{
+  align-items:center;
   background:linear-gradient(180deg,#ffffff,#f8fbff);
   border:1px solid #dfe7f2;
   border-radius:16px;
   cursor:pointer;
   display:grid;
   gap:4px;
-  min-height:92px;
-  padding:13px 14px;
+  min-height:62px;
+  padding:14px 42px 14px 14px;
   position:relative;
   transition:transform .16s ease, box-shadow .16s ease, border-color .16s ease, background .16s ease;
 }
@@ -8065,7 +8066,7 @@ svg defs #cbWarnPattern rect, svg defs #cbCritPattern rect { shape-rendering:cri
   color:#183452;
   font-size:13px;
   font-weight:900;
-  padding-right:24px;
+  line-height:1.2;
 }
 
 .scheduled-check-card small{
@@ -8116,7 +8117,7 @@ svg defs #cbWarnPattern rect, svg defs #cbCritPattern rect { shape-rendering:cri
   font-size:12px;
   font-weight:700;
   line-height:1.45;
-  margin-top:2px;
+  margin:0 0 12px;
   padding:14px;
 }
 
