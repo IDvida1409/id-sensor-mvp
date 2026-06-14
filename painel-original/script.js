@@ -561,6 +561,11 @@ function formatScheduleClock(date){
   return date.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
 }
 
+function formatScheduleDate(date){
+  if(!(date instanceof Date) || Number.isNaN(date.getTime())) return '--/--/----';
+  return date.toLocaleDateString('pt-BR');
+}
+
 function getScheduledCollectionTiming(config){
   const hours = Math.max(1, Number(config?.hours) || 1);
   const intervalMs = hours * 60 * 60 * 1000;
@@ -599,6 +604,14 @@ function averageTemperature(values){
   return valid.reduce((sum, value) => sum + value, 0) / valid.length;
 }
 
+function getScheduledIntervalValues(values, hours){
+  const valid = (values || []).filter(value => Number.isFinite(Number(value))).map(Number);
+  if(!valid.length) return [];
+  const estimatedSampleHours = Math.max(1, 24 / valid.length);
+  const sampleCount = Math.max(1, Math.ceil((Number(hours) || 1) / estimatedSampleHours));
+  return valid.slice(-sampleCount);
+}
+
 function buildScheduledCollectionCard(d, values){
   const config = getScheduledCollectionConfig();
   if(!config){
@@ -616,18 +629,46 @@ function buildScheduledCollectionCard(d, values){
 
   const timing = getScheduledCollectionTiming(config);
   const current = Number.isFinite(Number(d.temp)) ? Number(d.temp) : values[values.length - 1];
-  const minTemp = Math.min(...values);
-  const maxTemp = Math.max(...values);
-  const avgTemp = averageTemperature(values);
+  const snapshotValues = Array.isArray(d.chart) && d.chart.length ? d.chart : values;
+  const snapshotMin = Math.min(...snapshotValues);
+  const snapshotMax = Math.max(...snapshotValues);
+  const intervalValues = getScheduledIntervalValues(values, config.hours);
+  const intervalAverage = averageTemperature(intervalValues);
+  const intervalMin = intervalValues.length ? Math.min(...intervalValues) : null;
+  const intervalMax = intervalValues.length ? Math.max(...intervalValues) : null;
   const selectedMetrics = config.metrics;
-  const detailParts = [];
-  if(selectedMetrics.includes('temperature')) detailParts.push(`temperatura ${tempLabel(current)}`);
-  if(selectedMetrics.includes('minMax')) detailParts.push(`mín. ${tempLabel(minTemp)} · máx. ${tempLabel(maxTemp)}`);
-  if(selectedMetrics.includes('average')) detailParts.push(`média ${tempLabel(avgTemp)}`);
-  const detailLine = detailParts.length ? detailParts.join(' · ') : `temperatura ${tempLabel(current)}`;
+  const showSnapshot = selectedMetrics.includes('temperature') || selectedMetrics.includes('minMax');
+  const showAverage = selectedMetrics.includes('average');
   const remainingText = timing.remaining === 1 ? 'Falta 1 coleta' : `Faltam ${timing.remaining} coletas`;
-  const lastLabel = timing.last ? `${formatScheduleClock(timing.last)} · ${detailLine}` : 'Aguardando primeira coleta do dia';
-  const reportStatus = timing.remaining === 0 ? 'Relatório diário pronto' : 'Relatório diário em formação';
+  const lastCollection = timing.last || new Date(config.updatedAt);
+  const intervalEnd = lastCollection;
+  const intervalStart = new Date(intervalEnd.getTime() - config.hours * 60 * 60 * 1000);
+  const collectionCount = `${timing.completed} de ${timing.totalDaily}`;
+
+  const snapshotPanel = showSnapshot ? `
+    <div class="graph-schedule-reading-panel">
+      <span class="graph-schedule-panel-label">Leitura no horário</span>
+      ${selectedMetrics.includes('temperature') ? `<strong class="graph-schedule-main-value">${tempLabel(current)}</strong>` : ''}
+      ${selectedMetrics.includes('minMax') ? `
+        <div class="graph-schedule-minmax">
+          <div><span>Mínima</span><strong>${tempLabel(snapshotMin)}</strong></div>
+          <div><span>Máxima</span><strong>${tempLabel(snapshotMax)}</strong></div>
+        </div>
+      ` : ''}
+    </div>
+  ` : '';
+
+  const averagePanel = showAverage ? `
+    <div class="graph-schedule-reading-panel">
+      <span class="graph-schedule-panel-label">Resumo das últimas ${formatScheduledHours(config.hours)}</span>
+      <strong class="graph-schedule-main-value">${tempLabel(intervalAverage)}</strong>
+      <small class="graph-schedule-value-caption">Média da temperatura</small>
+      <div class="graph-schedule-minmax">
+        <div><span>Mínima</span><strong>${tempLabel(intervalMin)}</strong></div>
+        <div><span>Máxima</span><strong>${tempLabel(intervalMax)}</strong></div>
+      </div>
+    </div>
+  ` : '';
 
   return `
     <div class="graph-mini-card graph-schedule-card">
@@ -635,23 +676,28 @@ function buildScheduledCollectionCard(d, values){
         <h3 class="graph-mini-title">Coleta programada</h3>
         <span class="graph-schedule-pill">A cada ${formatScheduledHours(config.hours)}</span>
       </div>
-      <div class="graph-mini-sub">Acompanha a última coleta registrada e o fechamento do relatório diário.</div>
-      <div class="graph-schedule-kpis">
-        <div class="graph-schedule-kpi">
-          <span>Próxima coleta</span>
-          <strong>${formatScheduleClock(timing.next)}</strong>
+      <div class="graph-mini-sub">Mostra a leitura do horário e o resumo do intervalo selecionado.</div>
+      <div class="graph-schedule-last-head">
+        <div>
+          <span>Última coleta</span>
+          <strong>${formatScheduleClock(lastCollection)}</strong>
         </div>
-        <div class="graph-schedule-kpi">
-          <span>Coletas do dia</span>
-          <strong>${timing.completed}/${timing.totalDaily}</strong>
+        <small>${formatScheduleDate(lastCollection)}</small>
+      </div>
+      <div class="graph-schedule-readings ${showSnapshot && showAverage ? '' : 'single'}">
+        ${snapshotPanel}
+        ${averagePanel}
+      </div>
+      ${showAverage ? `<div class="graph-schedule-interval">Período analisado: ${formatScheduleClock(intervalStart)} às ${formatScheduleClock(intervalEnd)}</div>` : ''}
+      <div class="graph-schedule-meta-row">
+        <span>Próxima coleta <strong>${formatScheduleClock(timing.next)}</strong></span>
+        <span>Hoje <strong>${collectionCount}</strong></span>
+      </div>
+      <div class="graph-schedule-progress-compact">
+        <div>
+          <span>Relatório diário</span>
+          <strong>${timing.remaining === 0 ? 'Completo' : remainingText}</strong>
         </div>
-      </div>
-      <div class="graph-schedule-last">
-        <span>Última coleta</span>
-        <strong>${lastLabel}</strong>
-      </div>
-      <div class="graph-schedule-progress">
-        <div><span>${reportStatus}</span><strong>${timing.remaining === 0 ? 'Disponível para baixar' : remainingText + ' para fechar o dia'}</strong></div>
         <div class="graph-schedule-bar"><span style="width:${timing.progress}%"></span></div>
       </div>
     </div>
@@ -6841,10 +6887,7 @@ document.addEventListener('DOMContentLoaded', function(){
       pieces.push(`No horário da coleta, o sistema registra ${snapshotLabel} com os valores exibidos naquele momento.`);
     }
     if(hasAverage){
-      const averageBase = snapshotMetrics.length
-        ? 'os dados selecionados'
-        : 'a temperatura dos dispositivos selecionados';
-      pieces.push(`A média considera as últimas ${formatHours(hours)} antes da coleta e usa ${averageBase} como base.`);
+      pieces.push(`A média usa as leituras de temperatura das últimas ${formatHours(hours)} antes da coleta. O resumo também mostra a mínima e a máxima encontradas nesse intervalo.`);
     }
 
     return pieces.join(' ');
