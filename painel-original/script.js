@@ -703,18 +703,31 @@ function buildScheduledCollectionCard(d, values){
   const humidityMin = humidityValues.length ? Math.min(...humidityValues) : null;
   const humidityMax = humidityValues.length ? Math.max(...humidityValues) : null;
   const selectedMetrics = config.metrics;
-  const showTemperatureSnapshot = selectedMetrics.includes('temperature') || selectedMetrics.includes('temperatureMinMax');
+  const temperatureSelected = selectedMetrics.includes('temperature');
+  const temperatureMinMaxSelected = selectedMetrics.includes('temperatureMinMax');
   const showTemperatureAverage = selectedMetrics.includes('temperatureAverage');
-  const showHumiditySnapshot = selectedMetrics.includes('humidity') || selectedMetrics.includes('humidityMinMax');
+  const humiditySelected = selectedMetrics.includes('humidity');
+  const humidityMinMaxSelected = selectedMetrics.includes('humidityMinMax');
   const showHumidityAverage = selectedMetrics.includes('humidityAverage');
+  const showTemperatureSnapshot = temperatureSelected || temperatureMinMaxSelected;
+  const showHumiditySnapshot = humiditySelected || humidityMinMaxSelected;
+  const showTemperatureAverageValue = showTemperatureAverage && (temperatureSelected || !temperatureMinMaxSelected);
+  const showTemperaturePeriodMinMax = showTemperatureAverage && temperatureMinMaxSelected;
+  const showHumidityAverageValue = showHumidityAverage && (humiditySelected || !humidityMinMaxSelected);
+  const showHumidityPeriodMinMax = showHumidityAverage && humidityMinMaxSelected;
   const showAverage = showTemperatureAverage || showHumidityAverage;
   const hasTemperatureMetrics = showTemperatureSnapshot || showTemperatureAverage;
   const hasHumidityMetrics = showHumiditySnapshot || showHumidityAverage;
+  const describeGroup = (label, hasSnapshot, hasPeriod) => {
+    if(hasSnapshot && hasPeriod) return `Mostra os dados de ${label} coletados e os resultados do intervalo selecionado.`;
+    if(hasPeriod) return `Mostra os resultados de ${label} no intervalo selecionado.`;
+    return `Mostra os dados de ${label} coletados.`;
+  };
   const cardDescription = hasTemperatureMetrics && hasHumidityMetrics
-    ? 'Mostra a temperatura e a umidade coletadas e as médias do intervalo selecionado.'
+    ? 'Mostra os dados selecionados de temperatura e umidade na coleta e no intervalo.'
     : hasHumidityMetrics
-      ? 'Mostra a umidade coletada e a média do intervalo selecionado.'
-      : 'Mostra a temperatura coletada e a média do intervalo selecionado.';
+      ? describeGroup('umidade', showHumiditySnapshot, showHumidityAverage)
+      : describeGroup('temperatura', showTemperatureSnapshot, showTemperatureAverage);
   const remainingText = timing.remaining === 1 ? 'Falta 1 coleta' : `Faltam ${timing.remaining} coletas`;
   const lastCollection = timing.last || new Date(config.updatedAt);
   const intervalEnd = lastCollection;
@@ -727,9 +740,9 @@ function buildScheduledCollectionCard(d, values){
 
   if(showTemperatureSnapshot) panels.push(`
     <div class="graph-schedule-reading-panel">
-      <span class="graph-schedule-panel-label">Temperatura coletada</span>
-      ${selectedMetrics.includes('temperature') ? `<strong class="graph-schedule-main-value">${tempLabel(current)}</strong>` : ''}
-      ${selectedMetrics.includes('temperatureMinMax') ? `
+      <span class="graph-schedule-panel-label">${temperatureSelected ? 'Temperatura coletada' : 'Mín./Máx. coletados'}</span>
+      ${temperatureSelected ? `<strong class="graph-schedule-main-value">${tempLabel(current)}</strong>` : ''}
+      ${temperatureMinMaxSelected ? `
         <div class="graph-schedule-minmax">
           <div><span>Mín.</span><strong>${tempLabel(snapshotMin)}</strong></div>
           <div><span>Máx.</span><strong>${tempLabel(snapshotMax)}</strong></div>
@@ -740,20 +753,22 @@ function buildScheduledCollectionCard(d, values){
 
   if(showTemperatureAverage) panels.push(`
     <div class="graph-schedule-reading-panel">
-      <span class="graph-schedule-panel-label">Média coletada</span>
-      <strong class="graph-schedule-main-value">${tempLabel(intervalAverage)}</strong>
-      <div class="graph-schedule-minmax">
-        <div><span>Mín.</span><strong>${tempLabel(intervalMin)}</strong></div>
-        <div><span>Máx.</span><strong>${tempLabel(intervalMax)}</strong></div>
-      </div>
+      <span class="graph-schedule-panel-label">${showTemperatureAverageValue && showTemperaturePeriodMinMax ? 'Média e extremos do período' : showTemperaturePeriodMinMax ? 'Mín./Máx. do período' : 'Média da temperatura'}</span>
+      ${showTemperatureAverageValue ? `<strong class="graph-schedule-main-value">${tempLabel(intervalAverage)}</strong>` : ''}
+      ${showTemperaturePeriodMinMax ? `
+        <div class="graph-schedule-minmax">
+          <div><span>Mín.</span><strong>${tempLabel(intervalMin)}</strong></div>
+          <div><span>Máx.</span><strong>${tempLabel(intervalMax)}</strong></div>
+        </div>
+      ` : ''}
     </div>
   `);
 
   if(showHumiditySnapshot) panels.push(`
     <div class="graph-schedule-reading-panel">
-      <span class="graph-schedule-panel-label">Umidade coletada</span>
-      ${selectedMetrics.includes('humidity') ? `<strong class="graph-schedule-main-value">${humLabel(currentHumidity)}</strong>` : ''}
-      ${selectedMetrics.includes('humidityMinMax') ? `
+      <span class="graph-schedule-panel-label">${humiditySelected ? 'Umidade coletada' : 'Mín./Máx. coletados da umidade'}</span>
+      ${humiditySelected ? `<strong class="graph-schedule-main-value">${humLabel(currentHumidity)}</strong>` : ''}
+      ${humidityMinMaxSelected ? `
         <div class="graph-schedule-minmax">
           <div><span>Mín.</span><strong>${humLabel(humidityMin)}</strong></div>
           <div><span>Máx.</span><strong>${humLabel(humidityMax)}</strong></div>
@@ -764,12 +779,14 @@ function buildScheduledCollectionCard(d, values){
 
   if(showHumidityAverage) panels.push(`
     <div class="graph-schedule-reading-panel">
-      <span class="graph-schedule-panel-label">Média coletada da umidade</span>
-      <strong class="graph-schedule-main-value">${humLabel(humidityAverage)}</strong>
-      <div class="graph-schedule-minmax">
-        <div><span>Mín.</span><strong>${humLabel(humidityMin)}</strong></div>
-        <div><span>Máx.</span><strong>${humLabel(humidityMax)}</strong></div>
-      </div>
+      <span class="graph-schedule-panel-label">${showHumidityAverageValue && showHumidityPeriodMinMax ? 'Média e extremos da umidade' : showHumidityPeriodMinMax ? 'Mín./Máx. da umidade no período' : 'Média da umidade'}</span>
+      ${showHumidityAverageValue ? `<strong class="graph-schedule-main-value">${humLabel(humidityAverage)}</strong>` : ''}
+      ${showHumidityPeriodMinMax ? `
+        <div class="graph-schedule-minmax">
+          <div><span>Mín.</span><strong>${humLabel(humidityMin)}</strong></div>
+          <div><span>Máx.</span><strong>${humLabel(humidityMax)}</strong></div>
+        </div>
+      ` : ''}
     </div>
   `);
 
@@ -7050,16 +7067,26 @@ document.addEventListener('DOMContentLoaded', function(){
 
     if(temperatureMetrics.length){
       const details = [];
-      if(temperatureMetrics.includes('temperature')) details.push('coleta');
-      if(temperatureMetrics.includes('temperatureMinMax')) details.push('mín./máx.');
-      if(temperatureMetrics.includes('temperatureAverage')) details.push(`média das últimas ${formatHours(hours)}`);
+      const hasValue = temperatureMetrics.includes('temperature');
+      const hasMinMax = temperatureMetrics.includes('temperatureMinMax');
+      const hasAverage = temperatureMetrics.includes('temperatureAverage');
+      if(hasValue) details.push('temperatura do horário');
+      if(hasMinMax) details.push('mín./máx. do horário');
+      if(hasAverage && hasMinMax && hasValue) details.push(`média da temperatura e mín./máx. das últimas ${formatHours(hours)}`);
+      else if(hasAverage && hasMinMax) details.push(`mín./máx. das últimas ${formatHours(hours)}`);
+      else if(hasAverage) details.push(`média da temperatura das últimas ${formatHours(hours)}`);
       pieces.push(`Temperatura: ${joinPt(details)}.`);
     }
     if(humidityMetrics.length){
       const details = [];
-      if(humidityMetrics.includes('humidity')) details.push('coleta');
-      if(humidityMetrics.includes('humidityMinMax')) details.push('mín./máx.');
-      if(humidityMetrics.includes('humidityAverage')) details.push(`média das últimas ${formatHours(hours)}`);
+      const hasValue = humidityMetrics.includes('humidity');
+      const hasMinMax = humidityMetrics.includes('humidityMinMax');
+      const hasAverage = humidityMetrics.includes('humidityAverage');
+      if(hasValue) details.push('umidade do horário');
+      if(hasMinMax) details.push('mín./máx. do horário');
+      if(hasAverage && hasMinMax && hasValue) details.push(`média da umidade e mín./máx. das últimas ${formatHours(hours)}`);
+      else if(hasAverage && hasMinMax) details.push(`mín./máx. das últimas ${formatHours(hours)}`);
+      else if(hasAverage) details.push(`média da umidade das últimas ${formatHours(hours)}`);
       pieces.push(`Umidade: ${joinPt(details)}.`);
     }
 
