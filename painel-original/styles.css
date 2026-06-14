@@ -746,6 +746,12 @@
   line-height:1.35;
 }
 .graph-side-stack{display:grid;gap:12px}
+.graph-mini-title-row{
+  align-items:flex-start;
+  display:flex;
+  gap:10px;
+  justify-content:space-between;
+}
 .graph-mini-title{
   font-size:18px;
   font-weight:900;
@@ -785,7 +791,188 @@
   box-shadow:0 10px 22px rgba(35,115,255,.18);
   cursor:pointer;
 }
-.graph-report-list{display:grid;gap:8px}
+
+.graph-schedule-card{
+  display:grid;
+  gap:10px;
+}
+
+.graph-schedule-pill{
+  background:linear-gradient(180deg,#effaf5,#dff4ea);
+  border:1px solid #c7ead9;
+  border-radius:999px;
+  color:#147a48;
+  flex:0 0 auto;
+  font-size:11px;
+  font-weight:900;
+  padding:7px 10px;
+  white-space:nowrap;
+}
+
+.graph-schedule-pill.muted{
+  background:linear-gradient(180deg,#f8fbff,#eef3f9);
+  border-color:#dfe8f3;
+  color:#6f7d90;
+}
+
+.graph-schedule-empty{
+  background:linear-gradient(180deg,#f8fbff,#f1f6fc);
+  border:1px solid #e2eaf4;
+  border-radius:18px;
+  color:#6f7d90;
+  font-size:12px;
+  font-weight:800;
+  line-height:1.35;
+  padding:14px;
+}
+
+.graph-schedule-kpis{
+  display:grid;
+  gap:8px;
+  grid-template-columns:1fr 1fr;
+}
+
+.graph-schedule-kpi,
+.graph-schedule-last,
+.graph-schedule-progress{
+  background:linear-gradient(180deg,#ffffff,#f6faff);
+  border:1px solid #dde6f2;
+  border-radius:16px;
+  padding:12px;
+}
+
+.graph-schedule-kpi span,
+.graph-schedule-last span,
+.graph-schedule-progress span{
+  color:#6f7d90;
+  display:block;
+  font-size:11px;
+  font-weight:900;
+  text-transform:uppercase;
+}
+
+.graph-schedule-kpi strong{
+  color:#223047;
+  display:block;
+  font-size:20px;
+  font-weight:900;
+  margin-top:4px;
+}
+
+.graph-schedule-last strong{
+  color:#223047;
+  display:block;
+  font-size:13px;
+  font-weight:900;
+  line-height:1.35;
+  margin-top:5px;
+}
+
+.graph-schedule-progress{
+  display:grid;
+  gap:10px;
+}
+
+.graph-schedule-progress strong{
+  color:#223047;
+  display:block;
+  font-size:12px;
+  font-weight:900;
+  line-height:1.35;
+  margin-top:4px;
+}
+
+.graph-schedule-bar{
+  background:#e8f0f9;
+  border-radius:999px;
+  height:9px;
+  overflow:hidden;
+}
+
+.graph-schedule-bar span{
+  background:linear-gradient(90deg,#20b66b,#2f80ff);
+  border-radius:inherit;
+  display:block;
+  height:100%;
+  min-width:7px;
+}
+
+.graph-report-accordion{
+  padding:0;
+  overflow:hidden;
+}
+
+.graph-report-accordion summary{
+  align-items:center;
+  cursor:pointer;
+  display:grid;
+  gap:12px;
+  grid-template-columns:44px minmax(0,1fr) auto;
+  list-style:none;
+  padding:16px 18px;
+}
+
+.graph-report-accordion summary::-webkit-details-marker{
+  display:none;
+}
+
+.graph-report-icon{
+  align-items:center;
+  background:linear-gradient(180deg,#eef6ff,#dfeeff);
+  border:1px solid #cfe0f4;
+  border-radius:16px;
+  color:#2f66d8;
+  display:flex;
+  height:44px;
+  justify-content:center;
+  width:44px;
+}
+
+.graph-report-icon svg{
+  height:24px;
+  width:24px;
+}
+
+.graph-report-summary-copy strong{
+  color:#223047;
+  display:block;
+  font-size:18px;
+  font-weight:900;
+  letter-spacing:-.02em;
+}
+
+.graph-report-summary-copy small{
+  color:#6f7d90;
+  display:block;
+  font-size:12px;
+  font-weight:700;
+  line-height:1.35;
+  margin-top:4px;
+}
+
+.graph-report-chevron{
+  color:#6f7d90;
+  font-size:18px;
+  font-weight:900;
+  transition:transform .18s ease;
+}
+
+.graph-report-accordion[open] .graph-report-chevron{
+  transform:rotate(180deg);
+}
+
+.graph-report-accordion .graph-report-list{
+  padding:0 18px 18px;
+}
+
+.graph-report-accordion:not([open]) .graph-report-list{
+  display:none;
+}
+
+.graph-report-accordion[open] .graph-report-list{
+  display:grid;
+  gap:8px;
+}
 .graph-report-btn{
   height:40px;
   border:none;

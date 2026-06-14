@@ -525,6 +525,146 @@ function getGraphStatusMarkers(d, graphState, values, paths){
 
   return { svg, legend };
 }
+
+function normalizeScheduledMetrics(metrics){
+  const raw = Array.isArray(metrics) ? metrics : ['temperature'];
+  const migrated = raw.flatMap(metric => (metric === 'min' || metric === 'max') ? ['minMax'] : [metric]);
+  const allowed = new Set(['temperature', 'minMax', 'average']);
+  const unique = Array.from(new Set(migrated.filter(metric => allowed.has(metric))));
+  return unique.length ? unique : ['temperature'];
+}
+
+function getScheduledCollectionConfig(){
+  try {
+    const parsed = JSON.parse(localStorage.getItem('idsensor.scheduledCollection.v1') || 'null');
+    if(!parsed || !parsed.updatedAt) return null;
+    const hours = [1,2,3,4,6,12].includes(Number(parsed.hours)) ? Number(parsed.hours) : 1;
+    return {
+      ...parsed,
+      hours,
+      scope: parsed.scope === 'selected' ? 'selected' : 'all',
+      deviceIds: Array.isArray(parsed.deviceIds) ? parsed.deviceIds.map(String) : [],
+      metrics: normalizeScheduledMetrics(parsed.metrics)
+    };
+  } catch(e) {
+    return null;
+  }
+}
+
+function formatScheduledHours(hours){
+  const safe = Number(hours) || 1;
+  return safe === 1 ? '1 hora' : `${safe} horas`;
+}
+
+function formatScheduleClock(date){
+  if(!(date instanceof Date) || Number.isNaN(date.getTime())) return '--:--';
+  return date.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
+}
+
+function getScheduledCollectionTiming(config){
+  const hours = Math.max(1, Number(config?.hours) || 1);
+  const intervalMs = hours * 60 * 60 * 1000;
+  const now = new Date();
+  const updatedAt = new Date(config?.updatedAt || now);
+  const anchor = Number.isNaN(updatedAt.getTime()) ? now : updatedAt;
+  const dayStart = new Date(now);
+  dayStart.setHours(0,0,0,0);
+  const dayEnd = new Date(dayStart);
+  dayEnd.setDate(dayEnd.getDate() + 1);
+
+  let cursor = new Date(anchor);
+  while(cursor > now) cursor = new Date(cursor.getTime() - intervalMs);
+  while(new Date(cursor.getTime() + intervalMs) <= now) cursor = new Date(cursor.getTime() + intervalMs);
+
+  const last = cursor >= dayStart ? cursor : null;
+  const next = new Date((last || cursor).getTime() + intervalMs);
+  const totalDaily = Math.max(1, Math.floor(24 / hours));
+  let completed = 0;
+  if(last){
+    let scan = new Date(anchor);
+    while(scan < dayStart) scan = new Date(scan.getTime() + intervalMs);
+    while(scan <= now && scan < dayEnd){
+      completed += 1;
+      scan = new Date(scan.getTime() + intervalMs);
+    }
+  }
+  const remaining = Math.max(0, totalDaily - Math.min(totalDaily, completed));
+  const progress = Math.round((Math.min(totalDaily, completed) / totalDaily) * 100);
+  return { last, next, totalDaily, completed: Math.min(totalDaily, completed), remaining, progress };
+}
+
+function averageTemperature(values){
+  const valid = (values || []).filter(value => Number.isFinite(Number(value))).map(Number);
+  if(!valid.length) return null;
+  return valid.reduce((sum, value) => sum + value, 0) / valid.length;
+}
+
+function buildScheduledCollectionCard(d, values){
+  const config = getScheduledCollectionConfig();
+  if(!config){
+    return `
+      <div class="graph-mini-card graph-schedule-card">
+        <div class="graph-mini-title-row">
+          <h3 class="graph-mini-title">Coleta programada</h3>
+          <span class="graph-schedule-pill muted">Não configurada</span>
+        </div>
+        <div class="graph-mini-sub">Configure a rotina na engrenagem do painel para acompanhar a formação do relatório diário.</div>
+        <div class="graph-schedule-empty">Nenhuma coleta programada foi salva para esta área.</div>
+      </div>
+    `;
+  }
+
+  const timing = getScheduledCollectionTiming(config);
+  const current = Number.isFinite(Number(d.temp)) ? Number(d.temp) : values[values.length - 1];
+  const minTemp = Math.min(...values);
+  const maxTemp = Math.max(...values);
+  const avgTemp = averageTemperature(values);
+  const selectedMetrics = config.metrics;
+  const detailParts = [];
+  if(selectedMetrics.includes('temperature')) detailParts.push(`temperatura ${tempLabel(current)}`);
+  if(selectedMetrics.includes('minMax')) detailParts.push(`mín. ${tempLabel(minTemp)} · máx. ${tempLabel(maxTemp)}`);
+  if(selectedMetrics.includes('average')) detailParts.push(`média ${tempLabel(avgTemp)}`);
+  const detailLine = detailParts.length ? detailParts.join(' · ') : `temperatura ${tempLabel(current)}`;
+  const remainingText = timing.remaining === 1 ? 'Falta 1 coleta' : `Faltam ${timing.remaining} coletas`;
+  const lastLabel = timing.last ? `${formatScheduleClock(timing.last)} · ${detailLine}` : 'Aguardando primeira coleta do dia';
+  const reportStatus = timing.remaining === 0 ? 'Relatório diário pronto' : 'Relatório diário em formação';
+
+  return `
+    <div class="graph-mini-card graph-schedule-card">
+      <div class="graph-mini-title-row">
+        <h3 class="graph-mini-title">Coleta programada</h3>
+        <span class="graph-schedule-pill">A cada ${formatScheduledHours(config.hours)}</span>
+      </div>
+      <div class="graph-mini-sub">Acompanha a última coleta registrada e o fechamento do relatório diário.</div>
+      <div class="graph-schedule-kpis">
+        <div class="graph-schedule-kpi">
+          <span>Próxima coleta</span>
+          <strong>${formatScheduleClock(timing.next)}</strong>
+        </div>
+        <div class="graph-schedule-kpi">
+          <span>Coletas do dia</span>
+          <strong>${timing.completed}/${timing.totalDaily}</strong>
+        </div>
+      </div>
+      <div class="graph-schedule-last">
+        <span>Última coleta</span>
+        <strong>${lastLabel}</strong>
+      </div>
+      <div class="graph-schedule-progress">
+        <div><span>${reportStatus}</span><strong>${timing.remaining === 0 ? 'Disponível para baixar' : remainingText + ' para fechar o dia'}</strong></div>
+        <div class="graph-schedule-bar"><span style="width:${timing.progress}%"></span></div>
+      </div>
+    </div>
+  `;
+}
+
+function getReportIcon(){
+  return `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+    <path d="M7 3.5h7.4L19 8.1v12.4H7a2 2 0 0 1-2-2v-13a2 2 0 0 1 2-2Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+    <path d="M14 3.7V8h4.3M8.5 12h7M8.5 15h7M8.5 18h4.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+  </svg>`;
+}
+
 function buildGraphModal(d, graphState = {period:'daily', view:'summary'}){
   const periodSets = {
     daily: {
@@ -772,16 +912,24 @@ function buildGraphModal(d, graphState = {period:'daily', view:'summary'}){
               </div>
             </div>
 
-            <div class="graph-mini-card">
-              <h3 class="graph-mini-title">Relatórios</h3>
-              <div class="graph-mini-sub">Exportações operacionais e relatório analítico do período selecionado.</div>
+            ${buildScheduledCollectionCard(d, values)}
+
+            <details class="graph-mini-card graph-report-accordion">
+              <summary>
+                <span class="graph-report-icon">${getReportIcon()}</span>
+                <span class="graph-report-summary-copy">
+                  <strong>Relatórios</strong>
+                  <small>Exportações operacionais e relatório analítico</small>
+                </span>
+                <span class="graph-report-chevron" aria-hidden="true">⌄</span>
+              </summary>
               <div class="graph-report-list">
                 <button class="graph-report-btn">Exportar PDF</button>
                 <button class="graph-report-btn">Exportar Excel</button>
                 <button class="graph-report-btn">Exportar CSV</button>
                 <button class="graph-report-btn">Relatório Analítico</button>
               </div>
-            </div>
+            </details>
           </div>
         </section>
       </div>
