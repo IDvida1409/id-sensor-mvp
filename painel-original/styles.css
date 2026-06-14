@@ -904,6 +904,14 @@
   padding-top:4px;
 }
 
+.graph-schedule-minmax div + div::before{
+  color:#a0abba;
+  content:"/";
+  font-size:10px;
+  font-weight:900;
+  margin-right:6px;
+}
+
 .graph-schedule-minmax span{
   color:#7b899c;
   font-size:9px;
@@ -8313,9 +8321,28 @@ svg defs #cbWarnPattern rect, svg defs #cbCritPattern rect { shape-rendering:cri
   padding:8px;
 }
 
+.scheduled-metric-groups{
+  display:grid;
+  gap:12px;
+}
+
+.scheduled-metric-group{
+  background:#f8fbff;
+  border:1px solid #dfe7f2;
+  border-radius:16px;
+  padding:12px;
+}
+
+.scheduled-metric-group h3{
+  color:#183452;
+  font-size:13px;
+  font-weight:900;
+  margin:0 0 9px;
+}
+
 .scheduled-metric-grid{
   display:grid;
-  gap:10px;
+  gap:8px;
   grid-template-columns:repeat(3, minmax(0, 1fr));
 }
 
@@ -8327,8 +8354,8 @@ svg defs #cbWarnPattern rect, svg defs #cbCritPattern rect { shape-rendering:cri
   cursor:pointer;
   display:grid;
   gap:4px;
-  min-height:62px;
-  padding:14px 42px 14px 14px;
+  min-height:52px;
+  padding:11px 38px 11px 11px;
   position:relative;
   transition:transform .16s ease, box-shadow .16s ease, border-color .16s ease, background .16s ease;
 }
@@ -8372,7 +8399,7 @@ svg defs #cbWarnPattern rect, svg defs #cbCritPattern rect { shape-rendering:cri
   justify-content:center;
   position:absolute;
   right:12px;
-  top:12px;
+  top:10px;
   width:20px;
 }
 

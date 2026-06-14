@@ -528,8 +528,21 @@ function getGraphStatusMarkers(d, graphState, values, paths){
 
 function normalizeScheduledMetrics(metrics){
   const raw = Array.isArray(metrics) ? metrics : ['temperature'];
-  const migrated = raw.flatMap(metric => (metric === 'min' || metric === 'max') ? ['minMax'] : [metric]);
-  const allowed = new Set(['temperature', 'minMax', 'average']);
+  const legacyAliases = {
+    min: 'temperatureMinMax',
+    max: 'temperatureMinMax',
+    minMax: 'temperatureMinMax',
+    average: 'temperatureAverage'
+  };
+  const migrated = raw.map(metric => legacyAliases[metric] || metric);
+  const allowed = new Set([
+    'temperature',
+    'temperatureMinMax',
+    'temperatureAverage',
+    'humidity',
+    'humidityMinMax',
+    'humidityAverage'
+  ]);
   const unique = Array.from(new Set(migrated.filter(metric => allowed.has(metric))));
   return unique.length ? unique : ['temperature'];
 }
@@ -604,6 +617,10 @@ function averageTemperature(values){
   return valid.reduce((sum, value) => sum + value, 0) / valid.length;
 }
 
+function averageMetric(values){
+  return averageTemperature(values);
+}
+
 function getScheduledIntervalValues(values, hours){
   const valid = (values || []).filter(value => Number.isFinite(Number(value))).map(Number);
   if(!valid.length) return [];
@@ -634,40 +651,64 @@ function buildScheduledCollectionCard(d, values){
   const snapshotMax = Math.max(...snapshotValues);
   const intervalValues = getScheduledIntervalValues(values, config.hours);
   const intervalAverage = averageTemperature(intervalValues);
-  const intervalMin = intervalValues.length ? Math.min(...intervalValues) : null;
-  const intervalMax = intervalValues.length ? Math.max(...intervalValues) : null;
+  const humidityValues = [d.hum1, d.hum2].filter(value => Number.isFinite(Number(value))).map(Number);
+  const currentHumidity = Number.isFinite(Number(d.hum2 ?? d.hum1)) ? Number(d.hum2 ?? d.hum1) : null;
+  const humidityAverage = averageMetric(humidityValues);
+  const humidityMin = humidityValues.length ? Math.min(...humidityValues) : null;
+  const humidityMax = humidityValues.length ? Math.max(...humidityValues) : null;
   const selectedMetrics = config.metrics;
-  const showSnapshot = selectedMetrics.includes('temperature') || selectedMetrics.includes('minMax');
-  const showAverage = selectedMetrics.includes('average');
+  const showTemperatureSnapshot = selectedMetrics.includes('temperature') || selectedMetrics.includes('temperatureMinMax');
+  const showTemperatureAverage = selectedMetrics.includes('temperatureAverage');
+  const showHumiditySnapshot = selectedMetrics.includes('humidity') || selectedMetrics.includes('humidityMinMax');
+  const showHumidityAverage = selectedMetrics.includes('humidityAverage');
+  const showAverage = showTemperatureAverage || showHumidityAverage;
   const remainingText = timing.remaining === 1 ? 'Falta 1 coleta' : `Faltam ${timing.remaining} coletas`;
   const lastCollection = timing.last || new Date(config.updatedAt);
   const intervalEnd = lastCollection;
   const intervalStart = new Date(intervalEnd.getTime() - config.hours * 60 * 60 * 1000);
   const collectionCount = `${timing.completed} de ${timing.totalDaily}`;
 
-  const snapshotPanel = showSnapshot ? `
+  const panels = [];
+
+  if(showTemperatureSnapshot) panels.push(`
     <div class="graph-schedule-reading-panel">
       <span class="graph-schedule-panel-label">Temperatura coletada</span>
       ${selectedMetrics.includes('temperature') ? `<strong class="graph-schedule-main-value">${tempLabel(current)}</strong>` : ''}
-      ${selectedMetrics.includes('minMax') ? `
+      ${selectedMetrics.includes('temperatureMinMax') ? `
         <div class="graph-schedule-minmax">
           <div><span>Mín.</span><strong>${tempLabel(snapshotMin)}</strong></div>
           <div><span>Máx.</span><strong>${tempLabel(snapshotMax)}</strong></div>
         </div>
       ` : ''}
     </div>
-  ` : '';
+  `);
 
-  const averagePanel = showAverage ? `
+  if(showTemperatureAverage) panels.push(`
     <div class="graph-schedule-reading-panel">
-      <span class="graph-schedule-panel-label">Média</span>
+      <span class="graph-schedule-panel-label">Média da temperatura</span>
       <strong class="graph-schedule-main-value">${tempLabel(intervalAverage)}</strong>
-      <div class="graph-schedule-minmax">
-        <div><span>Mín.</span><strong>${tempLabel(intervalMin)}</strong></div>
-        <div><span>Máx.</span><strong>${tempLabel(intervalMax)}</strong></div>
-      </div>
     </div>
-  ` : '';
+  `);
+
+  if(showHumiditySnapshot) panels.push(`
+    <div class="graph-schedule-reading-panel">
+      <span class="graph-schedule-panel-label">Umidade coletada</span>
+      ${selectedMetrics.includes('humidity') ? `<strong class="graph-schedule-main-value">${humLabel(currentHumidity)}</strong>` : ''}
+      ${selectedMetrics.includes('humidityMinMax') ? `
+        <div class="graph-schedule-minmax">
+          <div><span>Mín.</span><strong>${humLabel(humidityMin)}</strong></div>
+          <div><span>Máx.</span><strong>${humLabel(humidityMax)}</strong></div>
+        </div>
+      ` : ''}
+    </div>
+  `);
+
+  if(showHumidityAverage) panels.push(`
+    <div class="graph-schedule-reading-panel">
+      <span class="graph-schedule-panel-label">Média da umidade</span>
+      <strong class="graph-schedule-main-value">${humLabel(humidityAverage)}</strong>
+    </div>
+  `);
 
   return `
     <div class="graph-mini-card graph-schedule-card">
@@ -675,14 +716,13 @@ function buildScheduledCollectionCard(d, values){
         <h3 class="graph-mini-title">Coleta programada</h3>
         <span class="graph-schedule-pill">A cada ${formatScheduledHours(config.hours)}</span>
       </div>
-      <div class="graph-mini-sub">Mostra a temperatura coletada e a média do intervalo selecionado.</div>
+      <div class="graph-mini-sub">Mostra somente os dados escolhidos para cada coleta programada.</div>
       <div class="graph-schedule-last-head">
         <span>Última coleta <strong>${formatScheduleClock(lastCollection)}</strong></span>
         <small>${formatScheduleDate(lastCollection)}</small>
       </div>
-      <div class="graph-schedule-readings ${showSnapshot && showAverage ? '' : 'single'}">
-        ${snapshotPanel}
-        ${averagePanel}
+      <div class="graph-schedule-readings ${panels.length === 1 ? 'single' : ''}">
+        ${panels.join('')}
       </div>
       ${showAverage ? `<div class="graph-schedule-interval">Período analisado: ${formatScheduleClock(intervalStart)} às ${formatScheduleClock(intervalEnd)}</div>` : ''}
       <div class="graph-schedule-meta-row">
@@ -6697,17 +6737,19 @@ document.addEventListener('DOMContentLoaded', function(){
   };
   const metricNames = {
     temperature: 'temperatura da coleta',
-    minMax: 'mínima e máxima',
-    average: 'média do período'
+    temperatureMinMax: 'temperatura: mín./máx.',
+    temperatureAverage: 'temperatura: média',
+    humidity: 'umidade da coleta',
+    humidityMinMax: 'umidade: mín./máx.',
+    humidityAverage: 'umidade: média'
   };
   const metricShortNames = {
     temperature: 'temperatura',
-    minMax: 'mín. e máx.',
-    average: 'média'
-  };
-  const snapshotMetricNames = {
-    temperature: ['a temperatura'],
-    minMax: ['a mínima', 'a máxima']
+    temperatureMinMax: 'temp. mín./máx.',
+    temperatureAverage: 'média temp.',
+    humidity: 'umidade',
+    humidityMinMax: 'umid. mín./máx.',
+    humidityAverage: 'média umid.'
   };
 
   function getEl(id){ return document.getElementById(id); }
@@ -6761,7 +6803,13 @@ document.addEventListener('DOMContentLoaded', function(){
     const hours = [1,2,3,4,6,12].includes(Number(raw.hours)) ? Number(raw.hours) : defaultConfig.hours;
     const scope = raw.scope === 'selected' ? 'selected' : 'all';
     const rawMetrics = Array.isArray(raw.metrics) ? raw.metrics : defaultConfig.metrics.slice();
-    const migratedMetrics = rawMetrics.flatMap(metric => (metric === 'min' || metric === 'max') ? ['minMax'] : [metric]);
+    const legacyAliases = {
+      min: 'temperatureMinMax',
+      max: 'temperatureMinMax',
+      minMax: 'temperatureMinMax',
+      average: 'temperatureAverage'
+    };
+    const migratedMetrics = rawMetrics.map(metric => legacyAliases[metric] || metric);
     const metrics = migratedMetrics.filter(metric => Object.prototype.hasOwnProperty.call(metricNames, metric));
     return {
       areaName: raw.areaName || currentAreaName(),
@@ -6864,8 +6912,8 @@ document.addEventListener('DOMContentLoaded', function(){
     const hours = selectedHours();
     const scope = selectedScope();
     const metrics = selectedMetrics();
-    const snapshotMetrics = metrics.filter(metric => metric !== 'average');
-    const hasAverage = metrics.includes('average');
+    const temperatureMetrics = metrics.filter(metric => metric.startsWith('temperature'));
+    const humidityMetrics = metrics.filter(metric => metric.startsWith('humidity'));
     const rows = getDeviceRows();
     const selectedCount = scope === 'selected' ? selectedDeviceIds().length : rows.length;
 
@@ -6878,12 +6926,19 @@ document.addEventListener('DOMContentLoaded', function(){
       : `A coleta será aplicada em todos os dispositivos da área atual (${rows.length}).`;
     const pieces = [scopeText, `A rotina será executada a cada ${formatHours(hours)}.`];
 
-    if(snapshotMetrics.length){
-      const snapshotLabel = joinPt(snapshotMetrics.flatMap(metric => snapshotMetricNames[metric] || []));
-      pieces.push(`No horário da coleta, o sistema registra ${snapshotLabel} com os valores exibidos naquele momento.`);
+    if(temperatureMetrics.length){
+      const details = [];
+      if(temperatureMetrics.includes('temperature')) details.push('coleta');
+      if(temperatureMetrics.includes('temperatureMinMax')) details.push('mín./máx.');
+      if(temperatureMetrics.includes('temperatureAverage')) details.push(`média das últimas ${formatHours(hours)}`);
+      pieces.push(`Temperatura: ${joinPt(details)}.`);
     }
-    if(hasAverage){
-      pieces.push(`A média usa as leituras de temperatura das últimas ${formatHours(hours)} antes da coleta. O resumo também mostra a mínima e a máxima encontradas nesse intervalo.`);
+    if(humidityMetrics.length){
+      const details = [];
+      if(humidityMetrics.includes('humidity')) details.push('coleta');
+      if(humidityMetrics.includes('humidityMinMax')) details.push('mín./máx.');
+      if(humidityMetrics.includes('humidityAverage')) details.push(`média das últimas ${formatHours(hours)}`);
+      pieces.push(`Umidade: ${joinPt(details)}.`);
     }
 
     return pieces.join(' ');

@@ -237,7 +237,7 @@
 
 
 
-<link rel='stylesheet' href='./styles.css?v=20260614-1604' />
+<link rel='stylesheet' href='./styles.css?v=20260614-1625' />
 </head>
 <body>
   <div class="app">
@@ -635,19 +635,41 @@
       <div class="info-field">
         <label>Dados registrados</label>
         <div class="scheduled-collection-summary" id="scheduledCollectionSummary"></div>
-        <div class="scheduled-metric-grid" id="scheduledMetricOptions">
-          <label class="scheduled-check-card active">
-            <input type="checkbox" value="temperature" checked>
-            <span>Temperatura da coleta</span>
-          </label>
-          <label class="scheduled-check-card">
-            <input type="checkbox" value="minMax">
-            <span>Mín. e Máx.</span>
-          </label>
-          <label class="scheduled-check-card">
-            <input type="checkbox" value="average">
-            <span>Média do período</span>
-          </label>
+        <div class="scheduled-metric-groups" id="scheduledMetricOptions">
+          <section class="scheduled-metric-group" aria-labelledby="scheduledTemperatureGroup">
+            <h3 id="scheduledTemperatureGroup">Temperatura</h3>
+            <div class="scheduled-metric-grid">
+              <label class="scheduled-check-card active">
+                <input type="checkbox" value="temperature" checked>
+                <span>Coleta</span>
+              </label>
+              <label class="scheduled-check-card">
+                <input type="checkbox" value="temperatureMinMax">
+                <span>Mín./Máx.</span>
+              </label>
+              <label class="scheduled-check-card">
+                <input type="checkbox" value="temperatureAverage">
+                <span>Média</span>
+              </label>
+            </div>
+          </section>
+          <section class="scheduled-metric-group" aria-labelledby="scheduledHumidityGroup">
+            <h3 id="scheduledHumidityGroup">Umidade</h3>
+            <div class="scheduled-metric-grid">
+              <label class="scheduled-check-card">
+                <input type="checkbox" value="humidity">
+                <span>Coleta</span>
+              </label>
+              <label class="scheduled-check-card">
+                <input type="checkbox" value="humidityMinMax">
+                <span>Mín./Máx.</span>
+              </label>
+              <label class="scheduled-check-card">
+                <input type="checkbox" value="humidityAverage">
+                <span>Média</span>
+              </label>
+            </div>
+          </section>
         </div>
       </div>
 
@@ -1165,7 +1187,7 @@
 
 
 
-<script src='./script.js?v=20260614-1604'></script>
+<script src='./script.js?v=20260614-1625'></script>
 </body>
 </html>
 
