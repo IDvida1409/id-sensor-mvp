@@ -80,6 +80,68 @@ function getCommunicationLabel(d){
   return d.online ? '' : `Sem comunicação · ${d.updated}`;
 }
 
+const criticalClockStarts = new Map();
+
+function getCriticalClockSeedSeconds(d){
+  const configured = Number(d?.criticalElapsedSeconds);
+  if(Number.isFinite(configured) && configured >= 0) return configured;
+  const id = Number(d?.id) || 1;
+  return (31 * 60) + ((id % 9) * 73);
+}
+
+function ensureCriticalClockStart(d){
+  if(!d) return null;
+  const key = String(d.id);
+  if(d.state !== 'crit'){
+    criticalClockStarts.delete(key);
+    return null;
+  }
+  if(!criticalClockStarts.has(key)){
+    criticalClockStarts.set(key, Date.now() - (getCriticalClockSeedSeconds(d) * 1000));
+  }
+  return criticalClockStarts.get(key);
+}
+
+function formatOperationalElapsed(totalSeconds){
+  const safe = Math.max(0, Math.floor(Number(totalSeconds) || 0));
+  const hours = String(Math.floor(safe / 3600)).padStart(2, '0');
+  const minutes = String(Math.floor((safe % 3600) / 60)).padStart(2, '0');
+  const seconds = String(safe % 60).padStart(2, '0');
+  return `${hours}:${minutes}:${seconds}`;
+}
+
+function getCriticalElapsedSeconds(d){
+  const startedAt = ensureCriticalClockStart(d);
+  return startedAt === null ? 0 : Math.floor((Date.now() - startedAt) / 1000);
+}
+
+function getStopwatchIcon(){
+  return `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="12" cy="13" r="7.2" stroke="currentColor" stroke-width="1.9"/>
+    <path d="M9.5 3h5M12 3v2.8M17.4 7.5l1.4-1.4M12 9.2V13l2.5 1.5" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>`;
+}
+
+function buildCriticalClockCard(d){
+  if(!d || d.state !== 'crit'){
+    if(d) criticalClockStarts.delete(String(d.id));
+    return '';
+  }
+  return `<div class="critical-clock-card" aria-label="Tempo em estado crítico">
+    <span class="critical-clock-icon">${getStopwatchIcon()}</span>
+    <span class="critical-clock-copy"><small>Em crítico</small><strong data-critical-timer="${d.id}">${formatOperationalElapsed(getCriticalElapsedSeconds(d))}</strong></span>
+  </div>`;
+}
+
+function updateOperationalClocks(){
+  document.querySelectorAll('[data-critical-timer]').forEach(el => {
+    const d = devices.find(item => String(item.id) === String(el.dataset.criticalTimer));
+    if(d && d.state === 'crit') el.textContent = formatOperationalElapsed(getCriticalElapsedSeconds(d));
+  });
+}
+
+setInterval(updateOperationalClocks, 1000);
+
 function getThermoVisual(d){
   const nearLimit = d.temp !== null && (Math.abs(d.max - d.temp) <= 0.8 || Math.abs(d.temp - d.min) <= 0.8 || (d.timerLabel || '').toLowerCase().includes('próximo do limite'));
   if(d.state === 'maint') return {level:0, fill:'#c6ced8', bulb:'#c6ced8'};
@@ -177,6 +239,8 @@ function buildSmallCard(d){
       </div>
       <div class="comm-label ${d.online ? 'active' : 'inactive'}">${getCommunicationLabel(d)}</div>
     </div>
+
+    ${buildCriticalClockCard(d)}
 
     <div class="bottom-meta"><div class="left-meta">${batteryHTML}</div><div class="right-meta"><span class="drop"></span> ${humLabel(d.hum2 ?? d.hum1)}</div></div>
     </div>
@@ -390,27 +454,6 @@ function bigChartPaths(values){
   const area = `${line} L ${width} ${height} L 0 ${height} Z`;
   return {line, area, y, step, width, height};
 }
-
-function buildTelemetryPath(values){
-  const width = 520, height = 180, min = 0, max = 12;
-  const dense = [];
-  for(let i=0;i<values.length-1;i++){
-    const a = values[i], b = values[i+1];
-    for(let k=0;k<4;k++) dense.push(a + ((b-a)*(k/4)));
-  }
-  dense.push(values[values.length-1]);
-  const step = 472 / Math.max(1, dense.length-1);
-  const y = v => 138 - ((v-min)/(max-min))*84;
-  let line = `M 24 ${y(dense[0]).toFixed(1)}`;
-  for(let i=1;i<dense.length;i++){
-    const x = 24 + i*step;
-    const mid = x - step/2;
-    line += ` C ${mid.toFixed(1)} ${y(dense[i-1]).toFixed(1)} ${mid.toFixed(1)} ${y(dense[i]).toFixed(1)} ${x.toFixed(1)} ${y(dense[i]).toFixed(1)}`;
-  }
-  const area = `${line} L 496 138 L 24 138 Z`;
-  return {line, area};
-}
-
 
 const GRAPH_STATUS_POINT_META = {
   defrost: { label:'Degelo', color:'#7f69c6' },
@@ -830,6 +873,112 @@ function getReportIcon(){
   </svg>`;
 }
 
+function getOperationalTelemetryIcon(kind){
+  const icons = {
+    communication: `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 16.5a10.5 10.5 0 0 1 14 0M8 13a6.2 6.2 0 0 1 8 0M10.7 9.8a2.3 2.3 0 0 1 2.6 0" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="19" r="1.4" fill="currentColor"/></svg>`,
+    variation: `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 16.5 8.4 12l3.2 2.8L19.5 7" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><path d="M15.5 7h4v4" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+    alerts: `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M18 9a6 6 0 0 0-12 0v3.2c0 1-.3 1.9-.9 2.7L4 16.5h16l-1.1-1.6a4.6 4.6 0 0 1-.9-2.7V9Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M9.5 19a2.7 2.7 0 0 0 5 0" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`,
+    silence: `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m5 5 14 14M8.2 8.2A5.8 5.8 0 0 0 6 12v2.2c0 .8-.3 1.6-.8 2.3L4 18h12M10 21h4M16.7 13.7V12a5.8 5.8 0 0 0-7.9-5.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+  };
+  return icons[kind] || icons.variation;
+}
+
+function buildOperationalTelemetryCard(d, values){
+  const safeValues = (Array.isArray(values) ? values : []).map(Number).filter(Number.isFinite);
+  const latest = safeValues.length ? safeValues[safeValues.length - 1] : Number(d.temp) || 0;
+  const initial = safeValues.length ? safeValues[Math.max(0, safeValues.length - 4)] : latest;
+  const maximum = safeValues.length ? Math.max(...safeValues) : latest;
+  const variation = latest - initial;
+  const variationLabel = `${variation >= 0 ? '+' : ''}${variation.toFixed(1)}°C`;
+  const rapidVariation = Math.abs(variation) >= 1;
+  const isCritical = d.state === 'crit';
+  const statusClass = isCritical ? 'is-critical' : (d.state === 'warn' ? 'is-attention' : 'is-normal');
+  const statusLabel = isCritical ? 'CRÍTICO EM ANDAMENTO' : (d.state === 'warn' ? 'ATENÇÃO EM ANDAMENTO' : 'OPERAÇÃO NORMAL');
+  const statusValue = isCritical
+    ? `<strong data-critical-timer="${d.id}">${formatOperationalElapsed(getCriticalElapsedSeconds(d))}</strong>`
+    : `<strong>${d.state === 'warn' ? '00:18:24' : 'Dentro do limite'}</strong>`;
+  const communicationValue = d.online === false ? 'Interrompida' : 'Restabelecida';
+  const communicationDetail = d.online === false ? 'Sem comunicação há 15 min' : 'Interrupção de 6 min · retorno às 14:41';
+  const smsCount = 2 + ((Number(d.id) || 1) % 2);
+  const emailCount = 1 + ((Number(d.id) || 1) % 2);
+  const whatsappCount = 2 + ((Number(d.id) || 1) % 3);
+  const timelineEvents = [
+    {time:'15:25', tone:'neutral', title:'Silêncio encerrado', detail:'Painel voltou a emitir alertas sonoros.'},
+    {time:'15:22', tone:'critical', title:`Temperatura máxima: ${tempLabel(maximum)}`, detail:'Maior valor registrado durante a ocorrência.'},
+    {time:'15:10', tone:'silence', title:'Painel silenciado', detail:'Silêncio de 15 minutos, sem identificação de pessoa.'},
+    {time:'14:50', tone:'critical', title:'Crítico iniciado', detail:'Permanência fora do limite atingiu a regra configurada.'},
+    {time:'14:50', tone:'alert', title:'Alertas enviados', detail:`SMS ${smsCount} · E-mail ${emailCount} · WhatsApp ${whatsappCount}`},
+    {time:'14:41', tone:'normal', title:'Comunicação restabelecida', detail:'Transmissão retomada após 6 minutos.'},
+    {time:'14:35', tone:'offline', title:'Comunicação interrompida', detail:'O painel deixou de receber novas leituras.'},
+    {time:'14:28', tone:rapidVariation ? 'attention' : 'normal', title:rapidVariation ? 'Variação rápida detectada' : 'Variação estável', detail:`Mudança de ${variationLabel} em 18 minutos.`},
+    {time:'14:20', tone:'attention', title:'Atenção iniciada', detail:'Temperatura saiu do limite configurado.'}
+  ];
+
+  return `
+    <details class="graph-mini-card telemetry-accordion">
+      <summary>
+        <span class="telemetry-heading-row">
+          <span class="telemetry-title-icon">${getStopwatchIcon()}</span>
+          <span class="telemetry-heading-copy">
+            <strong>Telemetria operacional</strong>
+            <small>Eventos, duração e ações das últimas 24 horas.</small>
+          </span>
+          <span class="telemetry-chevron" aria-hidden="true">⌄</span>
+        </span>
+        <span class="telemetry-active ${statusClass}">
+          <span class="telemetry-active-icon">${getStopwatchIcon()}</span>
+          <span class="telemetry-active-copy"><small>${statusLabel}</small>${statusValue}</span>
+        </span>
+        <span class="telemetry-quick-grid">
+          <span class="telemetry-quick-item">
+            <span class="telemetry-quick-icon communication">${getOperationalTelemetryIcon('communication')}</span>
+            <span><small>Comunicação</small><strong>${communicationValue}</strong><em>${communicationDetail}</em></span>
+          </span>
+          <span class="telemetry-quick-item">
+            <span class="telemetry-quick-icon variation">${getOperationalTelemetryIcon('variation')}</span>
+            <span><small>Variação rápida</small><strong>${rapidVariation ? variationLabel : 'Não detectada'}</strong><em>${rapidVariation ? 'em 18 minutos' : 'Comportamento estável'}</em></span>
+          </span>
+          <span class="telemetry-quick-item">
+            <span class="telemetry-quick-icon alerts">${getOperationalTelemetryIcon('alerts')}</span>
+            <span><small>Alertas enviados</small><strong>${smsCount + emailCount + whatsappCount}</strong><em>SMS, e-mail e WhatsApp</em></span>
+          </span>
+        </span>
+        <span class="telemetry-expand-hint">Clique para expandir a linha do tempo</span>
+      </summary>
+      <div class="telemetry-expanded-content">
+        <div class="telemetry-detail-grid">
+          <div class="telemetry-detail-card">
+            <span class="telemetry-detail-icon variation">${getOperationalTelemetryIcon('variation')}</span>
+            <div><small>Variação térmica</small><strong>${tempLabel(initial)} → ${tempLabel(latest)}</strong><span>${variationLabel} em 18 minutos · sem cálculo de média</span></div>
+          </div>
+          <div class="telemetry-detail-card">
+            <span class="telemetry-detail-icon alerts">${getOperationalTelemetryIcon('alerts')}</span>
+            <div><small>Canais acionados</small><strong>SMS ${smsCount} · E-mail ${emailCount}</strong><span>WhatsApp ${whatsappCount}</span></div>
+          </div>
+          <div class="telemetry-detail-card">
+            <span class="telemetry-detail-icon silence">${getOperationalTelemetryIcon('silence')}</span>
+            <div><small>Painel silenciado</small><strong>15:10 às 15:25</strong><span>Duração 15 min · 2 alertas registrados</span></div>
+          </div>
+        </div>
+        <div class="telemetry-timeline-head">
+          <div><strong>Linha do tempo operacional</strong><small>Ocorrências em ordem da mais recente para a mais antiga.</small></div>
+          <span>Últimas 24h</span>
+        </div>
+        <div class="telemetry-timeline">
+          ${timelineEvents.map(event => `
+            <div class="telemetry-event ${event.tone}">
+              <time>${event.time}</time>
+              <span class="telemetry-event-dot"></span>
+              <div><strong>${event.title}</strong><small>${event.detail}</small></div>
+            </div>
+          `).join('')}
+        </div>
+        <button class="graph-primary-btn telemetry-download-btn" type="button">Baixar telemetria do dia</button>
+      </div>
+    </details>
+  `;
+}
+
 function buildGraphModal(d, graphState = {period:'daily', view:'summary'}){
   const periodSets = {
     daily: {
@@ -885,7 +1034,6 @@ function buildGraphModal(d, graphState = {period:'daily', view:'summary'}){
   }
 
   const paths = bigChartPaths(values);
-  const telemetry = buildTelemetryPath(values);
   const current = values[values.length-1];
   const maxTemp = Math.max(...values);
   const minTemp = Math.min(...values);
@@ -1049,33 +1197,7 @@ function buildGraphModal(d, graphState = {period:'daily', view:'summary'}){
           </div>
 
           <div class="graph-side-stack">
-            <div class="graph-mini-card">
-              <h3 class="graph-mini-title">Telemetria</h3>
-              <div class="graph-mini-sub">Monitoramento contínuo ao longo do dia para acompanhar variações de forma mais detalhada.</div>
-              <div class="graph-mini-wrap">
-                <svg class="graph-mini-svg" viewBox="0 0 520 180" xmlns="http://www.w3.org/2000/svg" aria-label="Telemetria de ${d.name}">
-                  <defs>
-                    <linearGradient id="teleArea${d.id}" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stop-color="#2ea8ff" stop-opacity=".18"/>
-                      <stop offset="100%" stop-color="#2ea8ff" stop-opacity=".03"/>
-                    </linearGradient>
-                  </defs>
-                  <rect x="8" y="18" width="504" height="120" rx="16" fill="#f8fbff" stroke="#dfe8f3"/>
-                  <g opacity=".45">
-                    <line x1="24" y1="42" x2="496" y2="42" stroke="#d9e3ef"/>
-                    <line x1="24" y1="72" x2="496" y2="72" stroke="#d9e3ef"/>
-                    <line x1="24" y1="102" x2="496" y2="102" stroke="#d9e3ef"/>
-                    <line x1="24" y1="132" x2="496" y2="132" stroke="#d9e3ef"/>
-                  </g>
-                  <path d="${telemetry.area}" fill="url(#teleArea${d.id})"></path>
-                  <path d="${telemetry.line}" fill="none" stroke="#2ea8ff" stroke-width="3" stroke-linecap="round"></path>
-                </svg>
-                <div class="graph-mini-note">Leitura contínua ao longo das últimas 24 horas.</div>
-              </div>
-              <div style="margin-top:10px">
-                <button class="graph-primary-btn">Baixar telemetria do dia</button>
-              </div>
-            </div>
+            ${buildOperationalTelemetryCard(d, values)}
 
             ${buildScheduledCollectionCard(d, values)}
 
@@ -1125,6 +1247,7 @@ function renderGraphModal(){
   root.innerHTML = buildGraphModal(d, currentGraphState);
   document.getElementById('closeGraphWorkspace').addEventListener('click', closeGraphModal);
   document.getElementById('graphWorkspaceBackdrop').addEventListener('click', closeGraphModal);
+  updateOperationalClocks();
 }
 
 function setGraphPeriod(period){
