@@ -651,8 +651,8 @@ function buildScheduledCollectionCard(d, values){
       ${selectedMetrics.includes('temperature') ? `<strong class="graph-schedule-main-value">${tempLabel(current)}</strong>` : ''}
       ${selectedMetrics.includes('minMax') ? `
         <div class="graph-schedule-minmax">
-          <div><span>Mín.</span><em>·</em><strong>${tempLabel(snapshotMin)}</strong></div>
-          <div><span>Máx.</span><em>·</em><strong>${tempLabel(snapshotMax)}</strong></div>
+          <div><span>Mín.</span><strong>${tempLabel(snapshotMin)}</strong></div>
+          <div><span>Máx.</span><strong>${tempLabel(snapshotMax)}</strong></div>
         </div>
       ` : ''}
     </div>
@@ -660,11 +660,11 @@ function buildScheduledCollectionCard(d, values){
 
   const averagePanel = showAverage ? `
     <div class="graph-schedule-reading-panel">
-      <span class="graph-schedule-panel-label">Últimas ${formatScheduledHours(config.hours)}</span>
-      <div class="graph-schedule-average-value"><span>Média</span><strong>${tempLabel(intervalAverage)}</strong></div>
+      <span class="graph-schedule-panel-label">Média</span>
+      <strong class="graph-schedule-main-value">${tempLabel(intervalAverage)}</strong>
       <div class="graph-schedule-minmax">
-        <div><span>Mín.</span><em>·</em><strong>${tempLabel(intervalMin)}</strong></div>
-        <div><span>Máx.</span><em>·</em><strong>${tempLabel(intervalMax)}</strong></div>
+        <div><span>Mín.</span><strong>${tempLabel(intervalMin)}</strong></div>
+        <div><span>Máx.</span><strong>${tempLabel(intervalMax)}</strong></div>
       </div>
     </div>
   ` : '';
