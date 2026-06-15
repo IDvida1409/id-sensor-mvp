@@ -901,6 +901,38 @@ function formatTelemetryShortDuration(totalSeconds){
   return minutes ? `${hours}h ${minutes}min` : `${hours}h`;
 }
 
+function escapeTelemetryText(value){
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function telemetryToneClass(value){
+  const tone = String(value || '').toLowerCase();
+  return ['limit','normal','attention','critical','offline','alert','silence','maintenance','defrost'].includes(tone)
+    ? tone
+    : 'normal';
+}
+
+function normalizeTelemetryChannels(channels){
+  const fallback = [
+    {tone:'sms', icon:'sms', label:'SMS', total:3},
+    {tone:'email', icon:'email', label:'E-mail', total:2},
+    {tone:'whatsapp', icon:'whatsapp', label:'WhatsApp', total:3}
+  ];
+
+  if(!Array.isArray(channels) || !channels.length) return fallback;
+  return channels.map((channel, index) => ({
+    tone: channel.tone || fallback[index]?.tone || 'sms',
+    icon: channel.icon || fallback[index]?.icon || 'sms',
+    label: channel.label || fallback[index]?.label || 'Canal',
+    total: Number.isFinite(Number(channel.total)) ? Number(channel.total) : 0
+  }));
+}
+
 function buildOperationalTelemetryCard(d, values){
   const safeValues = (Array.isArray(values) ? values : []).map(Number).filter(Number.isFinite);
   const latest = safeValues.length ? safeValues[safeValues.length - 1] : Number(d.temp) || 0;
@@ -915,8 +947,16 @@ function buildOperationalTelemetryCard(d, values){
   const variationLabel = `${variation >= 0 ? '+' : ''}${variation.toFixed(1)}°C`;
   const variationTargetLabel = variationIsUp ? 'Pico atingido' : 'Menor ponto';
   const variationClass = variation >= 0 ? 'up' : 'down';
+  const telemetry = d.operationalTelemetry || {};
+  const telemetryActive = telemetry.active || {};
+  const telemetryDurations = telemetry.durations || {};
   const criticalElapsed = getCriticalElapsedSeconds(d);
-  const criticalTotalLabel = d.state === 'crit' ? formatTelemetryShortDuration(criticalElapsed) : '32 min';
+  const criticalSeconds = d.state === 'crit'
+    ? criticalElapsed
+    : Number(telemetryDurations.criticalSeconds || 0);
+  const attentionSeconds = Number(telemetryDurations.attentionSeconds || 0);
+  const offlineSeconds = Number(telemetryDurations.offlineSeconds || 0);
+  const criticalTotalLabel = criticalSeconds > 0 ? formatTelemetryShortDuration(criticalSeconds) : '32 min';
   const outOfRangeTime = d.state === 'crit' ? formatTelemetryShortDuration(criticalElapsed) : '1h20';
   const isCritical = d.state === 'crit';
   const isAttention = d.state === 'warn';
@@ -927,13 +967,9 @@ function buildOperationalTelemetryCard(d, values){
     ? `<strong data-critical-timer="${d.id}">${formatOperationalElapsed(criticalElapsed)}</strong>`
     : (isAttention ? '<strong>00:18:24</strong>' : (isOffline ? '<strong>00:15:00</strong>' : `<strong>${tempLabel(latest)}</strong>`));
   const statusSub = isCritical
-    ? 'Início 14:32'
-    : (isAttention ? 'Início 15:06' : (isOffline ? 'Última comunicação 14:35' : 'Última normalização 15:45'));
-  const alertChannels = [
-    {tone:'sms', icon:'sms', label:'SMS', total:3},
-    {tone:'email', icon:'email', label:'E-mail', total:2},
-    {tone:'whatsapp', icon:'whatsapp', label:'WhatsApp', total:3}
-  ];
+    ? (telemetryActive.startedLabel || 'Início 14:32')
+    : (isAttention ? (telemetryActive.startedLabel || 'Início 15:06') : (isOffline ? (telemetryActive.startedLabel || 'Última comunicação 14:35') : 'Última normalização 15:45'));
+  const alertChannels = normalizeTelemetryChannels(telemetry.alertChannels);
   const smsCount = alertChannels[0].total;
   const emailCount = alertChannels[1].total;
   const whatsappCount = alertChannels[2].total;
@@ -943,7 +979,10 @@ function buildOperationalTelemetryCard(d, values){
     {tone:'critical', icon:'critical', label:'Crítico', value:criticalTotalLabel},
     {tone:'offline', icon:'communication', label:'Sem comunicação', value:'15 min'}
   ];
-  const timelineEvents = [
+  statusCards[1].value = attentionSeconds > 0 ? formatTelemetryShortDuration(attentionSeconds) : statusCards[1].value;
+  statusCards[3].value = offlineSeconds > 0 ? formatTelemetryShortDuration(offlineSeconds) : statusCards[3].value;
+
+  const fallbackTimelineEvents = [
     {time:'15:45', tone:'normal', title:'Temperatura normalizada', detail:'Leitura voltou para dentro do limite configurado.'},
     {time:'15:38', tone:'critical', title:'Crítico encerrado', detail:'Equipamento deixou o estado crítico.'},
     {time:'15:30', tone:'normal', title:'Comunicação restabelecida', detail:'Painel voltou a receber leituras do sensor.'},
@@ -957,6 +996,9 @@ function buildOperationalTelemetryCard(d, values){
     {time:'14:20', tone:'attention', title:'Atenção iniciada', detail:'Temperatura permaneceu fora do limite antes de virar crítico.'},
     {time:'14:20', tone:'attention', title:'Temperatura saiu do limite configurado', detail:'Primeiro ponto fora do intervalo permitido.'}
   ];
+  const timelineEvents = Array.isArray(telemetry.events) && telemetry.events.length
+    ? telemetry.events
+    : fallbackTimelineEvents;
 
   return `
     <details class="graph-mini-card telemetry-accordion">
@@ -1010,10 +1052,10 @@ function buildOperationalTelemetryCard(d, values){
         </div>
         <div class="telemetry-timeline">
           ${timelineEvents.map(event => `
-            <div class="telemetry-event ${event.tone}">
-              <time>${event.time}</time>
+            <div class="telemetry-event ${telemetryToneClass(event.tone)}">
+              <time>${escapeTelemetryText(event.time)}</time>
               <span class="telemetry-event-dot"></span>
-              <div><strong>${event.title}</strong><small>${event.detail}</small></div>
+              <div><strong>${escapeTelemetryText(event.title)}</strong><small>${escapeTelemetryText(event.detail)}</small></div>
             </div>
           `).join('')}
         </div>
@@ -1181,9 +1223,9 @@ function buildGraphModal(d, graphState = {period:'daily', view:'summary'}){
             <div class="graph-wrap">
               <div class="graph-legend">
                 <div class="graph-legend-item"><span class="graph-line-swatch"></span> Temperatura</div>
-                <div class="graph-legend-item"><span class="graph-band-swatch"></span> Limite seguro: 2°C a 8°C</div>
-                <div class="graph-legend-item"><span class="graph-near-swatch"></span> Próximo do limite</div>
-                <div class="graph-legend-item"><span class="graph-risk-swatch"></span> Fora do limite</div>
+                <div class="graph-legend-item"><span class="graph-band-swatch"></span> Dentro do limite: 2°C a 8°C</div>
+                <div class="graph-legend-item"><span class="graph-near-swatch"></span> Atenção</div>
+                <div class="graph-legend-item"><span class="graph-risk-swatch"></span> Crítico</div>
                 ${statusMarkerLayer.legend}
               </div>
 
@@ -1282,6 +1324,20 @@ function getCalendarIcon(){
   </svg>`;
 }
 
+function normalizeGraphLegendLabels(root = document){
+  const replacements = [
+    ['graph-band-swatch', 'Dentro do limite: 2°C a 8°C'],
+    ['graph-near-swatch', 'Atenção'],
+    ['graph-risk-swatch', 'Crítico']
+  ];
+
+  replacements.forEach(([className, label]) => {
+    const swatch = root.querySelector(`.${className}`);
+    const item = swatch?.closest('.graph-legend-item');
+    if(item) item.innerHTML = `<span class="${className}"></span> ${label}`;
+  });
+}
+
 
 function renderGraphModal(){
   const d = devices.find(x => x.id === currentGraphDeviceId);
@@ -1289,6 +1345,7 @@ function renderGraphModal(){
   const root = document.getElementById('graphWorkspaceRoot');
   if(!root) return;
   root.innerHTML = buildGraphModal(d, currentGraphState);
+  normalizeGraphLegendLabels(root);
   document.getElementById('closeGraphWorkspace').addEventListener('click', closeGraphModal);
   document.getElementById('graphWorkspaceBackdrop').addEventListener('click', closeGraphModal);
   updateOperationalClocks();

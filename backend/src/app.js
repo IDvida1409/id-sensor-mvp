@@ -764,6 +764,144 @@ function buildAlert(row) {
   };
 }
 
+function formatTelemetryTime(value) {
+  const date = value ? new Date(value) : new Date();
+  if (!Number.isFinite(date.getTime())) return '--:--';
+
+  return date.toLocaleTimeString('pt-BR', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZone: 'America/Sao_Paulo'
+  });
+}
+
+function secondsSince(value) {
+  const startedAt = value ? new Date(value).getTime() : Date.now();
+  if (!Number.isFinite(startedAt)) return 0;
+  return Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
+}
+
+function alertDurationSeconds(alert) {
+  if (!alert?.criado_em) return 0;
+  const startedAt = new Date(alert.criado_em).getTime();
+  const endedAt = alert.encerrado_em ? new Date(alert.encerrado_em).getTime() : Date.now();
+  if (!Number.isFinite(startedAt) || !Number.isFinite(endedAt)) return 0;
+  return Math.max(0, Math.floor((endedAt - startedAt) / 1000));
+}
+
+function telemetryEventForAlert(alert) {
+  const time = formatTelemetryTime(alert.criado_em);
+  const type = String(alert.tipo_alerta || '').toLowerCase();
+  const temp = Number(alert.temperatura_atual);
+  const tempText = Number.isFinite(temp) ? `${temp.toFixed(1)}°C` : 'leitura registrada';
+
+  if (type.includes('critico')) {
+    return [
+      {
+        time,
+        tone: 'critical',
+        title: 'Crítico iniciado',
+        detail: `Permanência fora do limite atingiu a regra configurada (${tempText}).`
+      },
+      {
+        time,
+        tone: 'alert',
+        title: 'Primeiro alerta enviado',
+        detail: 'Canais configurados foram acionados pela simulação.'
+      }
+    ];
+  }
+
+  if (type.includes('offline')) {
+    return [{
+      time,
+      tone: 'offline',
+      title: 'Comunicação interrompida',
+      detail: 'Dispositivo ficou sem transmitir leituras ao painel.'
+    }];
+  }
+
+  if (type.includes('atencao')) {
+    return [{
+      time,
+      tone: 'attention',
+      title: 'Temperatura saiu do limite configurado',
+      detail: `Primeiro registro fora do intervalo permitido (${tempText}).`
+    }];
+  }
+
+  return [{
+    time,
+    tone: alert.severidade === 'critica' ? 'critical' : 'attention',
+    title: alert.mensagem || 'Evento registrado',
+    detail: `Evento registrado pela simulação (${tempText}).`
+  }];
+}
+
+function buildOperationalTelemetry(db, row) {
+  const status = String(row.status || 'normal').toLowerCase();
+  const alerts = db.prepare(`
+    SELECT *
+    FROM alerts
+    WHERE dispositivo_id = ?
+    ORDER BY criado_em DESC
+    LIMIT 8
+  `).all(row.id);
+
+  const activeAlert = alerts.find((alert) => alert.status === 'ativo') || null;
+  const events = alerts.flatMap(telemetryEventForAlert);
+
+  if (!events.length) {
+    events.push({
+      time: formatTelemetryTime(row.atualizado_em || new Date()),
+      tone: status === 'offline' ? 'offline' : 'limit',
+      title: status === 'offline' ? 'Sem comunicação registrada' : 'Dentro do limite',
+      detail: status === 'offline'
+        ? 'Último estado do dispositivo indica ausência de comunicação.'
+        : 'Leitura atual dentro do intervalo configurado.'
+    });
+  }
+
+  const criticalAlert = alerts.find((alert) => String(alert.tipo_alerta || '').includes('critico'));
+  const attentionAlert = alerts.find((alert) => String(alert.tipo_alerta || '').includes('atencao'));
+  const offlineAlert = alerts.find((alert) => String(alert.tipo_alerta || '').includes('offline'));
+  const activeStartedAt = activeAlert?.criado_em || row.atualizado_em;
+  const activeElapsedSeconds = activeAlert ? alertDurationSeconds(activeAlert) : 0;
+
+  return {
+    active: {
+      status,
+      startedAt: activeStartedAt,
+      startedLabel: activeAlert ? `Início ${formatTelemetryTime(activeAlert.criado_em)}` : null,
+      elapsedSeconds: activeElapsedSeconds
+    },
+    durations: {
+      criticalSeconds: criticalAlert ? alertDurationSeconds(criticalAlert) : 0,
+      attentionSeconds: attentionAlert ? alertDurationSeconds(attentionAlert) : 0,
+      offlineSeconds: offlineAlert ? alertDurationSeconds(offlineAlert) : 0
+    },
+    alertChannels: [
+      { tone: 'sms', icon: 'sms', label: 'SMS', total: alerts.length ? 3 : 0 },
+      { tone: 'email', icon: 'email', label: 'E-mail', total: alerts.length ? 2 : 0 },
+      { tone: 'whatsapp', icon: 'whatsapp', label: 'WhatsApp', total: alerts.length ? 3 : 0 }
+    ],
+    events: events.slice(0, 12)
+  };
+}
+
+function buildDeviceCardWithTelemetry(db, row) {
+  const card = buildDeviceCard(row);
+  const operationalTelemetry = buildOperationalTelemetry(db, row);
+  card.operationalTelemetry = operationalTelemetry;
+
+  if (card.state === 'crit' && operationalTelemetry.active?.elapsedSeconds) {
+    card.criticalElapsedSeconds = operationalTelemetry.active.elapsedSeconds;
+  }
+
+  return card;
+}
+
 function applyAppDeviceAlertBaseline(rows, appDevice) {
   const activatedAt = appDevice?.criado_em;
   if (!activatedAt) return rows;
@@ -828,9 +966,10 @@ addRoute('POST', '/seed', async ({ res }) => {
 });
 
 addRoute('GET', '/devices', async ({ res }) => {
-  advanceSimulationIfNeeded(getDb());
-  const rows = getDb().prepare(deviceSelectSql('ORDER BY d.nome ASC')).all();
-  ok(res, rows.map(buildDeviceCard));
+  const db = getDb();
+  advanceSimulationIfNeeded(db);
+  const rows = db.prepare(deviceSelectSql('ORDER BY d.nome ASC')).all();
+  ok(res, rows.map((row) => buildDeviceCardWithTelemetry(db, row)));
 });
 
 addRoute('GET', '/q/:codigo', async ({ params, res }) => {
@@ -847,7 +986,7 @@ addRoute('GET', '/q/:codigo', async ({ params, res }) => {
     ));
   }
 
-  return html(res, 200, renderDeviceQrPage(buildDeviceCard(row), code));
+  return html(res, 200, renderDeviceQrPage(buildDeviceCardWithTelemetry(db, row), code));
 });
 
 addRoute('GET', '/a/:codigo', async ({ params, req, res }) => {
@@ -894,7 +1033,7 @@ addRoute('GET', '/devices/by-code/:codigo', async ({ params, req, res }) => {
 addRoute('GET', '/devices/:id', async ({ params, res }) => {
   const row = getDeviceById(params.id);
   if (!row) return fail(res, 404, 'Dispositivo não encontrado.');
-  ok(res, buildDeviceCard(row));
+  ok(res, buildDeviceCardWithTelemetry(getDb(), row));
 });
 
 addRoute('POST', '/devices/:id/update-status', async ({ params, body, res }) => {
@@ -913,7 +1052,7 @@ addRoute('POST', '/devices/:id/update-status', async ({ params, body, res }) => 
     WHERE id = ?
   `).run(temperatura, status, ultimaComunicacao, nowIso(), params.id);
 
-  ok(res, buildDeviceCard(getDeviceById(params.id)));
+  ok(res, buildDeviceCardWithTelemetry(getDb(), getDeviceById(params.id)));
 });
 
 addRoute('GET', '/simulation/status', async ({ res }) => {
