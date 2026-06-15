@@ -1493,10 +1493,14 @@ function analyticalDuration(totalSeconds){
 
 function analyticalLongDuration(totalSeconds){
   const safe = Math.max(0, Number(totalSeconds) || 0);
-  const hours = Math.floor(safe / 3600);
+  const days = Math.floor(safe / 86400);
+  const hours = Math.floor((safe % 86400) / 3600);
   const minutes = Math.floor((safe % 3600) / 60);
-  if(!hours) return `${minutes}min`;
-  return `${hours.toLocaleString('pt-BR')}h ${String(minutes).padStart(2,'0')}min`;
+  const parts = [];
+  if(days) parts.push(`${days}d`);
+  if(hours) parts.push(`${hours}h`);
+  if(minutes || !parts.length) parts.push(`${minutes}min`);
+  return parts.join(' ');
 }
 
 function buildAnalyticalReportModel(d){
