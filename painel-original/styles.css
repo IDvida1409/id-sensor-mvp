@@ -8988,9 +8988,9 @@ body.density-compact .critical-clock-copy strong{
   border:1px solid;
   border-radius:14px;
   display:flex;
-  gap:12px;
-  margin-top:12px;
-  padding:12px 14px;
+  gap:10px;
+  margin-top:10px;
+  padding:10px 12px;
 }
 
 .telemetry-active-card.is-critical{
@@ -9021,25 +9021,25 @@ body.density-compact .critical-clock-copy strong{
   background:transparent;
   border:0;
   border-radius:0;
-  flex:0 0 38px;
-  height:38px;
-  width:38px;
+  flex:0 0 32px;
+  height:32px;
+  width:32px;
 }
 
 .telemetry-active-card .telemetry-active-icon svg{
-  height:36px;
-  width:36px;
+  height:30px;
+  width:30px;
 }
 
 .telemetry-active-card .telemetry-active-copy small{
   color:currentColor;
-  font-size:10px;
+  font-size:9px;
   letter-spacing:.06em;
 }
 
 .telemetry-active-card .telemetry-active-copy strong{
   color:#10213a;
-  font-size:22px;
+  font-size:19px;
   font-weight:900;
   letter-spacing:-.02em;
   margin-top:3px;
@@ -9047,7 +9047,7 @@ body.density-compact .critical-clock-copy strong{
 
 .telemetry-active-card .telemetry-active-copy em{
   color:#64748b;
-  font-size:11px;
+  font-size:10px;
   font-style:normal;
   font-weight:700;
   margin-top:2px;
@@ -9055,41 +9055,41 @@ body.density-compact .critical-clock-copy strong{
 
 .telemetry-status-grid{
   display:grid;
-  gap:7px;
+  gap:6px;
   grid-template-columns:repeat(4,minmax(0,1fr));
-  margin-top:10px;
+  margin-top:9px;
 }
 
 .telemetry-status-card{
   align-items:center;
   background:#fff;
   border:1px solid #e1e8f2;
-  border-radius:12px;
+  border-radius:11px;
   display:grid;
-  gap:5px;
-  grid-template-columns:22px minmax(0,1fr);
-  min-height:50px;
-  padding:8px 7px;
+  gap:4px;
+  grid-template-columns:19px minmax(0,1fr);
+  min-height:42px;
+  padding:6px 6px;
 }
 
 .telemetry-status-icon{
   align-items:center;
   border-radius:999px;
   display:flex;
-  height:22px;
+  height:19px;
   justify-content:center;
-  width:22px;
+  width:19px;
 }
 
 .telemetry-status-icon svg{
-  height:19px;
-  width:19px;
+  height:17px;
+  width:17px;
 }
 
 .telemetry-status-card small{
   color:#64748b;
   display:block;
-  font-size:8px;
+  font-size:7.5px;
   font-weight:800;
   line-height:1.15;
   overflow-wrap:anywhere;
@@ -9098,7 +9098,7 @@ body.density-compact .critical-clock-copy strong{
 .telemetry-status-card strong{
   color:#12233d;
   display:block;
-  font-size:15px;
+  font-size:13px;
   font-weight:900;
   line-height:1.05;
   margin-top:2px;
@@ -9120,7 +9120,7 @@ body.density-compact .critical-clock-copy strong{
 
 .telemetry-channel-grid{
   display:grid;
-  gap:8px;
+  gap:7px;
   grid-template-columns:repeat(3,minmax(0,1fr));
 }
 
@@ -9128,21 +9128,21 @@ body.density-compact .critical-clock-copy strong{
   align-items:center;
   background:#fff;
   border:1px solid #e0e8f3;
-  border-radius:12px;
+  border-radius:11px;
   display:grid;
-  gap:8px;
-  grid-template-columns:25px minmax(0,1fr) auto;
-  min-height:48px;
-  padding:8px 9px;
+  gap:7px;
+  grid-template-columns:23px minmax(0,1fr) auto;
+  min-height:40px;
+  padding:7px 8px;
 }
 
 .telemetry-channel-card > span:first-child{
   align-items:center;
   border-radius:9px;
   display:flex;
-  height:25px;
+  height:23px;
   justify-content:center;
-  width:25px;
+  width:23px;
 }
 
 .telemetry-channel-card > span:nth-child(2){
@@ -9151,13 +9151,13 @@ body.density-compact .critical-clock-copy strong{
 }
 
 .telemetry-channel-card svg{
-  height:19px;
-  width:19px;
+  height:17px;
+  width:17px;
 }
 
 .telemetry-channel-card small{
   color:#21344d;
-  font-size:11px;
+  font-size:10px;
   font-weight:900;
   line-height:1.05;
 }
@@ -9174,7 +9174,7 @@ body.density-compact .critical-clock-copy strong{
 
 .telemetry-channel-card strong{
   color:#10213a;
-  font-size:17px;
+  font-size:15px;
   font-weight:900;
   justify-self:end;
 }
@@ -9190,9 +9190,9 @@ body.density-compact .critical-clock-copy strong{
   border-radius:14px;
   display:grid;
   gap:11px;
-  grid-template-columns:42px minmax(0,1fr);
-  margin-top:10px;
-  padding:10px 12px;
+  grid-template-columns:36px minmax(0,1fr);
+  margin-top:9px;
+  padding:9px 11px;
 }
 
 .telemetry-silence-icon{
@@ -9201,14 +9201,14 @@ body.density-compact .critical-clock-copy strong{
   border-radius:999px;
   color:#64748b;
   display:flex;
-  height:42px;
+  height:36px;
   justify-content:center;
-  width:42px;
+  width:36px;
 }
 
 .telemetry-silence-icon svg{
-  height:24px;
-  width:24px;
+  height:21px;
+  width:21px;
 }
 
 .telemetry-silence-card > span:last-child{
@@ -9217,14 +9217,14 @@ body.density-compact .critical-clock-copy strong{
 
 .telemetry-silence-card strong{
   color:#162b46;
-  font-size:13px;
+  font-size:12px;
   font-weight:900;
 }
 
 .telemetry-silence-card small,
 .telemetry-silence-card em{
   color:#50647d;
-  font-size:11px;
+  font-size:10px;
   font-style:normal;
   font-weight:700;
   line-height:1.3;
@@ -9237,15 +9237,15 @@ body.density-compact .critical-clock-copy strong{
   border-radius:14px;
   display:grid;
   grid-template-columns:repeat(4,minmax(0,1fr));
-  margin-top:10px;
+  margin-top:9px;
   overflow:hidden;
 }
 
 .telemetry-variation-strip > span{
   display:grid;
   gap:3px;
-  min-height:52px;
-  padding:9px 7px;
+  min-height:48px;
+  padding:8px 7px;
   text-align:center;
 }
 
@@ -9255,14 +9255,14 @@ body.density-compact .critical-clock-copy strong{
 
 .telemetry-variation-strip small{
   color:#667792;
-  font-size:8px;
+  font-size:7.5px;
   font-weight:900;
   line-height:1.15;
 }
 
 .telemetry-variation-strip strong{
   color:#11233e;
-  font-size:17px;
+  font-size:15px;
   font-weight:900;
   line-height:1.1;
 }

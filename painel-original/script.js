@@ -878,7 +878,7 @@ function getOperationalTelemetryIcon(kind){
     limit: `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="8.5" stroke="currentColor" stroke-width="1.8"/><path d="m8.2 12.2 2.4 2.4 5.1-5.4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
     attention: `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 4 21 19H3L12 4Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M12 9v4.3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="16.4" r="1" fill="currentColor"/></svg>`,
     critical: `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="8.5" stroke="currentColor" stroke-width="1.8"/><path d="M12 7.7v5.1" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="16.2" r="1.1" fill="currentColor"/></svg>`,
-    communication: `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4.8 16.3a10.8 10.8 0 0 1 14.4 0M8 13a6.2 6.2 0 0 1 8 0M10.7 9.8a2.4 2.4 0 0 1 2.6 0" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="m5 5 14 14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="19" r="1.3" fill="currentColor"/></svg>`,
+    communication: `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M2.8 8.7a15.2 15.2 0 0 1 18.4 0M6.4 12.2a9.5 9.5 0 0 1 11.2 0M10 15.8a4 4 0 0 1 4 0" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><path d="m4 4 16 16" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"/><circle cx="12" cy="19" r="1.25" fill="currentColor"/></svg>`,
     variation: `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 16.5 8.4 12l3.2 2.8L19.5 7" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><path d="M15.5 7h4v4" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
     alerts: `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M18 9a6 6 0 0 0-12 0v3.2c0 1-.3 1.9-.9 2.7L4 16.5h16l-1.1-1.6a4.6 4.6 0 0 1-.9-2.7V9Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M9.5 19a2.7 2.7 0 0 0 5 0" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`,
     silence: `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m5 5 14 14M8.2 8.2A5.8 5.8 0 0 0 6 12v2.2c0 .8-.3 1.6-.8 2.3L4 18h12M10 21h4M16.7 13.7V12a5.8 5.8 0 0 0-7.9-5.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
@@ -930,9 +930,9 @@ function buildOperationalTelemetryCard(d, values){
     ? 'Início 14:32'
     : (isAttention ? 'Início 15:06' : (isOffline ? 'Última comunicação 14:35' : 'Última normalização 15:45'));
   const alertChannels = [
-    {tone:'sms', icon:'sms', label:'SMS', total:3, detail:'1 inicial + 2 recorr.'},
-    {tone:'email', icon:'email', label:'E-mail', total:2, detail:'1 inicial + 1 recorr.'},
-    {tone:'whatsapp', icon:'whatsapp', label:'WhatsApp', total:3, detail:'1 inicial + 2 recorr.'}
+    {tone:'sms', icon:'sms', label:'SMS', total:3},
+    {tone:'email', icon:'email', label:'E-mail', total:2},
+    {tone:'whatsapp', icon:'whatsapp', label:'WhatsApp', total:3}
   ];
   const smsCount = alertChannels[0].total;
   const emailCount = alertChannels[1].total;
@@ -948,11 +948,11 @@ function buildOperationalTelemetryCard(d, values){
     {time:'15:38', tone:'critical', title:'Crítico encerrado', detail:'Equipamento deixou o estado crítico.'},
     {time:'15:30', tone:'normal', title:'Comunicação restabelecida', detail:'Painel voltou a receber leituras do sensor.'},
     {time:'15:22', tone:'critical', title:`${variationTargetLabel}: ${tempLabel(variationTarget)}`, detail:`Variação acumulada da ocorrência: ${variationLabel}.`},
-    {time:'15:20', tone:'alert', title:'Recorrência de alerta enviada', detail:'Nova rodada enviada porque o crítico continuou ativo.'},
+    {time:'15:20', tone:'alert', title:'Alerta de recorrência enviado', detail:'Ocorrência continuou sem normalizar após 10 minutos.'},
     {time:'15:10', tone:'silence', title:'Painel silenciado', detail:'Alerta sonoro do painel pausado; alertas externos continuaram ativos.'},
     {time:'15:00', tone:'offline', title:'Comunicação interrompida', detail:'Sensor ficou sem transmitir novas leituras ao painel.'},
-    {time:'15:00', tone:'alert', title:'Recorrência de alerta enviada', detail:'SMS, e-mail e WhatsApp repetidos conforme regra configurada.'},
-    {time:'14:50', tone:'alert', title:'Alerta inicial enviado', detail:`SMS ${smsCount} · E-mail ${emailCount} · WhatsApp ${whatsappCount}`},
+    {time:'15:00', tone:'alert', title:'Alerta de recorrência enviado', detail:'Sistema reenviou o alerta conforme regra configurada.'},
+    {time:'14:50', tone:'alert', title:'Primeiro alerta enviado', detail:'Canais configurados foram acionados.'},
     {time:'14:50', tone:'critical', title:'Crítico iniciado', detail:'Permanência fora do limite atingiu a regra configurada.'},
     {time:'14:20', tone:'attention', title:'Atenção iniciada', detail:'Temperatura permaneceu fora do limite antes de virar crítico.'},
     {time:'14:20', tone:'attention', title:'Temperatura saiu do limite configurado', detail:'Primeiro ponto fora do intervalo permitido.'}
@@ -986,7 +986,7 @@ function buildOperationalTelemetryCard(d, values){
           ${alertChannels.map(channel => `
             <span class="telemetry-channel-card ${channel.tone}">
               <span>${getOperationalTelemetryIcon(channel.icon)}</span>
-              <span><small>${channel.label}</small><em>${channel.detail}</em></span>
+              <small>${channel.label}</small>
               <strong>${channel.total}</strong>
             </span>
           `).join('')}
