@@ -9131,6 +9131,9 @@ body.analytic-report-open{overflow:hidden}
 .analytic-kpi small{min-height:24px;color:#62728a;font-size:9px;font-weight:800}
 .analytic-kpi strong{color:#092658;font-size:19px;line-height:1.05;white-space:nowrap}
 .analytic-kpi span{margin-top:6px;color:#6e7e94;font-size:8px;font-weight:600;white-space:nowrap}
+.analytic-kpi-note{display:flex;align-items:center;gap:4px}
+.analytic-kpi-note b{width:15px;height:15px;border-radius:50%;display:inline-grid;place-items:center;color:#fff;font-size:11px;line-height:1}
+.analytic-kpi-note.down b{background:#1269d3}.analytic-kpi-note.up b{background:#ef334e}
 .analytic-kpi strong.blue{color:#1269d3;background:transparent!important;box-shadow:none!important}.analytic-kpi strong.red,.analytic-mini-totals strong.red{color:#ef334e}
 .analytic-kpi strong.orange,.analytic-mini-totals strong.orange{color:#e9850e}.analytic-kpi strong.gray,.analytic-mini-totals strong.gray{color:#68778d}
 .analytic-mini-totals strong.green{color:#15945a}
@@ -9154,8 +9157,8 @@ body.analytic-report-open{overflow:hidden}
 .analytic-chart-legend span,.analytic-occurrence-legend span{display:flex;align-items:center;gap:5px}
 .analytic-chart-legend{gap:13px;flex-wrap:wrap}
 .analytic-chart-legend i{width:17px;height:3px;border-radius:3px;background:#ef334e}
-.analytic-chart-legend i.is-humidity-normal,.analytic-chart-legend i.is-humidity-attention,.analytic-chart-legend i.is-humidity-critical{height:9px;border:0}
-.analytic-chart-legend i.is-humidity-normal{background:#82bff2}.analytic-chart-legend i.is-humidity-attention{background:#f5b15b}.analytic-chart-legend i.is-humidity-critical{background:#ef7b86}
+.analytic-chart-legend i.is-series.temperature{background:#ef334e}.analytic-chart-legend i.is-series.humidity{background:#2879bc}
+.analytic-chart-legend i.is-state{height:9px;border:0}.analytic-chart-legend i.is-state.normal{background:#82bff2}.analytic-chart-legend i.is-state.attention{background:#f5b15b}.analytic-chart-legend i.is-state.critical{background:#ef7b86}.analytic-chart-legend i.is-state.offline{background:#8b97a8}
 .analytic-chart-legend i.is-limit{height:0;border-top:2px dashed #7d8da4;background:transparent}
 .analytic-thermal-svg{display:block;width:100%;height:292px;margin-top:5px;overflow:visible}
 .analytic-axis-label,.analytic-month-label{fill:#5f718a;font-size:10px;font-weight:750}
@@ -9164,8 +9167,10 @@ body.analytic-report-open{overflow:hidden}
 .analytic-month-guide{stroke:#dce5f1;stroke-width:1;stroke-dasharray:5 5}
 .analytic-series-min,.analytic-series-average,.analytic-series-max,.analytic-series-humidity{fill:none;stroke-linecap:round;stroke-linejoin:round}
 .analytic-series-average{stroke:#ef334e;stroke-width:3.5}.analytic-dot-average{fill:#ef334e;stroke:#fff;stroke-width:2}
-.analytic-series-humidity{stroke:#3b75a8;stroke-width:2}.analytic-humidity-band.normal{fill:#82bff2;fill-opacity:.32}.analytic-humidity-band.attention{fill:#f5b15b;fill-opacity:.34}.analytic-humidity-band.critical{fill:#ef7b86;fill-opacity:.36}
-.analytic-value-label{font-size:9px;font-weight:900;paint-order:stroke;stroke:#fff;stroke-width:3px;stroke-linejoin:round}.analytic-value-label.average{fill:#e82943}.analytic-value-label.humidity{fill:#2c72ad}.analytic-value-label.humidity.attention{fill:#dc7a08}.analytic-value-label.humidity.critical{fill:#db253e}
+.analytic-series-temperature,.analytic-series-humidity{fill:none;stroke-linecap:round;stroke-linejoin:round}.analytic-series-temperature{stroke:#ef334e;stroke-width:3.5}.analytic-series-humidity{stroke:#2879bc;stroke-width:3.2}
+.analytic-dot-temperature{fill:#ef334e;stroke:#fff;stroke-width:2}.analytic-dot-humidity{fill:#2879bc;stroke:#fff;stroke-width:2}
+.analytic-state-band.normal{fill:#82bff2;fill-opacity:.30}.analytic-state-band.attention{fill:#f5b15b;fill-opacity:.32}.analytic-state-band.critical{fill:#ef7b86;fill-opacity:.34}.analytic-state-band.offline{fill:#8b97a8;fill-opacity:.28}
+.analytic-value-label{font-size:9px;font-weight:900;paint-order:stroke;stroke:#fff;stroke-width:3px;stroke-linejoin:round}.analytic-value-label.temperature{fill:#e82943}.analytic-value-label.humidity{fill:#2879bc}.analytic-value-label.average{fill:#e82943}
 
 .analytic-period-summary{padding:12px;border-left:1px solid #dfe7f1;background:#fbfcfe}
 .analytic-period-summary h4,.analytic-process-panel h4{margin:0 0 8px;color:#102b55;font-size:11px;text-transform:uppercase}

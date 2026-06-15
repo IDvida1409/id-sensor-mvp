@@ -1493,14 +1493,10 @@ function analyticalDuration(totalSeconds){
 
 function analyticalLongDuration(totalSeconds){
   const safe = Math.max(0, Number(totalSeconds) || 0);
-  const days = Math.floor(safe / 86400);
-  const hours = Math.floor((safe % 86400) / 3600);
+  const hours = Math.floor(safe / 3600);
   const minutes = Math.floor((safe % 3600) / 60);
-  const parts = [];
-  if(days) parts.push(`${days}d`);
-  if(hours) parts.push(`${hours}h`);
-  if(minutes || !parts.length) parts.push(`${minutes}min`);
-  return parts.join(' ');
+  if(!hours) return `${minutes}min`;
+  return `${hours}h ${String(minutes).padStart(2,'0')}min`;
 }
 
 function buildAnalyticalReportModel(d){
@@ -1509,6 +1505,7 @@ function buildAnalyticalReportModel(d){
   const minimum = [2.3,2.4,2.5,2.9,3.1,3.0].map(value => Number((value + offset).toFixed(1)));
   const average = [3.8,4.0,4.3,4.8,5.3,5.9].map(value => Number((value + offset).toFixed(1)));
   const maximum = [5.4,5.7,6.2,7.1,8.1,9.4].map(value => Number((value + offset).toFixed(1)));
+  const temperatureStatuses = ['normal','normal','normal','attention','critical','attention'];
   const humidityBase = Number.isFinite(Number(d.hum1)) ? Number(d.hum1) : 25.8;
   const humidity = [-1.2,-0.5,1.3,3.2,2.0,0.4].map(value => Number((humidityBase + value).toFixed(1)));
   const humidityStatuses = ['normal','normal','attention','critical','attention','normal'];
@@ -1520,16 +1517,20 @@ function buildAnalyticalReportModel(d){
   const normalSeconds = Math.max(0, periodSeconds - criticalSeconds - attentionSeconds - offlineSeconds);
   const conditionSeconds = {normal:normalSeconds, attention:attentionSeconds, critical:criticalSeconds, offline:offlineSeconds};
   const conditionWidths = Object.fromEntries(Object.entries(conditionSeconds).map(([key,value]) => [key, (value / periodSeconds) * 100]));
+  const humidityAttentionSeconds = 48 * 3600;
+  const humidityCriticalSeconds = 24 * 3600;
   const humidityConditionSeconds = {
-    normal:periodSeconds - (48 * 86400) - (24 * 86400),
-    attention:48 * 86400,
-    critical:24 * 86400
+    normal:Math.max(0, periodSeconds - humidityAttentionSeconds - humidityCriticalSeconds),
+    attention:humidityAttentionSeconds,
+    critical:humidityCriticalSeconds,
+    offline:0
   };
+  const humidityConditionWidths = Object.fromEntries(Object.entries(humidityConditionSeconds).map(([key,value]) => [key, (value / periodSeconds) * 100]));
   const alerts = [10,12,13,15,17,18];
   const recurrences = [2,3,3,4,4,6];
   const offline = [0,1,0,1,1,0];
   return {
-    months, minimum, average, maximum, humidity, humidityStatuses, humidityConditionSeconds, hasHumidity:Number.isFinite(Number(d.hum1)),
+    months, minimum, average, maximum, temperatureStatuses, humidity, humidityStatuses, humidityConditionSeconds, humidityConditionWidths, hasHumidity:Number.isFinite(Number(d.hum1)),
     conditionSeconds, conditionWidths, periodSeconds, alerts, recurrences, offline,
     minValue:Math.min(...minimum),
     maxValue:Math.max(...maximum),
@@ -1546,42 +1547,73 @@ function buildAnalyticalReportModel(d){
   };
 }
 
-function buildAnalyticalThermalChart(model, d){
+function buildAnalyticalMetricChart(model, d, config){
   const width = 640;
   const height = 235;
-  const avgPath = analyticalPath(model.average, width, height);
-  const humidityMin = Math.floor(Math.min(...model.humidity) - 2);
-  const humidityMax = Math.ceil(Math.max(...model.humidity) + 2);
-  const humidityPath = analyticalPath(model.humidity, width, height, humidityMin, humidityMax);
-  const criticalY = avgPath.y(Number(d.max ?? 8));
+  const metricPath = analyticalPath(config.values, width, height, config.axisMin, config.axisMax);
+  const criticalY = metricPath.y(config.criticalValue);
   const monthStep = width / (model.months.length - 1);
-  const humidityBands = model.humidityStatuses.map((status,index) => {
+  const stateBands = config.statuses.map((status,index) => {
     const x = index === 0 ? 0 : index * monthStep - monthStep / 2;
     const bandWidth = index === 0 || index === model.months.length - 1 ? monthStep / 2 : monthStep;
-    return `<rect x="${x.toFixed(1)}" y="0" width="${bandWidth.toFixed(1)}" height="${height}" class="analytic-humidity-band ${status}"/>`;
+    return `<rect x="${x.toFixed(1)}" y="0" width="${bandWidth.toFixed(1)}" height="${height}" class="analytic-state-band ${status}"/>`;
   }).join('');
   return `
     <div class="analytic-chart-legend">
-      <span><i class="is-average"></i>Temperatura média</span>
-      ${model.hasHumidity ? '<span><i class="is-humidity-normal"></i>Umidade dentro do limite</span><span><i class="is-humidity-attention"></i>Umidade em atenção</span><span><i class="is-humidity-critical"></i>Umidade crítica</span>' : ''}
-      <span><i class="is-limit"></i>Limite crítico da temperatura</span>
+      <span><i class="is-series ${config.className}"></i>${config.seriesLabel}</span>
+      <span><i class="is-state normal"></i>Dentro do limite</span>
+      <span><i class="is-state attention"></i>Atenção</span>
+      <span><i class="is-state critical"></i>Crítico</span>
+      <span><i class="is-state offline"></i>Sem comunicação</span>
+      <span><i class="is-limit"></i>Limite crítico</span>
     </div>
-    <svg class="analytic-thermal-svg" viewBox="0 0 760 325" role="img" aria-label="Histórico da temperatura e umidade do equipamento">
-      <defs>
-        <clipPath id="analyticHumidityClip${d.id}"><path d="${humidityPath.area}"/></clipPath>
-      </defs>
-      <text x="12" y="19" class="analytic-axis-title temperature">Temperatura (°C)</text>${model.hasHumidity ? '<text x="748" y="19" text-anchor="end" class="analytic-axis-title humidity">Umidade (°C)</text>' : ''}
+    <svg class="analytic-thermal-svg" viewBox="0 0 760 325" role="img" aria-label="${config.ariaLabel}">
+      <text x="12" y="19" class="analytic-axis-title ${config.className}">${config.axisLabel}</text>
       <g transform="translate(58,38)">
-        ${[0,2,4,6,8,10,12].map(value => `<line x1="0" y1="${avgPath.y(value).toFixed(1)}" x2="${width}" y2="${avgPath.y(value).toFixed(1)}" stroke="#dce5f1"/><text x="-12" y="${(avgPath.y(value)+4).toFixed(1)}" text-anchor="end" class="analytic-axis-label">${value}°C</text>`).join('')}
+        ${stateBands}
+        ${config.ticks.map(value => `<line x1="0" y1="${metricPath.y(value).toFixed(1)}" x2="${width}" y2="${metricPath.y(value).toFixed(1)}" stroke="#dce5f1"/><text x="-12" y="${(metricPath.y(value)+4).toFixed(1)}" text-anchor="end" class="analytic-axis-label">${value}${config.unit}</text>`).join('')}
         ${model.months.map((month,index) => `<line x1="${(index*monthStep).toFixed(1)}" y1="0" x2="${(index*monthStep).toFixed(1)}" y2="${height}" class="analytic-month-guide"/>`).join('')}
-        ${model.hasHumidity ? [humidityMin, Math.round((humidityMin+humidityMax)/2), humidityMax].map(value => `<text x="${width+12}" y="${(humidityPath.y(value)+4).toFixed(1)}" class="analytic-axis-label humidity">${value}°C</text>`).join('') : ''}
-        ${model.hasHumidity ? `<g clip-path="url(#analyticHumidityClip${d.id})">${humidityBands}</g><path d="${humidityPath.line}" class="analytic-series-humidity"/>${humidityPath.points.map((point,index) => `<text x="${point.x}" y="${Math.min(height-7,point.y+18)}" text-anchor="middle" class="analytic-value-label humidity ${model.humidityStatuses[index]}">${point.value.toFixed(1)}°C</text>`).join('')}` : ''}
-        <line x1="0" y1="${criticalY.toFixed(1)}" x2="${width}" y2="${criticalY.toFixed(1)}" class="analytic-limit-line"/><text x="${width-4}" y="${(criticalY-7).toFixed(1)}" text-anchor="end" class="analytic-critical-label">Limite crítico ${Number(d.max ?? 8).toFixed(0)}°C</text>
-        <path d="${avgPath.line}" class="analytic-series-average"/>
-        ${avgPath.points.map(point => `<circle cx="${point.x}" cy="${point.y}" r="4.5" class="analytic-dot-average"/><text x="${point.x}" y="${Math.max(12,point.y-12)}" text-anchor="middle" class="analytic-value-label average">${point.value.toFixed(1)}°C</text>`).join('')}
+        <line x1="0" y1="${criticalY.toFixed(1)}" x2="${width}" y2="${criticalY.toFixed(1)}" class="analytic-limit-line"/><text x="${width-4}" y="${(criticalY-7).toFixed(1)}" text-anchor="end" class="analytic-critical-label">Limite crítico ${config.criticalValue.toFixed(config.criticalValue % 1 ? 1 : 0)}${config.unit}</text>
+        <path d="${metricPath.line}" class="analytic-series-${config.className}"/>
+        ${metricPath.points.map(point => `<circle cx="${point.x}" cy="${point.y}" r="4.5" class="analytic-dot-${config.className}"/><text x="${point.x}" y="${Math.max(12,point.y-12)}" text-anchor="middle" class="analytic-value-label ${config.className}">${point.value.toFixed(1)}${config.unit}</text>`).join('')}
         ${model.months.map((month,index) => `<text x="${(index*monthStep).toFixed(1)}" y="266" text-anchor="middle" class="analytic-month-label">${month}</text>`).join('')}
       </g>
     </svg>`;
+}
+
+function buildAnalyticalTemperatureChart(model, d){
+  return buildAnalyticalMetricChart(model, d, {
+    values:model.average,
+    statuses:model.temperatureStatuses,
+    axisMin:0,
+    axisMax:12,
+    ticks:[0,2,4,6,8,10,12],
+    criticalValue:Number(d.max ?? 8),
+    unit:'°C',
+    axisLabel:'Temperatura (°C)',
+    seriesLabel:'Temperatura média',
+    className:'temperature',
+    ariaLabel:'Histórico da temperatura do equipamento'
+  });
+}
+
+function buildAnalyticalHumidityChart(model, d){
+  const axisMin = Math.floor(Math.min(...model.humidity) - 2);
+  const axisMax = Math.ceil(Math.max(...model.humidity) + 3);
+  const mid = Math.round((axisMin + axisMax) / 2);
+  return buildAnalyticalMetricChart(model, d, {
+    values:model.humidity,
+    statuses:model.humidityStatuses,
+    axisMin,
+    axisMax,
+    ticks:[axisMin, mid, axisMax],
+    criticalValue:Math.min(axisMax - 0.5, Math.max(28, model.humidityMax)),
+    unit:'°C',
+    axisLabel:'Umidade (°C)',
+    seriesLabel:'Umidade',
+    className:'humidity',
+    ariaLabel:'Histórico da umidade do equipamento'
+  });
 }
 
 function buildAnalyticalOccurrencesChart(model){
@@ -1630,6 +1662,9 @@ function buildAnalyticalReport(d){
   const trendWord = model.averageChange > 0.2 ? 'aumentou' : (model.averageChange < -0.2 ? 'reduziu' : 'permaneceu estável');
   const trendClass = model.averageChange > 0.2 ? 'up' : (model.averageChange < -0.2 ? 'down' : 'stable');
   const trendSign = model.averageChange > 0 ? '+' : '';
+  const humidityTrendWord = model.humidityChange > 0.2 ? 'aumentou' : (model.humidityChange < -0.2 ? 'reduziu' : 'permaneceu estável');
+  const humidityTrendClass = model.humidityChange > 0.2 ? 'up' : (model.humidityChange < -0.2 ? 'down' : 'stable');
+  const humidityTrendSign = model.humidityChange > 0 ? '+' : '';
   const areaName = d.unitName || d.sector || 'Banco IDvida';
   const deviceId = d.backendId || d.code || d.id;
   const largestAverageIncreases = model.months.slice(1).map((month,index) => ({
@@ -1637,11 +1672,22 @@ function buildAnalyticalReport(d){
     change:Number((model.average[index + 1] - model.average[index]).toFixed(1))
   })).sort((a,b) => b.change - a.change).slice(0,3);
   const largestAverageIncreasesText = largestAverageIncreases.map(item => `${item.month}: +${item.change.toFixed(1)}°C`).join(' · ');
+  const largestHumidityIncreases = model.months.slice(1).map((month,index) => ({
+    month,
+    change:Number((model.humidity[index + 1] - model.humidity[index]).toFixed(1))
+  })).sort((a,b) => b.change - a.change).slice(0,3);
+  const largestHumidityIncreasesText = largestHumidityIncreases.map(item => `${item.month}: +${item.change.toFixed(1)}°C`).join(' · ');
   const deviations = [
     {label:'Manhã', range:'06h - 12h', values:[8,9,10,11,13,15], peak:'8,1°C', trend:'↑'},
     {label:'Tarde', range:'12h - 18h', values:[35,38,42,47,58,55], peak:'9,4°C', trend:'↑'},
     {label:'Noite', range:'18h - 00h', values:[9,10,12,14,16,17], peak:'8,6°C', trend:'↑'},
     {label:'Madrugada', range:'00h - 06h', values:[2,2,2,3,3,3], peak:'7,2°C', trend:'↔'}
+  ];
+  const humidityDeviations = [
+    {label:'Manhã', range:'06h - 12h', values:[5,6,8,10,9,7], peak:'26,8°C', trend:'↑'},
+    {label:'Tarde', range:'12h - 18h', values:[12,14,18,24,21,16], peak:'28,2°C', trend:'↑'},
+    {label:'Noite', range:'18h - 00h', values:[7,8,10,12,11,9], peak:'27,0°C', trend:'↑'},
+    {label:'Madrugada', range:'00h - 06h', values:[2,2,3,4,3,2], peak:'25,6°C', trend:'→'}
   ];
   const processes = [
     ['Degelo','18','45h 30min'], ['Inventário','32','18h 40min'],
@@ -1677,8 +1723,8 @@ function buildAnalyticalReport(d){
           </section>
 
           <section class="analytic-kpi-grid">
-            <div class="analytic-kpi"><small>Temperatura mínima</small><strong class="blue">${model.minValue.toFixed(1)}°C</strong><span>↓ Menor leitura · 05/01/2026 04:10</span></div>
-            <div class="analytic-kpi"><small>Temperatura máxima</small><strong class="red">${model.maxValue.toFixed(1)}°C</strong><span>↑ Maior leitura · 11/06/2026 15:40</span></div>
+            <div class="analytic-kpi"><small>Temperatura mínima</small><strong class="blue">${model.minValue.toFixed(1)}°C</strong><span class="analytic-kpi-note down"><b>↓</b> Menor leitura · 05/01/2026 04:10</span></div>
+            <div class="analytic-kpi"><small>Temperatura máxima</small><strong class="red">${model.maxValue.toFixed(1)}°C</strong><span class="analytic-kpi-note up"><b>↑</b> Maior leitura · 11/06/2026 15:40</span></div>
             <div class="analytic-kpi"><small>Temperatura média</small><strong>${model.averageValue.toFixed(1)}°C</strong><span>Período analisado</span></div>
             <div class="analytic-kpi"><small>Variação total</small><strong class="red">↑ +${model.variation.toFixed(1)}°C</strong><span>Máxima - mínima</span></div>
             <div class="analytic-kpi"><small>Tempo em crítico</small><strong class="red">${analyticalDuration(model.criticalSeconds)}</strong><span>Tempo acumulado no período</span></div>
@@ -1687,22 +1733,22 @@ function buildAnalyticalReport(d){
           </section>
 
           <section class="analytic-section analytic-history-section">
-            <div class="analytic-section-title"><b>1</b><div><h3>Comportamento térmico e umidade do período</h3><p>Mostra a temperatura média e a umidade em °C, destacando por quanto tempo a umidade permaneceu dentro do limite, em atenção ou em condição crítica.</p></div></div>
+            <div class="analytic-section-title"><b>1</b><div><h3>Comportamento da temperatura do período</h3><p>Mostra a temperatura média em °C e as faixas de condição: dentro do limite, atenção, crítico e sem comunicação.</p></div></div>
             <div class="analytic-history-grid">
-              <div class="analytic-chart-card">${buildAnalyticalThermalChart(model,d)}</div>
+              <div class="analytic-chart-card">${buildAnalyticalTemperatureChart(model,d)}</div>
               <aside class="analytic-period-summary">
-                <h4>Leitura da tendência</h4>
+                <h4>Leitura da temperatura</h4>
                 <div class="analytic-trend-conclusion"><strong class="${trendClass}">A temperatura ${trendWord}</strong><span>A média avançou ${trendSign}${model.averageChange.toFixed(1)}°C nos seis meses, de ${model.average[0].toFixed(1)}°C para ${model.average.at(-1).toFixed(1)}°C.</span></div>
                 <div><small>Temperatura média do período</small><strong>${model.averageValue.toFixed(1)}°C</strong><span>Maior pico: ${model.maxValue.toFixed(1)}°C · Menor leitura: ${model.minValue.toFixed(1)}°C.</span></div>
                 <div><small>Maiores aumentos da média</small><strong class="analytic-trend-inline">${largestAverageIncreasesText}</strong></div>
-                <div><small>Comportamento da umidade</small><strong>${model.humidityAverage.toFixed(1)}°C de média</strong><span>Pico de ${model.humidityMax.toFixed(1)}°C. Em atenção por ${analyticalLongDuration(model.humidityConditionSeconds.attention)} e em condição crítica por ${analyticalLongDuration(model.humidityConditionSeconds.critical)}.</span></div>
+                <div><small>Tempo fora da condição normal</small><strong>${analyticalLongDuration(model.conditionSeconds.attention + model.conditionSeconds.critical)}</strong><span>${analyticalLongDuration(model.conditionSeconds.attention)} em atenção e ${analyticalLongDuration(model.conditionSeconds.critical)} em crítico.</span></div>
               </aside>
             </div>
           </section>
 
           <div class="analytic-two-column">
             <section class="analytic-section">
-              <div class="analytic-section-title"><b>2</b><div><h3>Tempo do equipamento em cada condição</h3><p>Mostra, em horas e minutos, quanto tempo a temperatura permaneceu dentro do limite, em atenção, em crítico ou sem comunicação.</p></div></div>
+              <div class="analytic-section-title"><b>2</b><div><h3>Tempo da temperatura em cada condição</h3><p>Mostra, em horas e minutos, quanto tempo a temperatura permaneceu dentro do limite, em atenção, em crítico ou sem comunicação.</p></div></div>
               <div class="analytic-condition-bar" aria-label="Tempo por condição"><span class="normal" style="width:${model.conditionWidths.normal}%"></span><span class="attention" style="width:${model.conditionWidths.attention}%"></span><span class="critical" style="width:${model.conditionWidths.critical}%"></span><span class="offline" style="width:${model.conditionWidths.offline}%"></span></div>
               <div class="analytic-condition-legend">
                 <div><i class="normal"></i><span>Dentro do limite</span><strong>${analyticalLongDuration(model.conditionSeconds.normal)}</strong></div>
@@ -1715,7 +1761,7 @@ function buildAnalyticalReport(d){
             </section>
 
             <section class="analytic-section analytic-deviation-section">
-              <div class="analytic-section-title"><b>3</b><div><h3>Desvio do equipamento por horário</h3><p>Mostra a incidência de desvios e os maiores picos em cada faixa do dia.</p></div></div>
+              <div class="analytic-section-title"><b>3</b><div><h3>Desvio da temperatura por horário</h3><p>Mostra a incidência de desvios da temperatura e os maiores picos em cada faixa do dia.</p></div></div>
               <div class="analytic-table-wrap"><table class="analytic-table analytic-deviation-table"><thead><tr><th>Período</th>${model.months.map(month=>`<th>${month.replace('/26','')}</th>`).join('')}<th>Pico</th><th>Tend.</th></tr></thead><tbody>
                 ${deviations.map(row => `<tr><td><strong>${row.label}</strong><small>${row.range}</small></td>${row.values.map(value=>`<td>${value}</td>`).join('')}<td class="peak">${row.peak}</td><td class="trend">${row.trend}</td></tr>`).join('')}
               </tbody></table></div>
@@ -1723,8 +1769,45 @@ function buildAnalyticalReport(d){
             </section>
           </div>
 
+          <section class="analytic-section analytic-history-section">
+            <div class="analytic-section-title"><b>4</b><div><h3>Comportamento da umidade do período</h3><p>Mostra a umidade em °C e as faixas de condição: dentro do limite, atenção, crítico e sem comunicação.</p></div></div>
+            <div class="analytic-history-grid">
+              <div class="analytic-chart-card">${buildAnalyticalHumidityChart(model,d)}</div>
+              <aside class="analytic-period-summary">
+                <h4>Leitura da umidade</h4>
+                <div class="analytic-trend-conclusion"><strong class="${humidityTrendClass}">A umidade ${humidityTrendWord}</strong><span>A leitura variou ${humidityTrendSign}${model.humidityChange.toFixed(1)}°C nos seis meses, de ${model.humidity[0].toFixed(1)}°C para ${model.humidity.at(-1).toFixed(1)}°C.</span></div>
+                <div><small>Umidade média do período</small><strong>${model.humidityAverage.toFixed(1)}°C</strong><span>Maior pico: ${model.humidityMax.toFixed(1)}°C.</span></div>
+                <div><small>Maiores aumentos da umidade</small><strong class="analytic-trend-inline">${largestHumidityIncreasesText}</strong></div>
+                <div><small>Tempo fora da condição normal</small><strong>${analyticalLongDuration(model.humidityConditionSeconds.attention + model.humidityConditionSeconds.critical)}</strong><span>${analyticalLongDuration(model.humidityConditionSeconds.attention)} em atenção e ${analyticalLongDuration(model.humidityConditionSeconds.critical)} em crítico.</span></div>
+              </aside>
+            </div>
+          </section>
+
+          <div class="analytic-two-column">
+            <section class="analytic-section">
+              <div class="analytic-section-title"><b>5</b><div><h3>Tempo da umidade em cada condição</h3><p>Mostra, em horas e minutos, quanto tempo a umidade permaneceu dentro do limite, em atenção, em crítico ou sem comunicação.</p></div></div>
+              <div class="analytic-condition-bar" aria-label="Tempo da umidade por condição"><span class="normal" style="width:${model.humidityConditionWidths.normal}%"></span><span class="attention" style="width:${model.humidityConditionWidths.attention}%"></span><span class="critical" style="width:${model.humidityConditionWidths.critical}%"></span><span class="offline" style="width:${model.humidityConditionWidths.offline}%"></span></div>
+              <div class="analytic-condition-legend">
+                <div><i class="normal"></i><span>Dentro do limite</span><strong>${analyticalLongDuration(model.humidityConditionSeconds.normal)}</strong></div>
+                <div><i class="attention"></i><span>Atenção</span><strong>${analyticalLongDuration(model.humidityConditionSeconds.attention)}</strong></div>
+                <div><i class="critical"></i><span>Crítico</span><strong>${analyticalLongDuration(model.humidityConditionSeconds.critical)}</strong></div>
+                <div><i class="offline"></i><span>Sem comunicação</span><strong>${analyticalLongDuration(model.humidityConditionSeconds.offline)}</strong></div>
+              </div>
+              <div class="analytic-condition-total"><small>Total de horas monitoradas</small><strong>${analyticalLongDuration(model.periodSeconds)}</strong></div>
+              <p class="analytic-condition-reading">A umidade permaneceu dentro do limite por <strong>${analyticalLongDuration(model.humidityConditionSeconds.normal)}</strong>. Fora da condição normal, foram registrados ${analyticalLongDuration(model.humidityConditionSeconds.attention)} em atenção e ${analyticalLongDuration(model.humidityConditionSeconds.critical)} em crítico.</p>
+            </section>
+
+            <section class="analytic-section analytic-deviation-section">
+              <div class="analytic-section-title"><b>6</b><div><h3>Desvio da umidade por horário</h3><p>Mostra a incidência de desvios da umidade e os maiores picos em cada faixa do dia.</p></div></div>
+              <div class="analytic-table-wrap"><table class="analytic-table analytic-deviation-table"><thead><tr><th>Período</th>${model.months.map(month=>`<th>${month.replace('/26','')}</th>`).join('')}<th>Pico</th><th>Tend.</th></tr></thead><tbody>
+                ${humidityDeviations.map(row => `<tr><td><strong>${row.label}</strong><small>${row.range}</small></td>${row.values.map(value=>`<td>${value}</td>`).join('')}<td class="peak">${row.peak}</td><td class="trend">${row.trend}</td></tr>`).join('')}
+              </tbody></table></div>
+              <p class="analytic-table-note">A maior concentração de desvios de umidade ocorreu no período da tarde.</p>
+            </section>
+          </div>
+
           <section class="analytic-section analytic-indicators-section">
-            <div class="analytic-section-title"><b>4</b><div><h3>Indicadores</h3><p>Consolida as ocorrências e os processos registrados durante o período analisado.</p></div></div>
+            <div class="analytic-section-title"><b>7</b><div><h3>Indicadores</h3><p>Consolida as ocorrências e os processos registrados durante o período analisado.</p></div></div>
             <div class="analytic-indicator-grid">
               <div class="analytic-occurrence-panel">
                 ${buildAnalyticalOccurrencesChart(model)}
@@ -1738,11 +1821,11 @@ function buildAnalyticalReport(d){
           </section>
 
           <section class="analytic-section analytic-analysis-section">
-            <div class="analytic-section-title"><b>5</b><div><h3>Análise do período</h3><p>Resumo factual dos indicadores apresentados neste relatório.</p></div></div>
+            <div class="analytic-section-title"><b>8</b><div><h3>Análise do período</h3><p>Resumo factual da temperatura, da umidade e dos indicadores operacionais apresentados neste relatório.</p></div></div>
             <div class="analytic-analysis-copy">
-              <p>No período analisado, a temperatura média <strong>${trendWord} ${Math.abs(model.averageChange).toFixed(1)}°C</strong>, passando de ${model.average[0].toFixed(1)}°C em ${model.months[0]} para ${model.average.at(-1).toFixed(1)}°C em ${model.months.at(-1)}. O maior pico registrado foi de <strong>${model.maxValue.toFixed(1)}°C</strong>.</p>
-              <p>O equipamento permaneceu <strong>${analyticalLongDuration(model.conditionSeconds.normal)} dentro do limite</strong>. Também foram registrados ${analyticalDuration(model.criticalSeconds)} em condição crítica, ${analyticalDuration(model.attentionSeconds)} em atenção e ${analyticalDuration(model.offlineSeconds)} sem comunicação.</p>
-              <p>Foram contabilizados <strong>${model.alertTotal} alertas</strong>, <strong>${model.recurrenceTotal} recorrências</strong> e ${model.offlineTotal} ocorrências de perda de comunicação. A maior incidência de desvios ocorreu no período da tarde.</p>
+              <p><strong>Temperatura:</strong> a média ${trendWord} ${Math.abs(model.averageChange).toFixed(1)}°C, passando de ${model.average[0].toFixed(1)}°C em ${model.months[0]} para ${model.average.at(-1).toFixed(1)}°C em ${model.months.at(-1)}. O maior pico registrado foi de <strong>${model.maxValue.toFixed(1)}°C</strong>, com ${analyticalDuration(model.criticalSeconds)} em crítico e ${analyticalDuration(model.attentionSeconds)} em atenção.</p>
+              <p><strong>Umidade:</strong> a leitura ${humidityTrendWord} ${Math.abs(model.humidityChange).toFixed(1)}°C, passando de ${model.humidity[0].toFixed(1)}°C para ${model.humidity.at(-1).toFixed(1)}°C. O maior pico foi de <strong>${model.humidityMax.toFixed(1)}°C</strong>, com ${analyticalLongDuration(model.humidityConditionSeconds.critical)} em crítico e ${analyticalLongDuration(model.humidityConditionSeconds.attention)} em atenção.</p>
+              <p><strong>Operacional:</strong> foram contabilizados <strong>${model.alertTotal} alertas</strong>, <strong>${model.recurrenceTotal} recorrências</strong> e ${model.offlineTotal} ocorrências de perda de comunicação. A maior incidência de desvios ocorreu no período da tarde.</p>
             </div>
           </section>
 
