@@ -9197,12 +9197,26 @@ body.analytic-report-open{overflow:hidden}
 
 .analytic-indicator-grid{display:grid;grid-template-columns:1.45fr 1fr;gap:16px}
 .analytic-occurrence-panel,.analytic-process-panel{min-width:0;padding:11px;border:1px solid #e0e7f0;border-radius:6px;background:#fcfdff}
-.analytic-mini-totals{display:grid;grid-template-columns:repeat(3,1fr);margin-bottom:8px;border:1px solid #dce5ef;border-radius:6px;background:#fff}
-.analytic-mini-totals span{padding:8px;display:grid;gap:2px;text-align:center}.analytic-mini-totals span + span{border-left:1px solid #e1e8f1}
-.analytic-mini-totals small{color:#63738a;font-size:8px;font-weight:800}.analytic-mini-totals strong{font-size:17px;color:#0c2b5e}
-.analytic-occurrence-legend{gap:13px}.analytic-occurrence-legend i{width:9px;height:9px;border-radius:2px}.analytic-occurrence-legend i.alerts{background:#15945a}.analytic-occurrence-legend i.recurrences{background:#ef334e}.analytic-occurrence-legend i.offline{border-radius:50%;background:#77869b}
-.analytic-occurrence-svg{display:block;width:100%;height:205px;margin-top:4px}
-.analytic-bar-value{font-size:9px;font-weight:900;paint-order:stroke;stroke:#fff;stroke-width:3px}.analytic-bar-value.alerts{fill:#117b4c}.analytic-bar-value.recurrences{fill:#d92741}.analytic-bar-value.offline{fill:#5f6e82}
+.analytic-donut-layout{display:grid;grid-template-columns:210px minmax(0,1fr);align-items:center;gap:14px;padding:2px 12px 10px}
+.analytic-donut-wrap{display:grid;place-items:center}
+.analytic-donut-svg{display:block;width:190px;height:190px;overflow:visible;transform:rotate(-90deg)}
+.analytic-donut-track,.analytic-donut-segment{fill:none;stroke-width:32}
+.analytic-donut-track{stroke:#edf1f6}
+.analytic-donut-segment{stroke-linecap:butt}
+.analytic-donut-segment.alerts{stroke:#68b8ee}.analytic-donut-segment.recurrences{stroke:#ef334e}.analytic-donut-segment.offline{stroke:#46556b}
+.analytic-donut-total,.analytic-donut-caption{transform:rotate(90deg);transform-origin:110px 110px;fill:#102b55;font-weight:900}
+.analytic-donut-total{font-size:31px}.analytic-donut-caption{fill:#6b7b91;font-size:9px;letter-spacing:.08em}
+.analytic-donut-legend{display:grid;gap:10px}
+.analytic-donut-legend > div{display:grid;grid-template-columns:10px minmax(0,1fr);align-items:center;gap:9px;padding:9px 11px;border:1px solid #e0e7f0;border-radius:6px;background:#fff}
+.analytic-donut-legend i{width:10px;height:30px;border-radius:3px}.analytic-donut-legend .alerts i{background:#68b8ee}.analytic-donut-legend .recurrences i{background:#ef334e}.analytic-donut-legend .offline i{background:#46556b}
+.analytic-donut-legend span{display:flex;align-items:center;justify-content:space-between;gap:10px}.analytic-donut-legend small{color:#5d6f87;font-size:9px;font-weight:800}.analytic-donut-legend strong{color:#102b55;font-size:18px}
+.analytic-donut-legend .alerts strong{color:#318fcf}.analytic-donut-legend .recurrences strong{color:#ef334e}.analytic-donut-legend .offline strong{color:#46556b}
+.analytic-monthly-occurrences{overflow:hidden;border:1px solid #dce5ef;border-radius:6px;background:#fff}
+.analytic-monthly-heading{padding:8px 10px;display:flex;align-items:center;justify-content:space-between;color:#17355f;background:#f4f8fd}
+.analytic-monthly-heading strong{font-size:9px;text-transform:uppercase}.analytic-monthly-heading span{color:#718096;font-size:8px}
+.analytic-monthly-row{display:grid;grid-template-columns:42px repeat(3,1fr);align-items:center;gap:7px;padding:6px 10px;color:#52647c;font-size:8px;border-top:1px solid #e5ebf3}
+.analytic-monthly-row > strong{color:#16345f;font-size:9px}.analytic-monthly-row span{display:flex;align-items:center;gap:5px;white-space:nowrap}
+.analytic-monthly-row i{width:7px;height:7px;border-radius:2px}.analytic-monthly-row .alerts i{background:#68b8ee}.analytic-monthly-row .recurrences i{background:#ef334e}.analytic-monthly-row .offline i{background:#46556b}
 .analytic-process-panel > p{margin:-4px 0 11px;color:#5f7189;font-size:9px;line-height:1.45}
 .analytic-process-panel .analytic-table th,.analytic-process-panel .analytic-table td{padding:8px}
 .analytic-process-panel .total td{color:#0753b5;background:#f4f8fd;font-weight:900}

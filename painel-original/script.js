@@ -1576,21 +1576,38 @@ function buildAnalyticalThermalChart(model, d){
 }
 
 function buildAnalyticalOccurrencesChart(model){
-  const chartHeight = 142;
-  const baseline = 164;
-  const groupWidth = 82;
-  const maxAlerts = 20;
-  const offlineX = index => index * groupWidth + 31;
-  const offlineY = value => baseline - (Number(value) / 3) * chartHeight;
-  const offlineLine = model.offline.map((value,index) => `${index ? 'L' : 'M'} ${offlineX(index)} ${offlineY(value)}`).join(' ');
+  const total = model.alertTotal + model.recurrenceTotal + model.offlineTotal;
+  const alertShare = total ? (model.alertTotal / total) * 100 : 0;
+  const recurrenceShare = total ? (model.recurrenceTotal / total) * 100 : 0;
+  const offlineShare = total ? (model.offlineTotal / total) * 100 : 0;
   return `
-    <div class="analytic-occurrence-legend"><span><i class="alerts"></i>Alertas</span><span><i class="recurrences"></i>Recorrências</span><span><i class="offline"></i>Sem comunicação</span></div>
-    <svg class="analytic-occurrence-svg" viewBox="0 0 520 215" role="img" aria-label="Ocorrências mensais do equipamento"><g transform="translate(42,16)">
-      ${[0,5,10,15,20].map(value => { const y = baseline - (value/maxAlerts)*chartHeight; return `<line x1="0" y1="${y}" x2="430" y2="${y}" stroke="#e2e9f2"/><text x="-10" y="${y+4}" text-anchor="end" class="analytic-axis-label">${value}</text>`; }).join('')}
-      ${model.months.map((month,index) => { const x=index*groupWidth+10; const ah=(model.alerts[index]/maxAlerts)*chartHeight; const rh=(model.recurrences[index]/maxAlerts)*chartHeight; return `<rect x="${x}" y="${baseline-ah}" width="20" height="${ah}" rx="4" fill="#15945a"/><text x="${x+10}" y="${baseline-ah-7}" text-anchor="middle" class="analytic-bar-value alerts">${model.alerts[index]}</text><rect x="${x+23}" y="${baseline-rh}" width="20" height="${rh}" rx="4" fill="#ef334e"/><text x="${x+33}" y="${baseline-rh-7}" text-anchor="middle" class="analytic-bar-value recurrences">${model.recurrences[index]}</text><text x="${x+21}" y="190" text-anchor="middle" class="analytic-month-label">${month.replace('/26','')}</text>`; }).join('')}
-      <path d="${offlineLine}" fill="none" stroke="#77869b" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-      ${model.offline.map((value,index) => `<circle cx="${offlineX(index)}" cy="${offlineY(value)}" r="4" fill="#77869b" stroke="#fff" stroke-width="2"/><text x="${offlineX(index)}" y="${offlineY(value)-8}" text-anchor="middle" class="analytic-bar-value offline">${value}</text>`).join('')}
-    </g></svg>`;
+    <div class="analytic-donut-layout">
+      <div class="analytic-donut-wrap">
+        <svg class="analytic-donut-svg" viewBox="0 0 220 220" role="img" aria-label="${total} ocorrências: ${model.alertTotal} alertas, ${model.recurrenceTotal} recorrências e ${model.offlineTotal} sem comunicação">
+          <circle class="analytic-donut-track" cx="110" cy="110" r="76" pathLength="100"></circle>
+          <circle class="analytic-donut-segment alerts" cx="110" cy="110" r="76" pathLength="100" stroke-dasharray="${alertShare.toFixed(3)} ${(100-alertShare).toFixed(3)}"></circle>
+          <circle class="analytic-donut-segment recurrences" cx="110" cy="110" r="76" pathLength="100" stroke-dasharray="${recurrenceShare.toFixed(3)} ${(100-recurrenceShare).toFixed(3)}" stroke-dashoffset="${(-alertShare).toFixed(3)}"></circle>
+          <circle class="analytic-donut-segment offline" cx="110" cy="110" r="76" pathLength="100" stroke-dasharray="${offlineShare.toFixed(3)} ${(100-offlineShare).toFixed(3)}" stroke-dashoffset="${(-(alertShare+recurrenceShare)).toFixed(3)}"></circle>
+          <text x="110" y="105" text-anchor="middle" class="analytic-donut-total">${total}</text>
+          <text x="110" y="125" text-anchor="middle" class="analytic-donut-caption">OCORRÊNCIAS</text>
+        </svg>
+      </div>
+      <div class="analytic-donut-legend">
+        <div class="alerts"><i></i><span><small>Alertas</small><strong>${model.alertTotal}</strong></span></div>
+        <div class="recurrences"><i></i><span><small>Recorrências</small><strong>${model.recurrenceTotal}</strong></span></div>
+        <div class="offline"><i></i><span><small>Sem comunicação</small><strong>${model.offlineTotal}</strong></span></div>
+      </div>
+    </div>
+    <div class="analytic-monthly-occurrences">
+      <div class="analytic-monthly-heading"><strong>Evolução mensal</strong><span>Valores absolutos por mês</span></div>
+      ${model.months.map((month,index) => `
+        <div class="analytic-monthly-row">
+          <strong>${month.replace('/26','')}</strong>
+          <span class="alerts"><i></i>${model.alerts[index]} alertas</span>
+          <span class="recurrences"><i></i>${model.recurrences[index]} recorr.</span>
+          <span class="offline"><i></i>${model.offline[index]} sem comunic.</span>
+        </div>`).join('')}
+    </div>`;
 }
 
 function buildAnalyticalReport(d){
@@ -1698,7 +1715,6 @@ function buildAnalyticalReport(d){
             <div class="analytic-section-title"><b>4</b><div><h3>Indicadores</h3><p>Consolida as ocorrências e os processos registrados durante o período analisado.</p></div></div>
             <div class="analytic-indicator-grid">
               <div class="analytic-occurrence-panel">
-                <div class="analytic-mini-totals"><span><small>Alertas</small><strong class="green">${model.alertTotal}</strong></span><span><small>Recorrências</small><strong class="red">${model.recurrenceTotal}</strong></span><span><small>Sem comunicação</small><strong class="gray">${model.offlineTotal}</strong></span></div>
                 ${buildAnalyticalOccurrencesChart(model)}
               </div>
               <div class="analytic-process-panel">
