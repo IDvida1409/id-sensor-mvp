@@ -98,6 +98,7 @@ function seedDatabase() {
       DELETE FROM notification_logs;
       DELETE FROM alert_acknowledgements;
       DELETE FROM alerts;
+      DELETE FROM telemetry_events;
       DELETE FROM app_devices;
       DELETE FROM activation_codes;
       DELETE FROM dispositivos;

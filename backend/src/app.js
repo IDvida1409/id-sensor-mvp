@@ -839,18 +839,45 @@ function telemetryEventForAlert(alert) {
   }];
 }
 
+function telemetryEventFromRow(event) {
+  return {
+    occurredAt: event.ocorrido_em,
+    time: formatTelemetryTime(event.ocorrido_em),
+    tone: event.tom || 'normal',
+    title: event.titulo || 'Evento operacional',
+    detail: event.detalhe || ''
+  };
+}
+
 function buildOperationalTelemetry(db, row) {
   const status = String(row.status || 'normal').toLowerCase();
+  const telemetryWindowStart = new Date(Date.now() - (24 * 60 * 60 * 1000)).toISOString();
   const alerts = db.prepare(`
     SELECT *
     FROM alerts
     WHERE dispositivo_id = ?
+      AND criado_em >= ?
     ORDER BY criado_em DESC
-    LIMIT 8
-  `).all(row.id);
+    LIMIT 100
+  `).all(row.id, telemetryWindowStart);
+
+  const operationalEvents = db.prepare(`
+    SELECT *
+    FROM telemetry_events
+    WHERE dispositivo_id = ?
+      AND ocorrido_em >= ?
+    ORDER BY ocorrido_em DESC, rowid DESC
+    LIMIT 12
+  `).all(row.id, telemetryWindowStart);
 
   const activeAlert = alerts.find((alert) => alert.status === 'ativo') || null;
-  const events = alerts.flatMap(telemetryEventForAlert);
+  const events = [
+    ...alerts.flatMap((alert) => telemetryEventForAlert(alert).map((event) => ({
+      ...event,
+      occurredAt: alert.criado_em
+    }))),
+    ...operationalEvents.map(telemetryEventFromRow)
+  ].sort((a, b) => String(b.occurredAt || '').localeCompare(String(a.occurredAt || '')));
 
   if (!events.length) {
     events.push({
@@ -863,9 +890,17 @@ function buildOperationalTelemetry(db, row) {
     });
   }
 
-  const criticalAlert = alerts.find((alert) => String(alert.tipo_alerta || '').includes('critico'));
-  const attentionAlert = alerts.find((alert) => String(alert.tipo_alerta || '').includes('atencao'));
-  const offlineAlert = alerts.find((alert) => String(alert.tipo_alerta || '').includes('offline'));
+  const durationForType = (type) => alerts
+    .filter((alert) => String(alert.tipo_alerta || '').includes(type))
+    .reduce((total, alert) => total + alertDurationSeconds(alert), 0);
+  const criticalSeconds = durationForType('critico');
+  const attentionSeconds = durationForType('atencao');
+  const offlineSeconds = durationForType('offline');
+  const withinLimitSeconds = Math.max(0, (24 * 60 * 60) - criticalSeconds - attentionSeconds - offlineSeconds);
+  const lastNormalization = operationalEvents.find((event) => (
+    event.tipo_evento === 'simulation_temperature_normalized'
+    || event.tipo_evento === 'simulation_communication_restored'
+  ));
   const activeStartedAt = activeAlert?.criado_em || row.atualizado_em;
   const activeElapsedSeconds = activeAlert ? alertDurationSeconds(activeAlert) : 0;
 
@@ -874,19 +909,22 @@ function buildOperationalTelemetry(db, row) {
       status,
       startedAt: activeStartedAt,
       startedLabel: activeAlert ? `Início ${formatTelemetryTime(activeAlert.criado_em)}` : null,
-      elapsedSeconds: activeElapsedSeconds
+      elapsedSeconds: activeElapsedSeconds,
+      normalizedAt: lastNormalization?.ocorrido_em || null,
+      normalizedLabel: lastNormalization ? `Última normalização ${formatTelemetryTime(lastNormalization.ocorrido_em)}` : null
     },
     durations: {
-      criticalSeconds: criticalAlert ? alertDurationSeconds(criticalAlert) : 0,
-      attentionSeconds: attentionAlert ? alertDurationSeconds(attentionAlert) : 0,
-      offlineSeconds: offlineAlert ? alertDurationSeconds(offlineAlert) : 0
+      withinLimitSeconds,
+      criticalSeconds,
+      attentionSeconds,
+      offlineSeconds
     },
     alertChannels: [
       { tone: 'sms', icon: 'sms', label: 'SMS', total: alerts.length ? 3 : 0 },
       { tone: 'email', icon: 'email', label: 'E-mail', total: alerts.length ? 2 : 0 },
       { tone: 'whatsapp', icon: 'whatsapp', label: 'WhatsApp', total: alerts.length ? 3 : 0 }
     ],
-    events: events.slice(0, 12)
+    events: events.slice(0, 12).map(({ occurredAt, ...event }) => event)
   };
 }
 

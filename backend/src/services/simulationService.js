@@ -160,7 +160,7 @@ function activeDeviceRows(db) {
   `).all();
 }
 
-function updateDevice(db, row, next) {
+function updateDevice(db, row, next, updatedAt = nowIso()) {
   db.prepare(`
     UPDATE dispositivos
     SET temperatura_atual = ?, status = ?, ultima_comunicacao = ?, bateria = ?,
@@ -172,19 +172,36 @@ function updateDevice(db, row, next) {
     next.ultima_comunicacao,
     next.bateria,
     next.chart_json || chartWith(row, next.temp),
-    nowIso(),
+    updatedAt,
     row.id
   );
 }
 
-function closeSimulationAlertsForDevice(db, deviceId) {
+function closeSimulationAlertsForDevice(db, deviceId, endedAt = nowIso()) {
   db.prepare(`
     UPDATE alerts
     SET status = 'encerrado', encerrado_em = ?
     WHERE dispositivo_id = ?
       AND status = 'ativo'
       AND tipo_alerta LIKE 'simulacao_%'
-  `).run(nowIso(), deviceId);
+  `).run(endedAt, deviceId);
+}
+
+function recordTelemetryEvent(db, row, event) {
+  db.prepare(`
+    INSERT INTO telemetry_events (
+      id, dispositivo_id, tipo_evento, tom, titulo, detalhe, temperatura, ocorrido_em
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    id('telemetry'),
+    row.id,
+    event.type,
+    event.tone,
+    event.title,
+    event.detail,
+    event.temp,
+    event.occurredAt
+  );
 }
 
 function logSimulationPush(db, alertId, recipient, pushResult) {
@@ -352,6 +369,58 @@ function resetOperationalDevices(db) {
   });
 }
 
+function normalizeOperationalDevices(db) {
+  const normalizedAt = nowIso();
+  let normalizationCount = 0;
+
+  activeDeviceRows(db).forEach((row) => {
+    const previousStatus = String(row.status || 'normal').toLowerCase();
+    const next = normalStateFor(row);
+
+    // Preserve the simulated excursion and append the normalized reading.
+    next.chart_json = chartWith(row, next.temp);
+    closeSimulationAlertsForDevice(db, row.id, normalizedAt);
+    updateDevice(db, row, next, normalizedAt);
+
+    if (previousStatus === 'normal') return;
+
+    if (previousStatus === 'critico') {
+      recordTelemetryEvent(db, row, {
+        type: 'simulation_critical_ended',
+        tone: 'critical',
+        title: 'Crítico encerrado',
+        detail: 'Equipamento deixou o estado crítico.',
+        temp: next.temp,
+        occurredAt: normalizedAt
+      });
+    }
+
+    if (previousStatus === 'offline') {
+      recordTelemetryEvent(db, row, {
+        type: 'simulation_communication_restored',
+        tone: 'normal',
+        title: 'Comunicação restabelecida',
+        detail: 'Painel voltou a receber leituras do sensor.',
+        temp: next.temp,
+        occurredAt: normalizedAt
+      });
+    } else {
+      recordTelemetryEvent(db, row, {
+        type: 'simulation_temperature_normalized',
+        tone: 'normal',
+        title: 'Temperatura normalizada',
+        detail: `Leitura voltou para dentro do limite configurado (${next.temp.toFixed(1)}°C).`,
+        temp: next.temp,
+        occurredAt: normalizedAt
+      });
+    }
+
+    normalizationCount += 1;
+  });
+
+  return normalizationCount;
+}
+
 function syncSimulationAlert(db, row, next) {
   if (next.status === 'normal') {
     closeSimulationAlertsForDevice(db, row.id);
@@ -441,7 +510,7 @@ function startSimulation(db) {
 }
 
 function stopSimulation(db) {
-  resetOperationalDevices(db);
+  const normalizationCount = normalizeOperationalDevices(db);
   const state = setSimulationState(db, {
     enabled: 0,
     step: 0,
@@ -449,7 +518,8 @@ function stopSimulation(db) {
     last_tick_at: nowIso()
   });
   return {
-    simulation: serializeSimulationState(state)
+    simulation: serializeSimulationState(state),
+    normalization_count: normalizationCount
   };
 }
 

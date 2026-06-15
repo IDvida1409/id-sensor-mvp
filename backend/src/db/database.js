@@ -131,6 +131,18 @@ function initDb() {
       FOREIGN KEY (app_device_id) REFERENCES app_devices(id)
     );
 
+    CREATE TABLE IF NOT EXISTS telemetry_events (
+      id TEXT PRIMARY KEY,
+      dispositivo_id TEXT NOT NULL,
+      tipo_evento TEXT NOT NULL,
+      tom TEXT NOT NULL,
+      titulo TEXT NOT NULL,
+      detalhe TEXT,
+      temperatura REAL,
+      ocorrido_em TEXT NOT NULL,
+      FOREIGN KEY (dispositivo_id) REFERENCES dispositivos(id)
+    );
+
     CREATE TABLE IF NOT EXISTS simulation_state (
       id TEXT PRIMARY KEY,
       enabled INTEGER NOT NULL DEFAULT 0,
@@ -158,6 +170,9 @@ function initDb() {
   database.exec(`
     CREATE INDEX IF NOT EXISTS idx_alert_ack_app_device
     ON alert_acknowledgements (app_device_id, alert_id);
+
+    CREATE INDEX IF NOT EXISTS idx_telemetry_events_device_time
+    ON telemetry_events (dispositivo_id, ocorrido_em DESC);
   `);
 }
 

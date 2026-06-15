@@ -950,14 +950,18 @@ function buildOperationalTelemetryCard(d, values){
   const telemetry = d.operationalTelemetry || {};
   const telemetryActive = telemetry.active || {};
   const telemetryDurations = telemetry.durations || {};
+  const hasTelemetryDurations = telemetry.durations && Object.prototype.hasOwnProperty.call(telemetry.durations, 'withinLimitSeconds');
   const criticalElapsed = getCriticalElapsedSeconds(d);
-  const criticalSeconds = d.state === 'crit'
-    ? criticalElapsed
-    : Number(telemetryDurations.criticalSeconds || 0);
+  const criticalSeconds = hasTelemetryDurations
+    ? Number(telemetryDurations.criticalSeconds || 0)
+    : (d.state === 'crit' ? criticalElapsed : 0);
   const attentionSeconds = Number(telemetryDurations.attentionSeconds || 0);
   const offlineSeconds = Number(telemetryDurations.offlineSeconds || 0);
-  const criticalTotalLabel = criticalSeconds > 0 ? formatTelemetryShortDuration(criticalSeconds) : '32 min';
-  const outOfRangeTime = d.state === 'crit' ? formatTelemetryShortDuration(criticalElapsed) : '1h20';
+  const withinLimitSeconds = Number(telemetryDurations.withinLimitSeconds || 0);
+  const criticalTotalLabel = hasTelemetryDurations ? formatTelemetryShortDuration(criticalSeconds) : '32 min';
+  const outOfRangeTime = hasTelemetryDurations
+    ? formatTelemetryShortDuration(attentionSeconds + criticalSeconds)
+    : (d.state === 'crit' ? formatTelemetryShortDuration(criticalElapsed) : '1h20');
   const isCritical = d.state === 'crit';
   const isAttention = d.state === 'warn';
   const isOffline = d.online === false;
@@ -965,22 +969,22 @@ function buildOperationalTelemetryCard(d, values){
   const statusLabel = isCritical ? 'CRÍTICO EM ANDAMENTO' : (isAttention ? 'ATENÇÃO EM ANDAMENTO' : (isOffline ? 'SEM COMUNICAÇÃO' : 'DENTRO DO LIMITE'));
   const statusMain = isCritical
     ? `<strong data-critical-timer="${d.id}">${formatOperationalElapsed(criticalElapsed)}</strong>`
-    : (isAttention ? '<strong>00:18:24</strong>' : (isOffline ? '<strong>00:15:00</strong>' : `<strong>${tempLabel(latest)}</strong>`));
+    : ((isAttention || isOffline)
+      ? `<strong>${formatOperationalElapsed(Number(telemetryActive.elapsedSeconds || 0))}</strong>`
+      : `<strong>${tempLabel(latest)}</strong>`);
   const statusSub = isCritical
     ? (telemetryActive.startedLabel || 'Início 14:32')
-    : (isAttention ? (telemetryActive.startedLabel || 'Início 15:06') : (isOffline ? (telemetryActive.startedLabel || 'Última comunicação 14:35') : 'Última normalização 15:45'));
+    : (isAttention ? (telemetryActive.startedLabel || 'Início 15:06') : (isOffline ? (telemetryActive.startedLabel || 'Última comunicação 14:35') : (telemetryActive.normalizedLabel || 'Dentro do limite configurado')));
   const alertChannels = normalizeTelemetryChannels(telemetry.alertChannels);
   const smsCount = alertChannels[0].total;
   const emailCount = alertChannels[1].total;
   const whatsappCount = alertChannels[2].total;
   const statusCards = [
-    {tone:'limit', icon:'limit', label:'Dentro do limite', value:'19h40'},
-    {tone:'attention', icon:'attention', label:'Atenção', value:'48 min'},
+    {tone:'limit', icon:'limit', label:'Dentro do limite', value:hasTelemetryDurations ? formatTelemetryShortDuration(withinLimitSeconds) : '19h40'},
+    {tone:'attention', icon:'attention', label:'Atenção', value:hasTelemetryDurations ? formatTelemetryShortDuration(attentionSeconds) : '48 min'},
     {tone:'critical', icon:'critical', label:'Crítico', value:criticalTotalLabel},
-    {tone:'offline', icon:'communication', label:'Sem comunicação', value:'15 min'}
+    {tone:'offline', icon:'communication', label:'Sem comunicação', value:hasTelemetryDurations ? formatTelemetryShortDuration(offlineSeconds) : '15 min'}
   ];
-  statusCards[1].value = attentionSeconds > 0 ? formatTelemetryShortDuration(attentionSeconds) : statusCards[1].value;
-  statusCards[3].value = offlineSeconds > 0 ? formatTelemetryShortDuration(offlineSeconds) : statusCards[3].value;
 
   const fallbackTimelineEvents = [
     {time:'15:45', tone:'normal', title:'Temperatura normalizada', detail:'Leitura voltou para dentro do limite configurado.'},
@@ -1835,6 +1839,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if(typeof renderGrid === 'function') renderGrid();
     if(typeof updateToolbarState === 'function') updateToolbarState();
+    if(currentGraphDeviceId !== null && document.getElementById('graphWorkspaceRoot')) renderGraphModal();
     refreshNocLiveFromDevices();
     return devices;
   }
