@@ -1491,22 +1491,40 @@ function analyticalDuration(totalSeconds){
   return `${hours}h ${String(minutes).padStart(2,'0')}min`;
 }
 
+function analyticalLongDuration(totalSeconds){
+  const safe = Math.max(0, Number(totalSeconds) || 0);
+  const days = Math.floor(safe / 86400);
+  const hours = Math.floor((safe % 86400) / 3600);
+  const minutes = Math.floor((safe % 3600) / 60);
+  const parts = [];
+  if(days) parts.push(`${days}d`);
+  if(hours) parts.push(`${hours}h`);
+  if(minutes || !parts.length) parts.push(`${minutes}min`);
+  return parts.join(' ');
+}
+
 function buildAnalyticalReportModel(d){
   const months = ['Jan/26','Fev/26','Mar/26','Abr/26','Mai/26','Jun/26'];
   const offset = ((Number(d.id) || 1) % 4) * 0.1;
   const minimum = [2.3,2.4,2.5,2.9,3.1,3.0].map(value => Number((value + offset).toFixed(1)));
   const average = [3.8,4.0,4.3,4.8,5.3,5.9].map(value => Number((value + offset).toFixed(1)));
   const maximum = [5.4,5.7,6.2,7.1,8.1,9.4].map(value => Number((value + offset).toFixed(1)));
+  const humidityBase = Number.isFinite(Number(d.hum1)) ? Number(d.hum1) : 25.8;
+  const humidity = [-1.2,-0.8,-0.3,0.2,0.7,1.1].map(value => Number((humidityBase + value).toFixed(1)));
   const durations = d.operationalTelemetry?.durations || {};
   const criticalSeconds = Math.max(Number(durations.criticalSeconds || 0), 18 * 3600 + 40 * 60);
   const attentionSeconds = Math.max(Number(durations.attentionSeconds || 0), 9 * 3600 + 15 * 60);
   const offlineSeconds = Math.max(Number(durations.offlineSeconds || 0), 45 * 60);
-  const condition = {normal:94.2, attention:4.0, critical:1.5, offline:0.3};
+  const periodSeconds = 143 * 86400 + 23 * 3600 + 59 * 60;
+  const normalSeconds = Math.max(0, periodSeconds - criticalSeconds - attentionSeconds - offlineSeconds);
+  const conditionSeconds = {normal:normalSeconds, attention:attentionSeconds, critical:criticalSeconds, offline:offlineSeconds};
+  const conditionWidths = Object.fromEntries(Object.entries(conditionSeconds).map(([key,value]) => [key, (value / periodSeconds) * 100]));
   const alerts = [10,12,13,15,17,18];
   const recurrences = [2,3,3,4,4,6];
   const offline = [0,1,0,1,1,0];
   return {
-    months, minimum, average, maximum, condition, alerts, recurrences, offline,
+    months, minimum, average, maximum, humidity, hasHumidity:Number.isFinite(Number(d.hum1)),
+    conditionSeconds, conditionWidths, periodSeconds, alerts, recurrences, offline,
     minValue:Math.min(...minimum),
     maxValue:Math.max(...maximum),
     averageValue:Number((average.reduce((sum, value) => sum + value, 0) / average.length).toFixed(1)),
@@ -1520,30 +1538,39 @@ function buildAnalyticalReportModel(d){
 }
 
 function buildAnalyticalThermalChart(model, d){
-  const width = 650;
-  const height = 210;
+  const width = 640;
+  const height = 235;
   const minPath = analyticalPath(model.minimum, width, height);
   const avgPath = analyticalPath(model.average, width, height);
   const maxPath = analyticalPath(model.maximum, width, height);
+  const humidityMin = Math.floor(Math.min(...model.humidity) - 2);
+  const humidityMax = Math.ceil(Math.max(...model.humidity) + 2);
+  const humidityPath = analyticalPath(model.humidity, width, height, humidityMin, humidityMax);
   const rangeTop = maxPath.y(Number(d.max ?? 8));
   const rangeBottom = maxPath.y(Number(d.min ?? 2));
   const monthStep = width / (model.months.length - 1);
   return `
     <div class="analytic-chart-legend">
       <span><i class="is-average"></i>Média</span><span><i class="is-maximum"></i>Máxima</span>
-      <span><i class="is-minimum"></i>Mínima</span><span><i class="is-limit"></i>Limites configurados</span>
+      <span><i class="is-minimum"></i>Mínima</span>${model.hasHumidity ? '<span><i class="is-humidity"></i>Umidade</span>' : ''}<span><i class="is-limit"></i>Limites configurados</span>
     </div>
-    <svg class="analytic-thermal-svg" viewBox="0 0 730 270" role="img" aria-label="Histórico da temperatura do equipamento">
-      <defs><linearGradient id="analyticArea${d.id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#1f6fe5" stop-opacity=".22"/><stop offset="100%" stop-color="#1f6fe5" stop-opacity=".02"/></linearGradient></defs>
-      <g transform="translate(54,18)">
+    <svg class="analytic-thermal-svg" viewBox="0 0 760 325" role="img" aria-label="Histórico da temperatura e umidade do equipamento">
+      <defs>
+        <linearGradient id="analyticArea${d.id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#1f6fe5" stop-opacity=".18"/><stop offset="100%" stop-color="#1f6fe5" stop-opacity=".02"/></linearGradient>
+        <linearGradient id="analyticHumidity${d.id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#21b6a8" stop-opacity=".30"/><stop offset="100%" stop-color="#21b6a8" stop-opacity=".04"/></linearGradient>
+      </defs>
+      <text x="12" y="19" class="analytic-axis-title">Temperatura (°C)</text>${model.hasHumidity ? '<text x="748" y="19" text-anchor="end" class="analytic-axis-title humidity">Umidade (°C)</text>' : ''}
+      <g transform="translate(58,38)">
         <rect x="0" y="${rangeTop.toFixed(1)}" width="${width}" height="${Math.max(0, rangeBottom-rangeTop).toFixed(1)}" fill="#eef6ff"/>
         ${[0,2,4,6,8,10,12].map(value => `<line x1="0" y1="${maxPath.y(value).toFixed(1)}" x2="${width}" y2="${maxPath.y(value).toFixed(1)}" stroke="#dce5f1"/><text x="-12" y="${(maxPath.y(value)+4).toFixed(1)}" text-anchor="end" class="analytic-axis-label">${value}°C</text>`).join('')}
+        ${model.hasHumidity ? [humidityMin, Math.round((humidityMin+humidityMax)/2), humidityMax].map(value => `<text x="${width+12}" y="${(humidityPath.y(value)+4).toFixed(1)}" class="analytic-axis-label humidity">${value}°C</text>`).join('') : ''}
         <line x1="0" y1="${rangeTop.toFixed(1)}" x2="${width}" y2="${rangeTop.toFixed(1)}" class="analytic-limit-line"/><line x1="0" y1="${rangeBottom.toFixed(1)}" x2="${width}" y2="${rangeBottom.toFixed(1)}" class="analytic-limit-line"/>
+        ${model.hasHumidity ? `<path d="${humidityPath.area}" fill="url(#analyticHumidity${d.id})"/><path d="${humidityPath.line}" class="analytic-series-humidity"/>${humidityPath.points.map(point => `<circle cx="${point.x}" cy="${point.y}" r="3.5" class="analytic-dot-humidity"/><text x="${point.x}" y="${Math.min(height-5,point.y+15)}" text-anchor="middle" class="analytic-value-label humidity">${point.value.toFixed(1)}</text>`).join('')}` : ''}
         <path d="${avgPath.area}" fill="url(#analyticArea${d.id})"/><path d="${minPath.line}" class="analytic-series-min"/><path d="${avgPath.line}" class="analytic-series-average"/><path d="${maxPath.line}" class="analytic-series-max"/>
-        ${minPath.points.map(point => `<circle cx="${point.x}" cy="${point.y}" r="3.5" class="analytic-dot-min"/>`).join('')}
-        ${avgPath.points.map(point => `<circle cx="${point.x}" cy="${point.y}" r="4" class="analytic-dot-average"/>`).join('')}
-        ${maxPath.points.map(point => `<circle cx="${point.x}" cy="${point.y}" r="4" class="analytic-dot-max"/>`).join('')}
-        ${model.months.map((month,index) => `<text x="${(index*monthStep).toFixed(1)}" y="238" text-anchor="middle" class="analytic-month-label">${month}</text>`).join('')}
+        ${minPath.points.map(point => `<circle cx="${point.x}" cy="${point.y}" r="3.5" class="analytic-dot-min"/><text x="${point.x}" y="${Math.min(height-4,point.y+17)}" text-anchor="middle" class="analytic-value-label minimum">${point.value.toFixed(1)}</text>`).join('')}
+        ${avgPath.points.map(point => `<circle cx="${point.x}" cy="${point.y}" r="4" class="analytic-dot-average"/><text x="${point.x}" y="${Math.max(12,point.y-10)}" text-anchor="middle" class="analytic-value-label average">${point.value.toFixed(1)}</text>`).join('')}
+        ${maxPath.points.map(point => `<circle cx="${point.x}" cy="${point.y}" r="4" class="analytic-dot-max"/><text x="${point.x}" y="${Math.max(12,point.y-10)}" text-anchor="middle" class="analytic-value-label maximum">${point.value.toFixed(1)}</text>`).join('')}
+        ${model.months.map((month,index) => `<text x="${(index*monthStep).toFixed(1)}" y="266" text-anchor="middle" class="analytic-month-label">${month}</text>`).join('')}
       </g>
     </svg>`;
 }
@@ -1553,14 +1580,16 @@ function buildAnalyticalOccurrencesChart(model){
   const baseline = 164;
   const groupWidth = 82;
   const maxAlerts = 20;
-  const offlinePath = analyticalPath(model.offline, 410, 82, 0, 3);
+  const offlineX = index => index * groupWidth + 31;
+  const offlineY = value => baseline - (Number(value) / 3) * chartHeight;
+  const offlineLine = model.offline.map((value,index) => `${index ? 'L' : 'M'} ${offlineX(index)} ${offlineY(value)}`).join(' ');
   return `
     <div class="analytic-occurrence-legend"><span><i class="alerts"></i>Alertas</span><span><i class="recurrences"></i>Recorrências</span><span><i class="offline"></i>Sem comunicação</span></div>
     <svg class="analytic-occurrence-svg" viewBox="0 0 520 215" role="img" aria-label="Ocorrências mensais do equipamento"><g transform="translate(42,16)">
       ${[0,5,10,15,20].map(value => { const y = baseline - (value/maxAlerts)*chartHeight; return `<line x1="0" y1="${y}" x2="430" y2="${y}" stroke="#e2e9f2"/><text x="-10" y="${y+4}" text-anchor="end" class="analytic-axis-label">${value}</text>`; }).join('')}
-      ${model.months.map((month,index) => { const x=index*groupWidth+10; const ah=(model.alerts[index]/maxAlerts)*chartHeight; const rh=(model.recurrences[index]/maxAlerts)*chartHeight; return `<rect x="${x}" y="${baseline-ah}" width="20" height="${ah}" rx="4" fill="#ef334e"/><rect x="${x+23}" y="${baseline-rh}" width="20" height="${rh}" rx="4" fill="#f59b23"/><text x="${x+21}" y="190" text-anchor="middle" class="analytic-month-label">${month.replace('/26','')}</text>`; }).join('')}
-      <path d="${offlinePath.line}" transform="translate(10,68)" fill="none" stroke="#77869b" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-      ${offlinePath.points.map(point => `<circle cx="${point.x+10}" cy="${point.y+68}" r="4" fill="#77869b" stroke="#fff" stroke-width="2"/>`).join('')}
+      ${model.months.map((month,index) => { const x=index*groupWidth+10; const ah=(model.alerts[index]/maxAlerts)*chartHeight; const rh=(model.recurrences[index]/maxAlerts)*chartHeight; return `<rect x="${x}" y="${baseline-ah}" width="20" height="${ah}" rx="4" fill="#15945a"/><text x="${x+10}" y="${baseline-ah-7}" text-anchor="middle" class="analytic-bar-value alerts">${model.alerts[index]}</text><rect x="${x+23}" y="${baseline-rh}" width="20" height="${rh}" rx="4" fill="#ef334e"/><text x="${x+33}" y="${baseline-rh-7}" text-anchor="middle" class="analytic-bar-value recurrences">${model.recurrences[index]}</text><text x="${x+21}" y="190" text-anchor="middle" class="analytic-month-label">${month.replace('/26','')}</text>`; }).join('')}
+      <path d="${offlineLine}" fill="none" stroke="#77869b" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+      ${model.offline.map((value,index) => `<circle cx="${offlineX(index)}" cy="${offlineY(value)}" r="4" fill="#77869b" stroke="#fff" stroke-width="2"/><text x="${offlineX(index)}" y="${offlineY(value)-8}" text-anchor="middle" class="analytic-bar-value offline">${value}</text>`).join('')}
     </g></svg>`;
 }
 
@@ -1572,6 +1601,14 @@ function buildAnalyticalReport(d){
   const trendSign = model.averageChange > 0 ? '+' : '';
   const areaName = d.unitName || d.sector || 'Banco IDvida';
   const deviceId = d.backendId || d.code || d.id;
+  const configuredMin = Number(d.min ?? 2);
+  const configuredMax = Number(d.max ?? 8);
+  const increasedMonths = model.months.slice(1).filter((month,index) => model.average[index + 1] > model.average[index] + 0.05);
+  const stableMonths = model.months.filter((month,index) => model.average[index] >= configuredMin && model.average[index] <= configuredMax);
+  const peakMonths = model.months.filter((month,index) => model.maximum[index] > configuredMax || model.minimum[index] < configuredMin);
+  const increasedMonthsText = increasedMonths.length ? increasedMonths.join(', ') : 'nenhum mês';
+  const stableMonthsText = stableMonths.length ? stableMonths.join(', ') : 'nenhum mês';
+  const peakMonthsText = peakMonths.length ? peakMonths.join(', ') : 'nenhum mês';
   const deviations = [
     {label:'Manhã', range:'06h - 12h', values:[8,9,10,11,13,15], peak:'8,1°C', trend:'↑'},
     {label:'Tarde', range:'12h - 18h', values:[35,38,42,47,58,55], peak:'9,4°C', trend:'↑'},
@@ -1612,17 +1649,17 @@ function buildAnalyticalReport(d){
           </section>
 
           <section class="analytic-kpi-grid">
-            <div class="analytic-kpi"><small>Temperatura mínima</small><strong class="blue">↓ ${model.minValue.toFixed(1)}°C</strong><span>05/01/2026 · 04:10</span></div>
-            <div class="analytic-kpi"><small>Temperatura máxima</small><strong class="red">↑ ${model.maxValue.toFixed(1)}°C</strong><span>11/06/2026 · 15:40</span></div>
+            <div class="analytic-kpi"><small>Temperatura mínima</small><strong class="blue">${model.minValue.toFixed(1)}°C</strong><span>↓ Menor leitura · 05/01/2026 04:10</span></div>
+            <div class="analytic-kpi"><small>Temperatura máxima</small><strong class="red">${model.maxValue.toFixed(1)}°C</strong><span>↑ Maior leitura · 11/06/2026 15:40</span></div>
             <div class="analytic-kpi"><small>Temperatura média</small><strong>${model.averageValue.toFixed(1)}°C</strong><span>Período analisado</span></div>
             <div class="analytic-kpi"><small>Variação total</small><strong class="red">↑ +${model.variation.toFixed(1)}°C</strong><span>Máxima - mínima</span></div>
-            <div class="analytic-kpi"><small>Tempo em crítico</small><strong class="red">${analyticalDuration(model.criticalSeconds)}</strong><span>${model.condition.critical.toFixed(1)}% do período</span></div>
-            <div class="analytic-kpi"><small>Tempo em atenção</small><strong class="orange">${analyticalDuration(model.attentionSeconds)}</strong><span>${model.condition.attention.toFixed(1)}% do período</span></div>
-            <div class="analytic-kpi"><small>Sem comunicação</small><strong class="gray">${analyticalDuration(model.offlineSeconds)}</strong><span>${model.condition.offline.toFixed(1)}% do período</span></div>
+            <div class="analytic-kpi"><small>Tempo em crítico</small><strong class="red">${analyticalDuration(model.criticalSeconds)}</strong><span>Tempo acumulado no período</span></div>
+            <div class="analytic-kpi"><small>Tempo em atenção</small><strong class="orange">${analyticalDuration(model.attentionSeconds)}</strong><span>Tempo acumulado no período</span></div>
+            <div class="analytic-kpi"><small>Sem comunicação</small><strong class="gray">${analyticalDuration(model.offlineSeconds)}</strong><span>Tempo acumulado no período</span></div>
           </section>
 
           <section class="analytic-section analytic-history-section">
-            <div class="analytic-section-title"><b>1</b><div><h3>Histórico da temperatura do equipamento</h3><p>Compara as temperaturas mínima, média e máxima ao longo dos meses analisados.</p></div></div>
+            <div class="analytic-section-title"><b>1</b><div><h3>Histórico da temperatura do equipamento</h3><p>Compara as temperaturas mínima, média e máxima${model.hasHumidity ? ', além da umidade registrada,' : ''} ao longo dos meses analisados.</p></div></div>
             <div class="analytic-history-grid">
               <div class="analytic-chart-card">${buildAnalyticalThermalChart(model,d)}</div>
               <aside class="analytic-period-summary">
@@ -1630,7 +1667,7 @@ function buildAnalyticalReport(d){
                 <div><small>Variação da temperatura média</small><strong class="${trendClass}">${trendSign}${model.averageChange.toFixed(1)}°C</strong><span>${model.months[0]}: ${model.average[0].toFixed(1)}°C · ${model.months.at(-1)}: ${model.average.at(-1).toFixed(1)}°C</span></div>
                 <div><small>Maior pico registrado</small><strong>${model.maxValue.toFixed(1)}°C</strong><span>11/06/2026 · 15:40</span></div>
                 <div><small>Menor valor registrado</small><strong>${model.minValue.toFixed(1)}°C</strong><span>05/01/2026 · 04:10</span></div>
-                <div><small>Leitura da tendência</small><strong>A temperatura ${trendWord}</strong><span>Comparação entre o primeiro e o último mês.</span></div>
+                <div class="analytic-trend-detail"><small>Leitura da tendência</small><strong>A temperatura ${trendWord}</strong><span><b>Meses com aumento:</b> ${increasedMonthsText}.</span><span><b>Média dentro do limite:</b> ${stableMonthsText}.</span><span><b>Meses com pico fora do limite:</b> ${peakMonthsText}.</span></div>
               </aside>
             </div>
           </section>
@@ -1638,14 +1675,14 @@ function buildAnalyticalReport(d){
           <div class="analytic-two-column">
             <section class="analytic-section">
               <div class="analytic-section-title"><b>2</b><div><h3>Tempo do equipamento em cada condição</h3><p>Distribui o tempo total entre as condições registradas.</p></div></div>
-              <div class="analytic-condition-bar" aria-label="Tempo por condição"><span class="normal" style="width:${model.condition.normal}%"></span><span class="attention" style="width:${model.condition.attention}%"></span><span class="critical" style="width:${model.condition.critical}%"></span><span class="offline" style="width:${model.condition.offline}%"></span></div>
+              <div class="analytic-condition-bar" aria-label="Tempo por condição"><span class="normal" style="width:${model.conditionWidths.normal}%"></span><span class="attention" style="width:${model.conditionWidths.attention}%"></span><span class="critical" style="width:${model.conditionWidths.critical}%"></span><span class="offline" style="width:${model.conditionWidths.offline}%"></span></div>
               <div class="analytic-condition-legend">
-                <div><i class="normal"></i><span>Dentro do limite</span><strong>${model.condition.normal.toFixed(1)}%</strong></div>
-                <div><i class="attention"></i><span>Atenção</span><strong>${model.condition.attention.toFixed(1)}%</strong></div>
-                <div><i class="critical"></i><span>Crítico</span><strong>${model.condition.critical.toFixed(1)}%</strong></div>
-                <div><i class="offline"></i><span>Sem comunicação</span><strong>${model.condition.offline.toFixed(1)}%</strong></div>
+                <div><i class="normal"></i><span>Dentro do limite</span><strong>${analyticalLongDuration(model.conditionSeconds.normal)}</strong></div>
+                <div><i class="attention"></i><span>Atenção</span><strong>${analyticalLongDuration(model.conditionSeconds.attention)}</strong></div>
+                <div><i class="critical"></i><span>Crítico</span><strong>${analyticalLongDuration(model.conditionSeconds.critical)}</strong></div>
+                <div><i class="offline"></i><span>Sem comunicação</span><strong>${analyticalLongDuration(model.conditionSeconds.offline)}</strong></div>
               </div>
-              <div class="analytic-condition-total"><small>Total analisado</small><strong>143d 23h 59min</strong></div>
+              <div class="analytic-condition-total"><small>Total analisado</small><strong>${analyticalLongDuration(model.periodSeconds)}</strong></div>
             </section>
 
             <section class="analytic-section analytic-deviation-section">
@@ -1661,13 +1698,13 @@ function buildAnalyticalReport(d){
             <div class="analytic-section-title"><b>4</b><div><h3>Indicadores</h3><p>Consolida as ocorrências e os processos registrados durante o período analisado.</p></div></div>
             <div class="analytic-indicator-grid">
               <div class="analytic-occurrence-panel">
-                <div class="analytic-mini-totals"><span><small>Alertas</small><strong class="red">${model.alertTotal}</strong></span><span><small>Recorrências</small><strong class="orange">${model.recurrenceTotal}</strong></span><span><small>Sem comunicação</small><strong class="gray">${model.offlineTotal}</strong></span></div>
+                <div class="analytic-mini-totals"><span><small>Alertas</small><strong class="green">${model.alertTotal}</strong></span><span><small>Recorrências</small><strong class="red">${model.recurrenceTotal}</strong></span><span><small>Sem comunicação</small><strong class="gray">${model.offlineTotal}</strong></span></div>
                 ${buildAnalyticalOccurrencesChart(model)}
               </div>
               <div class="analytic-process-panel">
-                <h4>Processos registrados</h4><p>Períodos operacionais informados no sistema.</p>
+                <h4>Processos registrados</h4><p>Períodos em que o equipamento foi colocado em um processo operacional.</p>
                 <table class="analytic-table"><thead><tr><th>Processo</th><th>Quantidade</th><th>Tempo total</th></tr></thead><tbody>${processes.map(row=>`<tr><td>${row[0]}</td><td>${row[1]}</td><td>${row[2]}</td></tr>`).join('')}<tr class="total"><td>Total</td><td>138</td><td>116h 45min</td></tr></tbody></table>
-                <small class="analytic-process-note">Os processos contextualizam períodos em que o equipamento estava sob intervenção operacional registrada.</small>
+                <small class="analytic-process-note">Esses processos mostram os períodos em que o equipamento foi colocado pelo usuário em manutenção, degelo, inventário ou reposição. Nesses intervalos, o processo permanece registrado e os alertas automáticos relacionados à intervenção ficam suspensos, evitando contabilizar a operação planejada como falha.</small>
               </div>
             </div>
           </section>
@@ -1676,7 +1713,7 @@ function buildAnalyticalReport(d){
             <div class="analytic-section-title"><b>5</b><div><h3>Análise do período</h3><p>Resumo factual dos indicadores apresentados neste relatório.</p></div></div>
             <div class="analytic-analysis-copy">
               <p>No período analisado, a temperatura média <strong>${trendWord} ${Math.abs(model.averageChange).toFixed(1)}°C</strong>, passando de ${model.average[0].toFixed(1)}°C em ${model.months[0]} para ${model.average.at(-1).toFixed(1)}°C em ${model.months.at(-1)}. O maior pico registrado foi de <strong>${model.maxValue.toFixed(1)}°C</strong>.</p>
-              <p>O equipamento permaneceu <strong>${model.condition.normal.toFixed(1)}% do tempo dentro do limite</strong>. Foram registrados ${analyticalDuration(model.criticalSeconds)} em condição crítica, ${analyticalDuration(model.attentionSeconds)} em atenção e ${analyticalDuration(model.offlineSeconds)} sem comunicação.</p>
+              <p>O equipamento permaneceu <strong>${analyticalLongDuration(model.conditionSeconds.normal)} dentro do limite</strong>. Também foram registrados ${analyticalDuration(model.criticalSeconds)} em condição crítica, ${analyticalDuration(model.attentionSeconds)} em atenção e ${analyticalDuration(model.offlineSeconds)} sem comunicação.</p>
               <p>Foram contabilizados <strong>${model.alertTotal} alertas</strong>, <strong>${model.recurrenceTotal} recorrências</strong> e ${model.offlineTotal} ocorrências de perda de comunicação. A maior incidência de desvios ocorreu no período da tarde.</p>
             </div>
           </section>
