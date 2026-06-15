@@ -1304,7 +1304,7 @@ function buildGraphModal(d, graphState = {period:'daily', view:'summary'}){
                 <button class="graph-report-btn">Exportar PDF</button>
                 <button class="graph-report-btn">Exportar Excel</button>
                 <button class="graph-report-btn">Exportar CSV</button>
-                <button class="graph-report-btn">Relatório Analítico</button>
+                <button class="graph-report-btn" type="button" onclick="openAnalyticalReportModal(${d.id})">Relatório Analítico</button>
               </div>
             </details>
           </div>
@@ -1457,6 +1457,264 @@ function openGraphModal(id){
 function closeGraphModal(){
   document.getElementById('graphWorkspaceRoot')?.remove();
 }
+
+function analyticalReportPeriod(){
+  const end = new Date();
+  const start = new Date(end.getFullYear(), end.getMonth() - 5, 1);
+  const format = value => value.toLocaleDateString('pt-BR', {day:'2-digit', month:'2-digit', year:'numeric'});
+  return {
+    start:format(start),
+    end:format(end),
+    generated:end.toLocaleString('pt-BR', {day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'})
+  };
+}
+
+function analyticalPath(values, width, height, minValue=0, maxValue=12){
+  const safe = (Array.isArray(values) ? values : []).map(Number).filter(Number.isFinite);
+  const step = safe.length > 1 ? width / (safe.length - 1) : width;
+  const y = value => height - ((Number(value) - minValue) / (maxValue - minValue)) * height;
+  const points = safe.map((value, index) => ({
+    x:index * step,
+    y:Math.max(0, Math.min(height, y(value))),
+    value
+  }));
+  const line = points.map((point, index) => `${index ? 'L' : 'M'} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(' ');
+  const area = points.length ? `${line} L ${points.at(-1).x.toFixed(1)} ${height} L 0 ${height} Z` : '';
+  return {points, line, area, y};
+}
+
+function analyticalDuration(totalSeconds){
+  const safe = Math.max(0, Number(totalSeconds) || 0);
+  const hours = Math.floor(safe / 3600);
+  const minutes = Math.floor((safe % 3600) / 60);
+  if(!hours) return `${minutes}min`;
+  return `${hours}h ${String(minutes).padStart(2,'0')}min`;
+}
+
+function buildAnalyticalReportModel(d){
+  const months = ['Jan/26','Fev/26','Mar/26','Abr/26','Mai/26','Jun/26'];
+  const offset = ((Number(d.id) || 1) % 4) * 0.1;
+  const minimum = [2.3,2.4,2.5,2.9,3.1,3.0].map(value => Number((value + offset).toFixed(1)));
+  const average = [3.8,4.0,4.3,4.8,5.3,5.9].map(value => Number((value + offset).toFixed(1)));
+  const maximum = [5.4,5.7,6.2,7.1,8.1,9.4].map(value => Number((value + offset).toFixed(1)));
+  const durations = d.operationalTelemetry?.durations || {};
+  const criticalSeconds = Math.max(Number(durations.criticalSeconds || 0), 18 * 3600 + 40 * 60);
+  const attentionSeconds = Math.max(Number(durations.attentionSeconds || 0), 9 * 3600 + 15 * 60);
+  const offlineSeconds = Math.max(Number(durations.offlineSeconds || 0), 45 * 60);
+  const condition = {normal:94.2, attention:4.0, critical:1.5, offline:0.3};
+  const alerts = [10,12,13,15,17,18];
+  const recurrences = [2,3,3,4,4,6];
+  const offline = [0,1,0,1,1,0];
+  return {
+    months, minimum, average, maximum, condition, alerts, recurrences, offline,
+    minValue:Math.min(...minimum),
+    maxValue:Math.max(...maximum),
+    averageValue:Number((average.reduce((sum, value) => sum + value, 0) / average.length).toFixed(1)),
+    averageChange:Number((average.at(-1) - average[0]).toFixed(1)),
+    variation:Number((Math.max(...maximum) - Math.min(...minimum)).toFixed(1)),
+    criticalSeconds, attentionSeconds, offlineSeconds,
+    alertTotal:alerts.reduce((sum, value) => sum + value, 0),
+    recurrenceTotal:recurrences.reduce((sum, value) => sum + value, 0),
+    offlineTotal:offline.reduce((sum, value) => sum + value, 0)
+  };
+}
+
+function buildAnalyticalThermalChart(model, d){
+  const width = 650;
+  const height = 210;
+  const minPath = analyticalPath(model.minimum, width, height);
+  const avgPath = analyticalPath(model.average, width, height);
+  const maxPath = analyticalPath(model.maximum, width, height);
+  const rangeTop = maxPath.y(Number(d.max ?? 8));
+  const rangeBottom = maxPath.y(Number(d.min ?? 2));
+  const monthStep = width / (model.months.length - 1);
+  return `
+    <div class="analytic-chart-legend">
+      <span><i class="is-average"></i>Média</span><span><i class="is-maximum"></i>Máxima</span>
+      <span><i class="is-minimum"></i>Mínima</span><span><i class="is-limit"></i>Limites configurados</span>
+    </div>
+    <svg class="analytic-thermal-svg" viewBox="0 0 730 270" role="img" aria-label="Histórico da temperatura do equipamento">
+      <defs><linearGradient id="analyticArea${d.id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#1f6fe5" stop-opacity=".22"/><stop offset="100%" stop-color="#1f6fe5" stop-opacity=".02"/></linearGradient></defs>
+      <g transform="translate(54,18)">
+        <rect x="0" y="${rangeTop.toFixed(1)}" width="${width}" height="${Math.max(0, rangeBottom-rangeTop).toFixed(1)}" fill="#eef6ff"/>
+        ${[0,2,4,6,8,10,12].map(value => `<line x1="0" y1="${maxPath.y(value).toFixed(1)}" x2="${width}" y2="${maxPath.y(value).toFixed(1)}" stroke="#dce5f1"/><text x="-12" y="${(maxPath.y(value)+4).toFixed(1)}" text-anchor="end" class="analytic-axis-label">${value}°C</text>`).join('')}
+        <line x1="0" y1="${rangeTop.toFixed(1)}" x2="${width}" y2="${rangeTop.toFixed(1)}" class="analytic-limit-line"/><line x1="0" y1="${rangeBottom.toFixed(1)}" x2="${width}" y2="${rangeBottom.toFixed(1)}" class="analytic-limit-line"/>
+        <path d="${avgPath.area}" fill="url(#analyticArea${d.id})"/><path d="${minPath.line}" class="analytic-series-min"/><path d="${avgPath.line}" class="analytic-series-average"/><path d="${maxPath.line}" class="analytic-series-max"/>
+        ${minPath.points.map(point => `<circle cx="${point.x}" cy="${point.y}" r="3.5" class="analytic-dot-min"/>`).join('')}
+        ${avgPath.points.map(point => `<circle cx="${point.x}" cy="${point.y}" r="4" class="analytic-dot-average"/>`).join('')}
+        ${maxPath.points.map(point => `<circle cx="${point.x}" cy="${point.y}" r="4" class="analytic-dot-max"/>`).join('')}
+        ${model.months.map((month,index) => `<text x="${(index*monthStep).toFixed(1)}" y="238" text-anchor="middle" class="analytic-month-label">${month}</text>`).join('')}
+      </g>
+    </svg>`;
+}
+
+function buildAnalyticalOccurrencesChart(model){
+  const chartHeight = 142;
+  const baseline = 164;
+  const groupWidth = 82;
+  const maxAlerts = 20;
+  const offlinePath = analyticalPath(model.offline, 410, 82, 0, 3);
+  return `
+    <div class="analytic-occurrence-legend"><span><i class="alerts"></i>Alertas</span><span><i class="recurrences"></i>Recorrências</span><span><i class="offline"></i>Sem comunicação</span></div>
+    <svg class="analytic-occurrence-svg" viewBox="0 0 520 215" role="img" aria-label="Ocorrências mensais do equipamento"><g transform="translate(42,16)">
+      ${[0,5,10,15,20].map(value => { const y = baseline - (value/maxAlerts)*chartHeight; return `<line x1="0" y1="${y}" x2="430" y2="${y}" stroke="#e2e9f2"/><text x="-10" y="${y+4}" text-anchor="end" class="analytic-axis-label">${value}</text>`; }).join('')}
+      ${model.months.map((month,index) => { const x=index*groupWidth+10; const ah=(model.alerts[index]/maxAlerts)*chartHeight; const rh=(model.recurrences[index]/maxAlerts)*chartHeight; return `<rect x="${x}" y="${baseline-ah}" width="20" height="${ah}" rx="4" fill="#ef334e"/><rect x="${x+23}" y="${baseline-rh}" width="20" height="${rh}" rx="4" fill="#f59b23"/><text x="${x+21}" y="190" text-anchor="middle" class="analytic-month-label">${month.replace('/26','')}</text>`; }).join('')}
+      <path d="${offlinePath.line}" transform="translate(10,68)" fill="none" stroke="#77869b" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+      ${offlinePath.points.map(point => `<circle cx="${point.x+10}" cy="${point.y+68}" r="4" fill="#77869b" stroke="#fff" stroke-width="2"/>`).join('')}
+    </g></svg>`;
+}
+
+function buildAnalyticalReport(d){
+  const model = buildAnalyticalReportModel(d);
+  const period = analyticalReportPeriod();
+  const trendWord = model.averageChange > 0.2 ? 'aumentou' : (model.averageChange < -0.2 ? 'reduziu' : 'permaneceu estável');
+  const trendClass = model.averageChange > 0.2 ? 'up' : (model.averageChange < -0.2 ? 'down' : 'stable');
+  const trendSign = model.averageChange > 0 ? '+' : '';
+  const areaName = d.unitName || d.sector || 'Banco IDvida';
+  const deviceId = d.backendId || d.code || d.id;
+  const deviations = [
+    {label:'Manhã', range:'06h - 12h', values:[8,9,10,11,13,15], peak:'8,1°C', trend:'↑'},
+    {label:'Tarde', range:'12h - 18h', values:[35,38,42,47,58,55], peak:'9,4°C', trend:'↑'},
+    {label:'Noite', range:'18h - 00h', values:[9,10,12,14,16,17], peak:'8,6°C', trend:'↑'},
+    {label:'Madrugada', range:'00h - 06h', values:[2,2,2,3,3,3], peak:'7,2°C', trend:'↔'}
+  ];
+  const processes = [
+    ['Degelo','18','45h 30min'], ['Inventário','32','18h 40min'],
+    ['Reposição','76','30h 15min'], ['Manutenção','12','22h 30min']
+  ];
+  return `
+    <div class="analytic-report-backdrop" onclick="closeAnalyticalReportModal()"></div>
+    <div class="analytic-report-shell" role="dialog" aria-modal="true" aria-label="Relatório analítico de ${escapeTelemetryText(d.name)}">
+      <div class="analytic-report-toolbar">
+        <div><strong>Pré-visualização do relatório</strong><small>Versão HTML para aprovação visual</small></div>
+        <div class="analytic-report-actions">
+          <button type="button" class="analytic-pdf-btn" disabled title="Disponível após a aprovação do modelo">Baixar PDF <small>após aprovação</small></button>
+          <button type="button" class="analytic-close-btn" onclick="closeAnalyticalReportModal()" aria-label="Fechar">×</button>
+        </div>
+      </div>
+      <div class="analytic-report-scroll">
+        <article class="analytic-report-page">
+          <div class="analytic-top-band"></div>
+          <header class="analytic-report-header">
+            <div class="analytic-brand-block">
+              <img src="assets/idsensor-logo.png" alt="IDsensor">
+              <div><h1>RELATÓRIO ANALÍTICO INDIVIDUAL</h1><p>Análise da temperatura e das ocorrências do equipamento</p></div>
+            </div>
+            <div class="analytic-period-block">
+              <span>${getCalendarIcon()}</span>
+              <div><small>Período analisado</small><strong>${period.start} a ${period.end}</strong><em>Últimos 6 meses</em></div>
+            </div>
+          </header>
+
+          <section class="analytic-device-strip">
+            <div><h2>${escapeTelemetryText(d.name)}</h2><p><strong>Área:</strong> ${escapeTelemetryText(areaName)}</p><p><strong>ID do dispositivo:</strong> ${escapeTelemetryText(deviceId)}</p><p><strong>Faixa configurada:</strong> ${tempLabel(d.min ?? 2)} a ${tempLabel(d.max ?? 8)}</p></div>
+            <div class="analytic-device-purpose"><small>Escopo do relatório</small><strong>Temperatura e ocorrências</strong><span>Consolida o histórico do equipamento no período.</span></div>
+          </section>
+
+          <section class="analytic-kpi-grid">
+            <div class="analytic-kpi"><small>Temperatura mínima</small><strong class="blue">↓ ${model.minValue.toFixed(1)}°C</strong><span>05/01/2026 · 04:10</span></div>
+            <div class="analytic-kpi"><small>Temperatura máxima</small><strong class="red">↑ ${model.maxValue.toFixed(1)}°C</strong><span>11/06/2026 · 15:40</span></div>
+            <div class="analytic-kpi"><small>Temperatura média</small><strong>${model.averageValue.toFixed(1)}°C</strong><span>Período analisado</span></div>
+            <div class="analytic-kpi"><small>Variação total</small><strong class="red">↑ +${model.variation.toFixed(1)}°C</strong><span>Máxima - mínima</span></div>
+            <div class="analytic-kpi"><small>Tempo em crítico</small><strong class="red">${analyticalDuration(model.criticalSeconds)}</strong><span>${model.condition.critical.toFixed(1)}% do período</span></div>
+            <div class="analytic-kpi"><small>Tempo em atenção</small><strong class="orange">${analyticalDuration(model.attentionSeconds)}</strong><span>${model.condition.attention.toFixed(1)}% do período</span></div>
+            <div class="analytic-kpi"><small>Sem comunicação</small><strong class="gray">${analyticalDuration(model.offlineSeconds)}</strong><span>${model.condition.offline.toFixed(1)}% do período</span></div>
+          </section>
+
+          <section class="analytic-section analytic-history-section">
+            <div class="analytic-section-title"><b>1</b><div><h3>Histórico da temperatura do equipamento</h3><p>Compara as temperaturas mínima, média e máxima ao longo dos meses analisados.</p></div></div>
+            <div class="analytic-history-grid">
+              <div class="analytic-chart-card">${buildAnalyticalThermalChart(model,d)}</div>
+              <aside class="analytic-period-summary">
+                <h4>Resumo do período</h4>
+                <div><small>Variação da temperatura média</small><strong class="${trendClass}">${trendSign}${model.averageChange.toFixed(1)}°C</strong><span>${model.months[0]}: ${model.average[0].toFixed(1)}°C · ${model.months.at(-1)}: ${model.average.at(-1).toFixed(1)}°C</span></div>
+                <div><small>Maior pico registrado</small><strong>${model.maxValue.toFixed(1)}°C</strong><span>11/06/2026 · 15:40</span></div>
+                <div><small>Menor valor registrado</small><strong>${model.minValue.toFixed(1)}°C</strong><span>05/01/2026 · 04:10</span></div>
+                <div><small>Leitura da tendência</small><strong>A temperatura ${trendWord}</strong><span>Comparação entre o primeiro e o último mês.</span></div>
+              </aside>
+            </div>
+          </section>
+
+          <div class="analytic-two-column">
+            <section class="analytic-section">
+              <div class="analytic-section-title"><b>2</b><div><h3>Tempo do equipamento em cada condição</h3><p>Distribui o tempo total entre as condições registradas.</p></div></div>
+              <div class="analytic-condition-bar" aria-label="Tempo por condição"><span class="normal" style="width:${model.condition.normal}%"></span><span class="attention" style="width:${model.condition.attention}%"></span><span class="critical" style="width:${model.condition.critical}%"></span><span class="offline" style="width:${model.condition.offline}%"></span></div>
+              <div class="analytic-condition-legend">
+                <div><i class="normal"></i><span>Dentro do limite</span><strong>${model.condition.normal.toFixed(1)}%</strong></div>
+                <div><i class="attention"></i><span>Atenção</span><strong>${model.condition.attention.toFixed(1)}%</strong></div>
+                <div><i class="critical"></i><span>Crítico</span><strong>${model.condition.critical.toFixed(1)}%</strong></div>
+                <div><i class="offline"></i><span>Sem comunicação</span><strong>${model.condition.offline.toFixed(1)}%</strong></div>
+              </div>
+              <div class="analytic-condition-total"><small>Total analisado</small><strong>143d 23h 59min</strong></div>
+            </section>
+
+            <section class="analytic-section analytic-deviation-section">
+              <div class="analytic-section-title"><b>3</b><div><h3>Desvio do equipamento por horário</h3><p>Mostra a incidência de desvios e os maiores picos em cada faixa do dia.</p></div></div>
+              <div class="analytic-table-wrap"><table class="analytic-table analytic-deviation-table"><thead><tr><th>Período</th>${model.months.map(month=>`<th>${month.replace('/26','')}</th>`).join('')}<th>Pico</th><th>Tend.</th></tr></thead><tbody>
+                ${deviations.map(row => `<tr><td><strong>${row.label}</strong><small>${row.range}</small></td>${row.values.map(value=>`<td>${value}</td>`).join('')}<td class="peak">${row.peak}</td><td class="trend">${row.trend}</td></tr>`).join('')}
+              </tbody></table></div>
+              <p class="analytic-table-note">A maior concentração de desvios ocorreu no período da tarde.</p>
+            </section>
+          </div>
+
+          <section class="analytic-section analytic-indicators-section">
+            <div class="analytic-section-title"><b>4</b><div><h3>Indicadores</h3><p>Consolida as ocorrências e os processos registrados durante o período analisado.</p></div></div>
+            <div class="analytic-indicator-grid">
+              <div class="analytic-occurrence-panel">
+                <div class="analytic-mini-totals"><span><small>Alertas</small><strong class="red">${model.alertTotal}</strong></span><span><small>Recorrências</small><strong class="orange">${model.recurrenceTotal}</strong></span><span><small>Sem comunicação</small><strong class="gray">${model.offlineTotal}</strong></span></div>
+                ${buildAnalyticalOccurrencesChart(model)}
+              </div>
+              <div class="analytic-process-panel">
+                <h4>Processos registrados</h4><p>Períodos operacionais informados no sistema.</p>
+                <table class="analytic-table"><thead><tr><th>Processo</th><th>Quantidade</th><th>Tempo total</th></tr></thead><tbody>${processes.map(row=>`<tr><td>${row[0]}</td><td>${row[1]}</td><td>${row[2]}</td></tr>`).join('')}<tr class="total"><td>Total</td><td>138</td><td>116h 45min</td></tr></tbody></table>
+                <small class="analytic-process-note">Os processos contextualizam períodos em que o equipamento estava sob intervenção operacional registrada.</small>
+              </div>
+            </div>
+          </section>
+
+          <section class="analytic-section analytic-analysis-section">
+            <div class="analytic-section-title"><b>5</b><div><h3>Análise do período</h3><p>Resumo factual dos indicadores apresentados neste relatório.</p></div></div>
+            <div class="analytic-analysis-copy">
+              <p>No período analisado, a temperatura média <strong>${trendWord} ${Math.abs(model.averageChange).toFixed(1)}°C</strong>, passando de ${model.average[0].toFixed(1)}°C em ${model.months[0]} para ${model.average.at(-1).toFixed(1)}°C em ${model.months.at(-1)}. O maior pico registrado foi de <strong>${model.maxValue.toFixed(1)}°C</strong>.</p>
+              <p>O equipamento permaneceu <strong>${model.condition.normal.toFixed(1)}% do tempo dentro do limite</strong>. Foram registrados ${analyticalDuration(model.criticalSeconds)} em condição crítica, ${analyticalDuration(model.attentionSeconds)} em atenção e ${analyticalDuration(model.offlineSeconds)} sem comunicação.</p>
+              <p>Foram contabilizados <strong>${model.alertTotal} alertas</strong>, <strong>${model.recurrenceTotal} recorrências</strong> e ${model.offlineTotal} ocorrências de perda de comunicação. A maior incidência de desvios ocorreu no período da tarde.</p>
+            </div>
+          </section>
+
+          <section class="analytic-signature">
+            <div><span></span><strong>Assinatura do responsável</strong><small>Nome e identificação</small></div>
+            <div class="analytic-generated"><small>Relatório gerado em</small><strong>${period.generated}</strong><span>ID: RA-${String(d.id).padStart(4,'0')}-0626</span></div>
+          </section>
+
+          <footer class="analytic-report-footer">
+            <div class="analytic-powered"><span>Powered by</span><img src="assets/idvida-logo.png" alt="IDvida"></div>
+            <strong>IDsensor · Relatório Analítico Individual</strong><span>Página 1 de 1</span>
+          </footer>
+        </article>
+      </div>
+    </div>`;
+}
+
+function openAnalyticalReportModal(id){
+  const d = devices.find(device => Number(device.id) === Number(id));
+  if(!d) return;
+  closeAnalyticalReportModal();
+  const root = document.createElement('div');
+  root.id = 'analyticReportRoot';
+  root.innerHTML = buildAnalyticalReport(d);
+  document.body.appendChild(root);
+  document.body.classList.add('analytic-report-open');
+  requestAnimationFrame(() => root.classList.add('show'));
+}
+
+function closeAnalyticalReportModal(){
+  document.getElementById('analyticReportRoot')?.remove();
+  document.body.classList.remove('analytic-report-open');
+}
+
+document.addEventListener('keydown', event => {
+  if(event.key === 'Escape' && document.getElementById('analyticReportRoot')) closeAnalyticalReportModal();
+});
 
 function openDetail(id, keepMenu){
   const d = devices.find(x => x.id === id);
