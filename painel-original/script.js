@@ -2067,7 +2067,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function normalizeRole(role){
     const value = String(role || '').toLowerCase();
-    return ['master','admin1','admin2','area'].includes(value) ? value : '';
+    return ['master','admin1','admin2','area','cart'].includes(value) ? value : '';
   }
 
   function applyRouteFilter(filter){
@@ -5346,11 +5346,14 @@ document.getElementById('infoMacOverlay')?.addEventListener('click', ()=> openIn
       master: 'Lab IDvida',
       admin1: 'Admin 1',
       admin2: 'Admin 2',
-      area: 'Usuário Banco IDvida'
+      area: 'Usuário Banco IDvida',
+      cart: 'Lab carrinho'
     };
     currentUserLabel.textContent = labelMap[role] || 'Lab IDvida';
+    document.body.classList.toggle('cart-profile-mode', role === 'cart');
 
     if(role === 'master'){
+      if(typeof window.closeCartTrackingView === 'function') window.closeCartTrackingView();
       if(gestaoBtn) gestaoBtn.style.display = '';
       if(chipAreas) chipAreas.style.display = '';
       if(chipClients) chipClients.style.display = '';
@@ -5360,6 +5363,7 @@ document.getElementById('infoMacOverlay')?.addEventListener('click', ()=> openIn
     }
 
     if(role === 'admin1'){
+      if(typeof window.closeCartTrackingView === 'function') window.closeCartTrackingView();
       if(gestaoBtn) gestaoBtn.style.display = '';
       if(chipAreas) chipAreas.style.display = '';
       if(chipClients) chipClients.style.display = 'none';
@@ -5369,6 +5373,7 @@ document.getElementById('infoMacOverlay')?.addEventListener('click', ()=> openIn
     }
 
     if(role === 'admin2'){
+      if(typeof window.closeCartTrackingView === 'function') window.closeCartTrackingView();
       if(gestaoBtn) gestaoBtn.style.display = '';
       if(chipAreas) chipAreas.style.display = '';
       if(chipClients) chipClients.style.display = 'none';
@@ -5378,12 +5383,23 @@ document.getElementById('infoMacOverlay')?.addEventListener('click', ()=> openIn
     }
 
     if(role === 'area'){
+      if(typeof window.closeCartTrackingView === 'function') window.closeCartTrackingView();
       if(gestaoBtn) gestaoBtn.style.display = 'none';
       if(chipAreas) chipAreas.style.display = 'none';
       if(chipClients) chipClients.style.display = 'none';
       if(subtitleEl) subtitleEl.textContent = 'Laboratório IDvida · Banco IDvida';
       if(typeof selectedArea !== 'undefined') selectedArea = 'Banco IDvida';
       if(typeof selectedClient !== 'undefined') selectedClient = 'Laboratório IDvida';
+    }
+
+    if(role === 'cart'){
+      if(gestaoBtn) gestaoBtn.style.display = 'none';
+      if(chipAreas) chipAreas.style.display = 'none';
+      if(chipClients) chipClients.style.display = 'none';
+      if(subtitleEl) subtitleEl.textContent = 'Laboratório IDvida · Lab carrinho';
+      if(typeof selectedArea !== 'undefined') selectedArea = 'Lab carrinho';
+      if(typeof selectedClient !== 'undefined') selectedClient = 'Laboratório IDvida';
+      if(typeof window.openCartTrackingView === 'function') window.openCartTrackingView({ profileMode:true });
     }
 
     if(typeof renderGrid === 'function') renderGrid();
@@ -8714,6 +8730,904 @@ document.addEventListener("fullscreenchange", () => {
   const observer = new MutationObserver(syncNocOpenState);
   observer.observe(overlay, { attributes:true, attributeFilter:['class','style'] });
   syncNocOpenState();
+})();
+
+/* ===== SCRIPT BLOCK 44 | cart-tracking-test-view ===== */
+(function(){
+  const STORAGE_KEY = 'idsensor.cartTracking.v1';
+  const ROOM_STATUSES = {
+    in_room: 'Na sala',
+    near: 'Carrinho proximo',
+    transit: 'Em transito',
+    offline: 'Offline'
+  };
+
+  const defaultState = {
+    rooms: [
+      {
+        id: 'sala-bloco-b1',
+        name: 'SALA BLOCO B1',
+        gatewayDeviceId: '8ec5',
+        expectedTotal: 16
+      },
+      {
+        id: 'sala-bloco-a',
+        name: 'SALA BLOCO A',
+        gatewayDeviceId: '',
+        expectedTotal: 0
+      }
+    ],
+    carts: [
+      {
+        id: 'cart-de08dbf47311',
+        name: 'Carrinho teste',
+        mac: 'DE:08:DB:F4:73:11',
+        roomId: 'sala-bloco-b1',
+        locationStatus: 'in_room',
+        fillPercentage: 26,
+        consecutiveCriticalReadings: 0,
+        rssi: -39,
+        lastSeen: 'agora'
+      }
+    ]
+  };
+
+  let previousSubtitle = '';
+
+  function clone(value){
+    return JSON.parse(JSON.stringify(value));
+  }
+
+  function readState(){
+    try{
+      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
+      if(saved && Array.isArray(saved.rooms) && Array.isArray(saved.carts)){
+        return saved;
+      }
+    }catch(err){
+      console.warn('Falha ao ler cadastro de carrinhos', err);
+    }
+    return clone(defaultState);
+  }
+
+  function saveState(state){
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  }
+
+  function slugify(value){
+    return String(value || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') || `area-${Date.now()}`;
+  }
+
+  function cleanMac(value){
+    return String(value || '').toUpperCase().replace(/[^0-9A-F]/g, '').slice(0, 12);
+  }
+
+  function formatMac(value){
+    const compact = cleanMac(value);
+    return compact.match(/.{1,2}/g)?.join(':') || '';
+  }
+
+  function statusForCart(cart){
+    const fill = Number(cart.fillPercentage || 0);
+    const criticalReads = Number(cart.consecutiveCriticalReadings || 0);
+
+    if(cart.locationStatus === 'offline'){
+      return { key:'offline', label:'Offline', tone:'offline' };
+    }
+    if(fill >= 90 && criticalReads >= 3){
+      return { key:'critical_confirmed', label:'Critico confirmado', tone:'critical' };
+    }
+    if(fill >= 90){
+      return { key:'critical_pending', label:`Critico ${criticalReads}/3`, tone:'warning' };
+    }
+    if(fill >= 75){
+      return { key:'attention', label:'Atencao', tone:'attention' };
+    }
+    return { key:'normal', label:'Normal', tone:'normal' };
+  }
+
+  function roomCounters(room, carts){
+    const roomCarts = carts.filter(cart => cart.roomId === room.id);
+    return {
+      inRoom: roomCarts.filter(cart => cart.locationStatus === 'in_room').length,
+      near: roomCarts.filter(cart => cart.locationStatus === 'near').length,
+      transit: roomCarts.filter(cart => cart.locationStatus === 'transit').length,
+      critical: roomCarts.filter(cart => statusForCart(cart).tone === 'critical').length
+    };
+  }
+
+  function roomHasCritical(room, carts){
+    return carts.some(cart => cart.roomId === room.id && statusForCart(cart).tone === 'critical');
+  }
+
+  function ensureCartTrackingUi(){
+    if(document.getElementById('cartTrackingView')) return;
+
+    const view = document.createElement('section');
+    view.className = 'cart-tracking-view';
+    view.id = 'cartTrackingView';
+    view.hidden = true;
+    view.innerHTML = `
+      <div class="cart-tracking-head">
+        <div>
+          <p class="cart-tracking-kicker">Teste de rastreamento</p>
+          <h1>Salas e carrinhos</h1>
+          <span>Gateway BLE fixo por sala, sensor MAC no carrinho.</span>
+        </div>
+        <button type="button" class="cart-secondary-btn" id="cartBackBtn">Voltar ao painel</button>
+      </div>
+
+      <div class="cart-config-panel">
+        <div class="cart-config-section">
+          <strong>Area e gateway</strong>
+          <label>
+            Area
+            <select id="cartRoomSelect"></select>
+          </label>
+          <label>
+            Nome da area
+            <input id="cartRoomName" type="text" placeholder="SALA BLOCO B1">
+          </label>
+          <label>
+            Device ID do gateway
+            <input id="cartGatewayDeviceId" type="text" placeholder="8ec5">
+          </label>
+          <label>
+            Total de carrinhos
+            <input id="cartRoomTotal" type="number" min="0" step="1" placeholder="16">
+          </label>
+          <button type="button" class="cart-primary-btn" id="cartSaveRoomBtn">Salvar area</button>
+        </div>
+
+        <div class="cart-config-section">
+          <strong>Sensor no carrinho</strong>
+          <label>
+            Nome do carrinho
+            <input id="cartNameInput" type="text" placeholder="Carrinho 01">
+          </label>
+          <label>
+            MAC do sensor
+            <input id="cartMacInput" type="text" placeholder="DE:08:DB:F4:73:11">
+          </label>
+          <label>
+            Status inicial
+            <select id="cartStatusInput">
+              <option value="in_room">Na sala</option>
+              <option value="near">Carrinho proximo</option>
+              <option value="transit">Em transito</option>
+              <option value="offline">Offline</option>
+            </select>
+          </label>
+          <button type="button" class="cart-primary-btn" id="cartAddSensorBtn">Cadastrar sensor</button>
+        </div>
+      </div>
+
+      <div class="cart-room-grid" id="cartRoomGrid"></div>
+    `;
+
+    const layoutNode = document.getElementById('layout');
+    const toolbarNode = document.querySelector('.toolbar-filters') || document.querySelector('.toolbar');
+    const parent = layoutNode?.parentNode || toolbarNode?.parentNode || document.body;
+    parent.insertBefore(view, layoutNode || toolbarNode?.nextSibling || parent.firstChild);
+
+    document.getElementById('cartBackBtn')?.addEventListener('click', closeCartTrackingView);
+    document.getElementById('cartSaveRoomBtn')?.addEventListener('click', saveRoomFromForm);
+    document.getElementById('cartAddSensorBtn')?.addEventListener('click', addCartFromForm);
+    document.getElementById('cartRoomSelect')?.addEventListener('change', syncRoomFormFromSelect);
+    document.getElementById('cartRoomGrid')?.addEventListener('click', handleRoomGridClick);
+
+    renderCartTracking();
+  }
+
+  function setRoomOptions(state){
+    const select = document.getElementById('cartRoomSelect');
+    if(!select) return;
+    const selected = select.value || state.rooms[0]?.id || '';
+    select.innerHTML = [
+      ...state.rooms.map(room => `<option value="${room.id}">${room.name}</option>`),
+      '<option value="__new__">+ Nova area</option>'
+    ].join('');
+    select.value = state.rooms.some(room => room.id === selected) ? selected : (state.rooms[0]?.id || '');
+  }
+
+  function syncRoomFormFromSelect(){
+    const state = readState();
+    const selectedId = document.getElementById('cartRoomSelect')?.value;
+    if(selectedId === '__new__'){
+      document.getElementById('cartRoomName').value = '';
+      document.getElementById('cartGatewayDeviceId').value = '';
+      document.getElementById('cartRoomTotal').value = 0;
+      return;
+    }
+    const room = state.rooms.find(item => item.id === selectedId) || state.rooms[0];
+    if(!room) return;
+    document.getElementById('cartRoomName').value = room.name || '';
+    document.getElementById('cartGatewayDeviceId').value = room.gatewayDeviceId || '';
+    document.getElementById('cartRoomTotal').value = Number(room.expectedTotal || 0);
+  }
+
+  function saveRoomFromForm(){
+    const state = readState();
+    const selectedId = document.getElementById('cartRoomSelect')?.value;
+    const name = document.getElementById('cartRoomName')?.value.trim();
+    const gatewayDeviceId = document.getElementById('cartGatewayDeviceId')?.value.trim();
+    const expectedTotal = Math.max(0, Number(document.getElementById('cartRoomTotal')?.value || 0));
+    if(!name){
+      alert('Informe o nome da area.');
+      return;
+    }
+
+    let room = selectedId === '__new__' ? null : state.rooms.find(item => item.id === selectedId);
+    if(!room){
+      let newId = slugify(name);
+      if(state.rooms.some(item => item.id === newId)){
+        newId = `${newId}-${Date.now()}`;
+      }
+      room = { id: newId, name, gatewayDeviceId: '', expectedTotal: 0 };
+      state.rooms.push(room);
+    }
+
+    room.name = name.toUpperCase();
+    room.gatewayDeviceId = gatewayDeviceId;
+    room.expectedTotal = expectedTotal;
+    saveState(state);
+    renderCartTracking(room.id);
+  }
+
+  function addCartFromForm(){
+    const state = readState();
+    const roomId = document.getElementById('cartRoomSelect')?.value || state.rooms[0]?.id;
+    const name = document.getElementById('cartNameInput')?.value.trim();
+    const mac = formatMac(document.getElementById('cartMacInput')?.value);
+    const status = document.getElementById('cartStatusInput')?.value || 'in_room';
+
+    if(roomId === '__new__'){
+      alert('Salve a area antes de cadastrar o sensor.');
+      return;
+    }
+
+    if(!name || !mac || cleanMac(mac).length !== 12){
+      alert('Informe nome do carrinho e MAC completo do sensor.');
+      return;
+    }
+
+    const existing = state.carts.find(cart => cleanMac(cart.mac) === cleanMac(mac));
+    if(existing){
+      existing.name = name;
+      existing.mac = mac;
+      existing.roomId = roomId;
+      existing.locationStatus = status;
+      existing.lastSeen = 'agora';
+    }else{
+      state.carts.push({
+        id: `cart-${cleanMac(mac).toLowerCase()}`,
+        name,
+        mac,
+        roomId,
+        locationStatus: status,
+        fillPercentage: 0,
+        consecutiveCriticalReadings: 0,
+        rssi: null,
+        lastSeen: 'cadastro manual'
+      });
+    }
+
+    saveState(state);
+    document.getElementById('cartNameInput').value = '';
+    document.getElementById('cartMacInput').value = '';
+    renderCartTracking(roomId);
+  }
+
+  function handleRoomGridClick(event){
+    const addRoomId = event.target.closest('[data-cart-add-room]')?.getAttribute('data-cart-add-room');
+    const editRoomId = event.target.closest('[data-cart-edit-room]')?.getAttribute('data-cart-edit-room');
+    if(!addRoomId && !editRoomId) return;
+
+    const select = document.getElementById('cartRoomSelect');
+    if(select){
+      select.value = addRoomId || editRoomId;
+      syncRoomFormFromSelect();
+    }
+
+    if(addRoomId){
+      document.getElementById('cartNameInput')?.focus();
+    }else{
+      document.getElementById('cartGatewayDeviceId')?.focus();
+    }
+  }
+
+  function renderCartRows(room, carts){
+    const roomCarts = carts.filter(cart => cart.roomId === room.id);
+    if(!roomCarts.length){
+      return `<div class="cart-empty-row">Nenhum sensor cadastrado nesta sala.</div>`;
+    }
+
+    return roomCarts.map(cart => {
+      const fill = Math.max(0, Math.min(100, Number(cart.fillPercentage || 0)));
+      const status = statusForCart(cart);
+      const locationLabel = ROOM_STATUSES[cart.locationStatus] || ROOM_STATUSES.in_room;
+      const rssi = cart.rssi === null || cart.rssi === undefined ? '--' : `${cart.rssi} dBm`;
+      return `
+        <div class="cart-row">
+          <div class="cart-row-main">
+            <strong>${cart.name}</strong>
+            <span>${cart.mac}</span>
+          </div>
+          <div class="cart-row-meta">
+            <span class="cart-pill ${cart.locationStatus}">${locationLabel}</span>
+            <span class="cart-pill ${status.tone}">${status.label}</span>
+          </div>
+          <div class="cart-fill-track" aria-label="Nivel ${fill}%">
+            <span style="width:${fill}%"></span>
+          </div>
+          <div class="cart-row-foot">
+            <span>${fill}% cheio</span>
+            <span>RSSI ${rssi}</span>
+            <span>${cart.lastSeen || 'sem leitura'}</span>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  function renderCartTracking(preferredRoomId){
+    const state = readState();
+    setRoomOptions(state);
+    if(preferredRoomId){
+      const select = document.getElementById('cartRoomSelect');
+      if(select && state.rooms.some(room => room.id === preferredRoomId)) select.value = preferredRoomId;
+    }
+    syncRoomFormFromSelect();
+
+    const grid = document.getElementById('cartRoomGrid');
+    if(!grid) return;
+
+    grid.innerHTML = state.rooms.map(room => {
+      const counters = roomCounters(room, state.carts);
+      const isCritical = roomHasCritical(room, state.carts);
+      return `
+        <article class="cart-room-card ${isCritical ? 'critical' : ''}">
+          <div class="cart-room-title">
+            <div>
+              <h2>${room.name}</h2>
+              <span>Gateway: ${room.gatewayDeviceId || 'nao vinculado'}</span>
+            </div>
+            <strong>${Number(room.expectedTotal || 0)}</strong>
+          </div>
+          <div class="cart-room-total">Total de carrinhos</div>
+          <div class="cart-room-stats">
+            <span><b>${counters.inRoom}</b> Na sala</span>
+            <span><b>${counters.near}</b> Proximos</span>
+            <span><b>${counters.transit}</b> Transito</span>
+            <span><b>${counters.critical}</b> Criticos</span>
+          </div>
+          <div class="cart-room-list">
+            ${renderCartRows(room, state.carts)}
+          </div>
+          <div class="cart-room-actions">
+            <button type="button" data-cart-edit-room="${room.id}">Vincular gateway</button>
+            <button type="button" data-cart-add-room="${room.id}">Cadastrar sensor</button>
+          </div>
+        </article>
+      `;
+    }).join('');
+  }
+
+  function openCartTrackingView(){
+    ensureCartTrackingUi();
+    const view = document.getElementById('cartTrackingView');
+    if(!view) return;
+    const subtitle = document.getElementById('pageSubtitle');
+    previousSubtitle = subtitle?.textContent || previousSubtitle;
+    if(subtitle) subtitle.textContent = 'Carrinhos por sala';
+    view.hidden = false;
+    document.body.classList.add('cart-tracking-open');
+    renderCartTracking();
+  }
+
+  function closeCartTrackingView(){
+    const view = document.getElementById('cartTrackingView');
+    const subtitle = document.getElementById('pageSubtitle');
+    if(subtitle && previousSubtitle) subtitle.textContent = previousSubtitle;
+    if(view) view.hidden = true;
+    document.body.classList.remove('cart-tracking-open');
+  }
+
+  document.addEventListener('DOMContentLoaded', ensureCartTrackingUi);
+  window.openCartTrackingView = openCartTrackingView;
+  window.closeCartTrackingView = closeCartTrackingView;
+})();
+
+/* ===== SCRIPT BLOCK 45 | cart-tracking-room-cards-redesign ===== */
+(function(){
+  const STORAGE_KEY = 'idsensor.cartTracking.v4';
+
+  const defaultState = {
+    rooms: [
+      { id:'sala-bloco-b1', name:'SALA BLOCO B1', gatewayDeviceId:'8ec5' },
+      { id:'sala-bloco-a', name:'SALA BLOCO A', gatewayDeviceId:'' }
+    ],
+    carts: [
+      {
+        id:'cart-de08dbf47311',
+        name:'Carrinho 01',
+        mac:'DE:08:DB:F4:73:11',
+        roomId:'sala-bloco-b1',
+        locationStatus:'in_room',
+        fillPercentage:26,
+        consecutiveCriticalReadings:0,
+        rssi:-39,
+        lastSeen:'agora',
+        transitStep:0
+      },
+      {
+        id:'cart-teste-02',
+        name:'Carrinho 02',
+        mac:'AA:BB:CC:00:00:02',
+        roomId:'sala-bloco-b1',
+        locationStatus:'in_room',
+        fillPercentage:82,
+        consecutiveCriticalReadings:0,
+        rssi:-78,
+        lastSeen:'agora',
+        transitStep:0
+      }
+    ]
+  };
+
+  let previousSubtitle = '';
+
+  function clone(value){
+    return JSON.parse(JSON.stringify(value));
+  }
+
+  function ensureSeedData(state){
+    let changed = false;
+    const normalized = {
+      rooms: Array.isArray(state?.rooms) ? state.rooms : [],
+      carts: Array.isArray(state?.carts) ? state.carts : []
+    };
+
+    defaultState.rooms.forEach(defaultRoom => {
+      if(!normalized.rooms.some(room => room.id === defaultRoom.id)){
+        normalized.rooms.push(clone(defaultRoom));
+        changed = true;
+      }
+    });
+
+    defaultState.carts.forEach(defaultCart => {
+      if(!normalized.carts.some(cart => cart.id === defaultCart.id)){
+        normalized.carts.push(clone(defaultCart));
+        changed = true;
+      }
+    });
+
+    return { state: normalized, changed };
+  }
+
+  function readState(){
+    try{
+      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
+      if(saved && Array.isArray(saved.rooms) && Array.isArray(saved.carts)){
+        const migration = ensureSeedData(saved);
+        if(migration.changed) saveState(migration.state);
+        return migration.state;
+      }
+    }catch(err){
+      console.warn('Falha ao ler carrinhos por sala', err);
+    }
+    return clone(defaultState);
+  }
+
+  function saveState(state){
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  }
+
+  function cleanMac(value){
+    return String(value || '').toUpperCase().replace(/[^0-9A-F]/g, '').slice(0, 12);
+  }
+
+  function formatMac(value){
+    const compact = cleanMac(value);
+    return compact.match(/.{1,2}/g)?.join(':') || '';
+  }
+
+  function escapeHtml(value){
+    return String(value ?? '').replace(/[&<>"']/g, char => ({
+      '&':'&amp;',
+      '<':'&lt;',
+      '>':'&gt;',
+      '"':'&quot;',
+      "'":'&#039;'
+    }[char]));
+  }
+
+  function cartIcon(){
+    return `
+      <svg viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+        <path d="M14 18h8l4 24h24l5-17H28" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M24 42h25" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round"/>
+        <circle cx="29" cy="50" r="4" fill="currentColor"/>
+        <circle cx="48" cy="50" r="4" fill="currentColor"/>
+      </svg>
+    `;
+  }
+
+  function locationLabel(cart){
+    if(cart.locationStatus === 'near') return 'Proximo';
+    if(cart.locationStatus === 'transit') return 'Em transito';
+    if(cart.locationStatus === 'offline') return 'Offline';
+    return 'Na sala';
+  }
+
+  function fillLabel(cart){
+    const fill = Number(cart.fillPercentage || 0);
+    const criticalReads = Number(cart.consecutiveCriticalReadings || 0);
+    if(fill >= 90 && criticalReads >= 3) return 'Cheio';
+    if(fill >= 90) return `Confirmando ${criticalReads}/3`;
+    if(fill >= 75) return 'Proximo do limite';
+    if(fill <= 30) return 'Vazio';
+    return 'Normal';
+  }
+
+  function fillTone(cart){
+    const fill = Number(cart.fillPercentage || 0);
+    const criticalReads = Number(cart.consecutiveCriticalReadings || 0);
+    if(fill >= 90 && criticalReads >= 3) return 'full';
+    if(fill >= 75) return 'near-limit';
+    if(fill <= 30) return 'empty';
+    return 'normal';
+  }
+
+  function roomStats(room, carts){
+    const roomCarts = carts.filter(cart => cart.roomId === room.id && cart.locationStatus !== 'transit');
+    return {
+      total: roomCarts.length,
+      full: roomCarts.filter(cart => fillTone(cart) === 'full').length,
+      empty: roomCarts.filter(cart => fillTone(cart) === 'empty').length,
+      nearLimit: roomCarts.filter(cart => fillTone(cart) === 'near-limit').length
+    };
+  }
+
+  function globalStats(state){
+    const empty = state.carts.filter(cart => fillTone(cart) === 'empty').length;
+    const nearLimit = state.carts.filter(cart => fillTone(cart) === 'near-limit').length;
+    const full = state.carts.filter(cart => fillTone(cart) === 'full').length;
+    return { total: state.carts.length, empty, nearLimit, full };
+  }
+
+  function renderSummary(state){
+    const summary = document.getElementById('cartTrackingSummary');
+    if(!summary) return;
+    const stats = globalStats(state);
+    summary.innerHTML = `
+      <span><b>${stats.total}</b> Carrinhos</span>
+      <span><b>${stats.full}</b> Cheios</span>
+      <span><b>${stats.empty}</b> Vazios</span>
+      <span><b>${stats.nearLimit}</b> Proximo limite</span>
+    `;
+  }
+
+  function renderTransitStrip(cart){
+    const currentStep = Math.max(1, Math.min(4, Number(cart.transitStep || 1)));
+    const steps = Array.from({ length:4 }, (_, index) => {
+      const done = index + 1 <= currentStep ? 'done' : '';
+      return `<span class="${done}">${done ? '&#10003;' : index + 1}</span>`;
+    }).join('');
+
+    return `
+      <div class="cart-transit-strip">
+        <div>
+          <strong>${escapeHtml(cart.name)}</strong>
+          <small>Em transito - sinal afastando</small>
+        </div>
+        <div class="cart-transit-steps">${steps}</div>
+      </div>
+    `;
+  }
+
+  function renderCartCard(cart){
+    const fill = Math.max(0, Math.min(100, Number(cart.fillPercentage || 0)));
+    const tone = fillTone(cart);
+    const showStatus = cart.locationStatus !== 'in_room' && cart.locationStatus !== 'transit';
+
+    return `
+      <button type="button" class="cart-item-card ${tone} ${escapeHtml(cart.locationStatus)}" data-cart-id="${escapeHtml(cart.id)}" style="--cart-fill:${fill}%">
+        ${showStatus ? `<span class="cart-card-status"><i>${locationLabel(cart)}</i></span>` : ''}
+        <span class="cart-item-body">
+          <strong>${escapeHtml(cart.name)}</strong>
+        </span>
+        <span class="cart-visual" aria-hidden="true">
+          <span class="cart-radar outer"></span>
+          <span class="cart-radar inner"></span>
+          <span class="cart-lid"></span>
+          <span class="cart-bucket">
+            <span class="cart-red-fill"></span>
+            <span class="cart-bucket-light"></span>
+          </span>
+          <span class="cart-leg left"></span>
+          <span class="cart-leg right"></span>
+          <span class="cart-wheel left"><i></i></span>
+          <span class="cart-wheel right"><i></i></span>
+        </span>
+        <span class="cart-item-foot">
+          <small>${fill}% cheio</small>
+        </span>
+      </button>
+    `;
+  }
+
+  function renderRoomCarts(room, carts){
+    const roomCarts = carts.filter(cart => cart.roomId === room.id && cart.locationStatus !== 'transit');
+    if(!roomCarts.length){
+      return `<div class="cart-room-empty">Nenhum carrinho nesta sala.</div>`;
+    }
+    return roomCarts.map(renderCartCard).join('');
+  }
+
+  function renderRoomTransitRows(room, carts){
+    const transitCarts = carts.filter(cart => cart.roomId === room.id && cart.locationStatus === 'transit');
+    if(!transitCarts.length) return '';
+
+    return `
+      <div class="cart-room-status-list">
+        ${transitCarts.map(cart => {
+          const transitStep = Math.max(1, Math.min(4, Number(cart.transitStep || 1)));
+          const steps = Array.from({ length:4 }, (_, index) => {
+            const done = index + 1 <= transitStep ? 'done' : '';
+            return `<i class="${done}">${done ? '&#10003;' : index + 1}</i>`;
+          }).join('');
+          return `
+            <button type="button" class="cart-room-transit-status" data-cart-id="${escapeHtml(cart.id)}">
+              <span>
+                <strong>${escapeHtml(cart.name)} em transito</strong>
+                <small>Sinal afastando da sala</small>
+              </span>
+              <span class="cart-room-transit-steps">${steps}</span>
+            </button>
+          `;
+        }).join('')}
+      </div>
+    `;
+  }
+
+  function renderRooms(){
+    const state = readState();
+    renderSummary(state);
+
+    const grid = document.getElementById('cartRoomGrid');
+    if(!grid) return;
+
+    grid.innerHTML = state.rooms.map(room => {
+      const stats = roomStats(room, state.carts);
+      return `
+        <article class="cart-room-card">
+          <header class="cart-room-header">
+            <div>
+              <h2>${escapeHtml(room.name)}</h2>
+              <button type="button" class="cart-room-gateway" data-gateway-room="${escapeHtml(room.id)}">
+                Gateway: ${escapeHtml(room.gatewayDeviceId || 'nao vinculado')}
+              </button>
+            </div>
+            <strong>${stats.total}</strong>
+          </header>
+          <div class="cart-room-kpis">
+            <span><b>${stats.total}</b>Total</span>
+            <span><b>${stats.empty}</b>Vazios</span>
+            <span><b>${stats.nearLimit}</b>Prox. limite</span>
+            <span><b>${stats.full}</b>Cheios</span>
+          </div>
+          <div class="cart-items-grid">
+            ${renderRoomCarts(room, state.carts)}
+          </div>
+          ${renderRoomTransitRows(room, state.carts)}
+          <footer class="cart-room-footer">
+            <button type="button" data-cart-add="${escapeHtml(room.id)}">Adicionar carrinho</button>
+          </footer>
+        </article>
+      `;
+    }).join('');
+  }
+
+  function ensureCartTrackingUi(){
+    const oldView = document.getElementById('cartTrackingView');
+    if(oldView) oldView.remove();
+
+    const oldButton = document.getElementById('cartTrackingBtn');
+    if(oldButton) oldButton.remove();
+
+    const view = document.createElement('section');
+    view.className = 'cart-tracking-view cart-tracking-v2';
+    view.id = 'cartTrackingView';
+    view.hidden = true;
+    view.innerHTML = `
+      <div class="cart-tracking-head">
+        <div>
+          <p class="cart-tracking-kicker">Carrinhos por sala</p>
+          <h1>Monitor de carrinhos</h1>
+          <span>Clique no carrinho para editar nome e MAC.</span>
+        </div>
+        <button type="button" class="cart-secondary-btn" id="cartBackBtn">Voltar ao painel</button>
+      </div>
+      <div class="cart-summary-strip" id="cartTrackingSummary"></div>
+      <div class="cart-room-grid" id="cartRoomGrid"></div>
+      <div class="cart-detail-overlay" id="cartDetailOverlay" hidden>
+        <div class="cart-detail-modal">
+          <button type="button" class="cart-detail-close" id="cartDetailCloseBtn">x</button>
+          <div class="cart-detail-hero">
+            <span class="cart-detail-icon">${cartIcon()}</span>
+            <div>
+              <p>Detalhes do carrinho</p>
+              <h2 id="cartDetailTitle">Carrinho</h2>
+              <small id="cartDetailMeta">Sensor BLE</small>
+            </div>
+          </div>
+          <label>
+            Nome do carrinho
+            <input id="cartDetailName" type="text" placeholder="Carrinho 01">
+          </label>
+          <label>
+            MAC do sensor
+            <input id="cartDetailMac" type="text" placeholder="DE:08:DB:F4:73:11">
+          </label>
+          <button type="button" class="cart-primary-btn" id="cartDetailSaveBtn">Salvar</button>
+        </div>
+      </div>
+    `;
+
+    const layoutNode = document.getElementById('layout');
+    const toolbarNode = document.querySelector('.toolbar-filters') || document.querySelector('.toolbar');
+    const parent = layoutNode?.parentNode || toolbarNode?.parentNode || document.body;
+    parent.insertBefore(view, layoutNode || toolbarNode?.nextSibling || parent.firstChild);
+
+    document.getElementById('cartBackBtn')?.addEventListener('click', closeCartTrackingView);
+    document.getElementById('cartRoomGrid')?.addEventListener('click', handleRoomClick);
+    document.getElementById('cartDetailCloseBtn')?.addEventListener('click', closeCartDetail);
+    document.getElementById('cartDetailSaveBtn')?.addEventListener('click', saveCartDetail);
+    document.getElementById('cartDetailOverlay')?.addEventListener('click', event => {
+      if(event.target.id === 'cartDetailOverlay') closeCartDetail();
+    });
+
+    renderRooms();
+  }
+
+  function handleRoomClick(event){
+    const cartButton = event.target.closest('[data-cart-id]');
+    const addButton = event.target.closest('[data-cart-add]');
+    const gatewayButton = event.target.closest('[data-gateway-room]');
+
+    if(cartButton){
+      openCartDetail(cartButton.getAttribute('data-cart-id'));
+      return;
+    }
+
+    if(addButton){
+      const state = readState();
+      if(state.carts.length >= 2){
+        alert('Neste teste vamos trabalhar com dois carrinhos apenas.');
+        return;
+      }
+      openCartDetail(null, addButton.getAttribute('data-cart-add'));
+      return;
+    }
+
+    if(gatewayButton){
+      const roomId = gatewayButton.getAttribute('data-gateway-room');
+      const state = readState();
+      const room = state.rooms.find(item => item.id === roomId);
+      if(!room) return;
+      const nextGateway = prompt('Device ID do gateway BLE/LoRa desta sala:', room.gatewayDeviceId || '');
+      if(nextGateway === null) return;
+      room.gatewayDeviceId = nextGateway.trim();
+      saveState(state);
+      renderRooms();
+    }
+  }
+
+  function openCartDetail(cartId, roomId){
+    const state = readState();
+    const cart = state.carts.find(item => item.id === cartId);
+    const overlay = document.getElementById('cartDetailOverlay');
+    if(!overlay) return;
+
+    overlay.dataset.cartId = cart?.id || '';
+    overlay.dataset.roomId = cart?.roomId || roomId || state.rooms[0]?.id || '';
+
+    const title = document.getElementById('cartDetailTitle');
+    const meta = document.getElementById('cartDetailMeta');
+    const name = document.getElementById('cartDetailName');
+    const mac = document.getElementById('cartDetailMac');
+
+    if(title) title.textContent = cart?.name || 'Novo carrinho';
+    if(meta) meta.textContent = cart ? `${locationLabel(cart)} - ${fillLabel(cart)}` : 'Cadastro manual';
+    if(name) name.value = cart?.name || '';
+    if(mac) mac.value = cart ? formatMac(cart.mac) : '';
+
+    overlay.hidden = false;
+    name?.focus();
+  }
+
+  function closeCartDetail(){
+    const overlay = document.getElementById('cartDetailOverlay');
+    if(overlay) overlay.hidden = true;
+  }
+
+  function saveCartDetail(){
+    const overlay = document.getElementById('cartDetailOverlay');
+    const state = readState();
+    const cartId = overlay?.dataset.cartId;
+    const roomId = overlay?.dataset.roomId || state.rooms[0]?.id;
+    const name = document.getElementById('cartDetailName')?.value.trim();
+    const mac = formatMac(document.getElementById('cartDetailMac')?.value);
+
+    if(!name || cleanMac(mac).length !== 12){
+      alert('Informe nome e MAC completo do sensor.');
+      return;
+    }
+
+    const duplicate = state.carts.find(cart => cleanMac(cart.mac) === cleanMac(mac) && cart.id !== cartId);
+    if(duplicate){
+      alert('Este MAC ja esta cadastrado em outro carrinho.');
+      return;
+    }
+
+    let cart = state.carts.find(item => item.id === cartId);
+    if(!cart){
+      cart = {
+        id:`cart-${cleanMac(mac).toLowerCase()}`,
+        name,
+        mac,
+        roomId,
+        locationStatus:'in_room',
+        fillPercentage:0,
+        consecutiveCriticalReadings:0,
+        rssi:null,
+        lastSeen:'cadastro manual',
+        transitStep:0
+      };
+      state.carts.push(cart);
+    }
+
+    cart.name = name;
+    cart.mac = mac;
+    saveState(state);
+    closeCartDetail();
+    renderRooms();
+  }
+
+  function openCartTrackingView(){
+    ensureCartTrackingUi();
+    const view = document.getElementById('cartTrackingView');
+    if(!view) return;
+    const subtitle = document.getElementById('pageSubtitle');
+    previousSubtitle = subtitle?.textContent || previousSubtitle;
+    if(subtitle) subtitle.textContent = 'Carrinhos por sala';
+    view.hidden = false;
+    document.body.classList.add('cart-tracking-open');
+    renderRooms();
+  }
+
+  function closeCartTrackingView(){
+    const view = document.getElementById('cartTrackingView');
+    const subtitle = document.getElementById('pageSubtitle');
+    if(subtitle && previousSubtitle) subtitle.textContent = previousSubtitle;
+    if(view) view.hidden = true;
+    document.body.classList.remove('cart-tracking-open');
+  }
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', ensureCartTrackingUi);
+  }else{
+    ensureCartTrackingUi();
+  }
+
+  window.openCartTrackingView = openCartTrackingView;
+  window.closeCartTrackingView = closeCartTrackingView;
 })();
 
 
