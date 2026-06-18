@@ -9237,6 +9237,123 @@ document.addEventListener("fullscreenchange", () => {
     return compact.match(/.{1,2}/g)?.join(':') || '';
   }
 
+  function finiteNumberOrNull(value){
+    if(value === null || value === undefined || value === '') return null;
+    const number = Number(value);
+    return Number.isFinite(number) ? number : null;
+  }
+
+  function relativeTime(value){
+    const timestamp = new Date(value || '').getTime();
+    if(!Number.isFinite(timestamp)) return 'agora';
+    const seconds = Math.max(0, Math.round((Date.now() - timestamp) / 1000));
+    if(seconds < 60) return 'agora';
+    const minutes = Math.round(seconds / 60);
+    if(minutes < 60) return `${minutes} min atras`;
+    const hours = Math.round(minutes / 60);
+    return `${hours} h atras`;
+  }
+
+  function applyReadingsToState(state, readings){
+    if(!Array.isArray(readings) || !readings.length) return false;
+
+    const readingsByMac = new Map(readings.map(reading => [
+      cleanMac(reading.mac || reading.bleSensorId),
+      reading
+    ]).filter(([mac]) => mac.length === 12));
+
+    const roomByGateway = new Map(state.rooms.map(room => [
+      String(room.gatewayDeviceId || '').trim().toLowerCase(),
+      room.id
+    ]).filter(([gateway]) => gateway));
+
+    let changed = false;
+
+    state.carts.forEach(cart => {
+      const reading = readingsByMac.get(cleanMac(cart.mac));
+      if(!reading) return;
+
+      const fill = finiteNumberOrNull(reading.fillPercentage);
+      const distance = finiteNumberOrNull(reading.distanceMm);
+      const battery = finiteNumberOrNull(reading.battery);
+      const rssi = finiteNumberOrNull(reading.rssiBle);
+      const criticalReads = finiteNumberOrNull(reading.consecutiveCriticalReadings);
+      const gatewayRoomId = roomByGateway.get(String(reading.lorawanDeviceId || '').trim().toLowerCase());
+
+      if(fill !== null && Math.round(fill) !== Math.round(Number(cart.fillPercentage || 0))){
+        cart.fillPercentage = Math.round(fill);
+        changed = true;
+      }
+      if(distance !== null && cart.distanceMm !== distance){
+        cart.distanceMm = distance;
+        changed = true;
+      }
+      if(battery !== null && cart.battery !== battery){
+        cart.battery = battery;
+        changed = true;
+      }
+      if(rssi !== null && cart.rssi !== rssi){
+        cart.rssi = rssi;
+        changed = true;
+      }
+      if(criticalReads !== null && cart.consecutiveCriticalReadings !== criticalReads){
+        cart.consecutiveCriticalReadings = criticalReads;
+        changed = true;
+      }
+      if(reading.status && cart.collectorStatus !== reading.status){
+        cart.collectorStatus = reading.status;
+        changed = true;
+      }
+      if(reading.createdAt || reading.receivedAt){
+        const lastSeen = relativeTime(reading.createdAt || reading.receivedAt);
+        if(cart.lastSeen !== lastSeen){
+          cart.lastSeen = lastSeen;
+          changed = true;
+        }
+      }
+      if(gatewayRoomId && cart.roomId !== gatewayRoomId){
+        cart.roomId = gatewayRoomId;
+        cart.locationStatus = 'in_room';
+        cart.transitStep = 0;
+        changed = true;
+      }else if(gatewayRoomId && cart.locationStatus !== 'in_room'){
+        cart.locationStatus = 'in_room';
+        cart.transitStep = 0;
+        changed = true;
+      }
+    });
+
+    return changed;
+  }
+
+  let readingsTimer = null;
+  let readingsInFlight = false;
+
+  async function refreshCartReadings(){
+    if(readingsInFlight) return;
+    readingsInFlight = true;
+    try{
+      const response = await fetch('/api/cart-tracking/readings', { cache:'no-store' });
+      const payload = await response.json();
+      const readings = payload?.data?.readings || [];
+      const state = readState();
+      if(applyReadingsToState(state, readings)){
+        saveState(state);
+        renderRooms();
+      }
+    }catch(err){
+      console.warn('Falha ao buscar leituras dos carrinhos', err);
+    }finally{
+      readingsInFlight = false;
+    }
+  }
+
+  function startReadingsPolling(){
+    refreshCartReadings();
+    if(readingsTimer) return;
+    readingsTimer = setInterval(refreshCartReadings, 15000);
+  }
+
   function escapeHtml(value){
     return String(value ?? '').replace(/[&<>"']/g, char => ({
       '&':'&amp;',
@@ -9544,7 +9661,10 @@ document.addEventListener("fullscreenchange", () => {
     const mac = document.getElementById('cartDetailMac');
 
     if(title) title.textContent = cart?.name || 'Novo carrinho';
-    if(meta) meta.textContent = cart ? `${locationLabel(cart)} - ${fillLabel(cart)}` : 'Cadastro manual';
+    if(meta){
+      const distanceText = cart?.distanceMm ? ` - ${cart.distanceMm} mm` : '';
+      meta.textContent = cart ? `${locationLabel(cart)} - ${fillLabel(cart)}${distanceText}` : 'Cadastro manual';
+    }
     if(name) name.value = cart?.name || '';
     if(mac) mac.value = cart ? formatMac(cart.mac) : '';
 
@@ -9610,6 +9730,7 @@ document.addEventListener("fullscreenchange", () => {
     view.hidden = false;
     document.body.classList.add('cart-tracking-open');
     renderRooms();
+    startReadingsPolling();
   }
 
   function closeCartTrackingView(){

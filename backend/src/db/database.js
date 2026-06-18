@@ -143,6 +143,24 @@ function initDb() {
       FOREIGN KEY (dispositivo_id) REFERENCES dispositivos(id)
     );
 
+    CREATE TABLE IF NOT EXISTS collector_readings (
+      id TEXT PRIMARY KEY,
+      ble_sensor_id TEXT,
+      lorawan_device_id TEXT,
+      lorawan_gateway_id TEXT,
+      distance_mm REAL,
+      fill_percentage REAL,
+      status TEXT NOT NULL,
+      battery REAL,
+      rssi_ble REAL,
+      consecutive_critical_readings INTEGER NOT NULL DEFAULT 0,
+      f_port INTEGER,
+      raw_payload TEXT,
+      received_at TEXT,
+      created_at TEXT NOT NULL,
+      original_payload_json TEXT
+    );
+
     CREATE TABLE IF NOT EXISTS simulation_state (
       id TEXT PRIMARY KEY,
       enabled INTEGER NOT NULL DEFAULT 0,
@@ -173,6 +191,9 @@ function initDb() {
 
     CREATE INDEX IF NOT EXISTS idx_telemetry_events_device_time
     ON telemetry_events (dispositivo_id, ocorrido_em DESC);
+
+    CREATE INDEX IF NOT EXISTS idx_collector_readings_sensor_time
+    ON collector_readings (ble_sensor_id, created_at DESC);
   `);
 }
 

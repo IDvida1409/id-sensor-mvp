@@ -17,6 +17,11 @@ const { sendActivationEmail } = require('./services/emailService');
 const { sendExpoPush } = require('./services/pushService');
 const { alertMessageForAlert } = require('./services/alertText');
 const {
+  calculateFillPercentage,
+  getCollectorStatus,
+  normalizeTtnCollectorPayloads
+} = require('./integrations/ttn');
+const {
   advanceSimulationIfNeeded,
   getNocOccurrences,
   getSimulationState,
@@ -47,6 +52,9 @@ const staticMimeTypes = {
 function nowIso() {
   return new Date().toISOString();
 }
+
+const CART_EMPTY_DISTANCE_MM = Number(process.env.CART_EMPTY_DISTANCE_MM || 700);
+const CART_FULL_DISTANCE_MM = Number(process.env.CART_FULL_DISTANCE_MM || 50);
 
 const ACTIVATION_CODE_TTL_MS = 24 * 60 * 60 * 1000;
 
@@ -227,6 +235,166 @@ function normalizeAreaIds(value) {
 function serializeAreaIds(value) {
   const ids = normalizeAreaIds(value);
   return ids.length ? JSON.stringify(Array.from(new Set(ids))) : null;
+}
+
+function finiteNumberOrNull(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function compactBleSensorId(value) {
+  return String(value || '').replace(/[^0-9a-f]/gi, '').toLowerCase().slice(0, 12);
+}
+
+function formatBleSensorId(value) {
+  const compact = compactBleSensorId(value);
+  return compact.match(/.{1,2}/g)?.join(':').toUpperCase() || '';
+}
+
+function safeJsonStringify(value) {
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return null;
+  }
+}
+
+function collectorPayloadReceivedAt(reading) {
+  const timestamp = new Date(reading?.receivedAt || '').getTime();
+  return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : null;
+}
+
+function previousCollectorReading(db, bleSensorId) {
+  if (!bleSensorId) return null;
+  return db.prepare(`
+    SELECT *
+    FROM collector_readings
+    WHERE ble_sensor_id = ?
+    ORDER BY created_at DESC
+    LIMIT 1
+  `).get(bleSensorId);
+}
+
+function serializeCollectorReading(row) {
+  return {
+    id: row.id,
+    bleSensorId: row.ble_sensor_id,
+    mac: formatBleSensorId(row.ble_sensor_id),
+    lorawanDeviceId: row.lorawan_device_id,
+    lorawanGatewayId: row.lorawan_gateway_id,
+    distanceMm: finiteNumberOrNull(row.distance_mm),
+    fillPercentage: finiteNumberOrNull(row.fill_percentage),
+    status: row.status,
+    battery: finiteNumberOrNull(row.battery),
+    rssiBle: finiteNumberOrNull(row.rssi_ble),
+    consecutiveCriticalReadings: Number(row.consecutive_critical_readings || 0),
+    fPort: row.f_port === null || row.f_port === undefined ? null : Number(row.f_port),
+    rawPayload: row.raw_payload,
+    receivedAt: row.received_at,
+    createdAt: row.created_at,
+    calibration: {
+      emptyDistanceMm: CART_EMPTY_DISTANCE_MM,
+      fullDistanceMm: CART_FULL_DISTANCE_MM
+    }
+  };
+}
+
+function saveCollectorReading(db, normalizedReading) {
+  const bleSensorId = compactBleSensorId(normalizedReading?.bleSensorId);
+  if (!bleSensorId) return null;
+
+  const createdAt = nowIso();
+  const receivedAt = collectorPayloadReceivedAt(normalizedReading) || createdAt;
+  const distanceMm = finiteNumberOrNull(normalizedReading.distanceMm);
+  const fillPercentage = calculateFillPercentage(CART_EMPTY_DISTANCE_MM, CART_FULL_DISTANCE_MM, distanceMm);
+  const previous = previousCollectorReading(db, bleSensorId);
+  const consecutiveCriticalReadings = fillPercentage !== null && fillPercentage >= 90
+    ? Number(previous?.consecutive_critical_readings || 0) + 1
+    : 0;
+  const status = getCollectorStatus(fillPercentage, createdAt, consecutiveCriticalReadings);
+  const row = {
+    id: id('collector_reading'),
+    bleSensorId,
+    lorawanDeviceId: normalizedReading.lorawanDeviceId || null,
+    lorawanGatewayId: normalizedReading.lorawanGatewayId || null,
+    distanceMm,
+    fillPercentage,
+    status,
+    battery: finiteNumberOrNull(normalizedReading.battery),
+    rssiBle: finiteNumberOrNull(normalizedReading.rssiBle),
+    consecutiveCriticalReadings,
+    fPort: finiteNumberOrNull(normalizedReading.fPort),
+    rawPayload: normalizedReading.rawPayload || null,
+    receivedAt,
+    createdAt,
+    originalPayloadJson: safeJsonStringify(normalizedReading.originalPayload)
+  };
+
+  db.prepare(`
+    INSERT INTO collector_readings (
+      id, ble_sensor_id, lorawan_device_id, lorawan_gateway_id,
+      distance_mm, fill_percentage, status, battery, rssi_ble,
+      consecutive_critical_readings, f_port, raw_payload, received_at,
+      created_at, original_payload_json
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    row.id,
+    row.bleSensorId,
+    row.lorawanDeviceId,
+    row.lorawanGatewayId,
+    row.distanceMm,
+    row.fillPercentage,
+    row.status,
+    row.battery,
+    row.rssiBle,
+    row.consecutiveCriticalReadings,
+    row.fPort,
+    row.rawPayload,
+    row.receivedAt,
+    row.createdAt,
+    row.originalPayloadJson
+  );
+
+  return serializeCollectorReading({
+    id: row.id,
+    ble_sensor_id: row.bleSensorId,
+    lorawan_device_id: row.lorawanDeviceId,
+    lorawan_gateway_id: row.lorawanGatewayId,
+    distance_mm: row.distanceMm,
+    fill_percentage: row.fillPercentage,
+    status: row.status,
+    battery: row.battery,
+    rssi_ble: row.rssiBle,
+    consecutive_critical_readings: row.consecutiveCriticalReadings,
+    f_port: row.fPort,
+    raw_payload: row.rawPayload,
+    received_at: row.receivedAt,
+    created_at: row.createdAt
+  });
+}
+
+function latestCollectorReadings(db, options = {}) {
+  const limit = Math.max(1, Math.min(500, Number(options.limit || 200)));
+  const macFilters = Array.isArray(options.macFilters) ? options.macFilters.filter(Boolean) : [];
+  const rows = db.prepare(`
+    SELECT *
+    FROM collector_readings
+    ORDER BY created_at DESC
+    LIMIT ?
+  `).all(limit);
+  const seen = new Set();
+  const readings = [];
+
+  for (const row of rows) {
+    const sensorId = compactBleSensorId(row.ble_sensor_id);
+    if (!sensorId || seen.has(sensorId)) continue;
+    if (macFilters.length && !macFilters.includes(sensorId)) continue;
+    seen.add(sensorId);
+    readings.push(serializeCollectorReading(row));
+  }
+
+  return readings;
 }
 
 function areaIdsAllowAll(value) {
@@ -1116,6 +1284,35 @@ addRoute('GET', '/noc/occurrences/live', async ({ query, res }) => {
     mode: query.mode || 'area',
     filters: query.filters || 'all'
   }));
+});
+
+addRoute('POST', '/api/ttn/uplink', async ({ body, res }) => {
+  const db = getDb();
+  const normalizedReadings = normalizeTtnCollectorPayloads(body);
+  const storedReadings = normalizedReadings
+    .map((reading) => saveCollectorReading(db, reading))
+    .filter(Boolean);
+
+  ok(res, {
+    received: normalizedReadings.length,
+    stored: storedReadings.length,
+    ignored: normalizedReadings.length - storedReadings.length,
+    readings: storedReadings
+  });
+});
+
+addRoute('GET', '/api/cart-tracking/readings', async ({ query, res }) => {
+  const macFilters = String(query.mac || '')
+    .split(',')
+    .map(compactBleSensorId)
+    .filter(Boolean);
+
+  ok(res, {
+    readings: latestCollectorReadings(getDb(), {
+      limit: query.limit || 200,
+      macFilters
+    })
+  });
 });
 
 addRoute('POST', '/activation-code', async ({ body, req, res }) => {
