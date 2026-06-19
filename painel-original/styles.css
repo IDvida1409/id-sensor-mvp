@@ -11692,3 +11692,13 @@ body.analytic-report-open{overflow:hidden}
   position:absolute !important;
 }
 
+.cart-tracking-v2 .cart-bin-approved-img{
+  display:block !important;
+  height:100% !important;
+  object-fit:contain !important;
+  object-position:center !important;
+  position:relative !important;
+  width:100% !important;
+  z-index:5 !important;
+}
+

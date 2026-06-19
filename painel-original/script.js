@@ -9473,13 +9473,12 @@ document.addEventListener("fullscreenchange", () => {
           <strong>${escapeHtml(cart.name)}</strong>
         </span>
         <span class="cart-visual" aria-hidden="true">
-          <span class="cart-bin-glow"></span>
-          <span class="cart-lid-open"></span>
-          <span class="cart-lid"></span>
-          <span class="cart-bucket">
-            <span class="cart-red-fill"></span>
-            <span class="cart-bucket-light"></span>
-          </span>
+          <img
+            class="cart-bin-approved-img"
+            src="./assets/${lidOpen ? 'cart-bin-open-approved.png' : 'cart-bin-closed-approved.png'}"
+            alt=""
+            loading="lazy"
+          />
         </span>
         <span class="cart-item-foot">
           <small>${fill}% cheio</small>
