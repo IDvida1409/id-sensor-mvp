@@ -9367,10 +9367,10 @@ document.addEventListener("fullscreenchange", () => {
   function cartIcon(){
     return `
       <svg viewBox="0 0 64 64" aria-hidden="true" focusable="false">
-        <path d="M14 18h8l4 24h24l5-17H28" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M24 42h25" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round"/>
-        <circle cx="29" cy="50" r="4" fill="currentColor"/>
-        <circle cx="48" cy="50" r="4" fill="currentColor"/>
+        <path d="M18 20h28" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round"/>
+        <path d="M22 22h20l-3 30H25L22 22Z" fill="currentColor" opacity=".18"/>
+        <path d="M22 22h20l-3 30H25L22 22Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/>
+        <path d="M26 14h12" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
       </svg>
     `;
   }
@@ -9399,6 +9399,18 @@ document.addEventListener("fullscreenchange", () => {
     if(fill >= 75) return 'near-limit';
     if(fill <= 30) return 'empty';
     return 'normal';
+  }
+
+  function isLidOpen(cart){
+    const rawStatus = String(cart.collectorStatus || cart.readingStatus || cart.sensorStatus || '').toLowerCase();
+    return cart.lidOpen === true || [
+      'lid_open',
+      'open_lid',
+      'tampa_aberta',
+      'tampa aberta',
+      'invalid_reading',
+      'out_of_range'
+    ].includes(rawStatus);
   }
 
   function roomStats(room, carts){
@@ -9451,26 +9463,23 @@ document.addEventListener("fullscreenchange", () => {
   function renderCartCard(cart){
     const fill = Math.max(0, Math.min(100, Number(cart.fillPercentage || 0)));
     const tone = fillTone(cart);
+    const lidOpen = isLidOpen(cart);
     const showStatus = cart.locationStatus !== 'in_room' && cart.locationStatus !== 'transit';
 
     return `
-      <button type="button" class="cart-item-card ${tone} ${escapeHtml(cart.locationStatus)}" data-cart-id="${escapeHtml(cart.id)}" style="--cart-fill:${fill}%">
+      <button type="button" class="cart-item-card ${tone} ${lidOpen ? 'lid-open' : ''} ${escapeHtml(cart.locationStatus)}" data-cart-id="${escapeHtml(cart.id)}" style="--cart-fill:${fill}%">
         ${showStatus ? `<span class="cart-card-status"><i>${locationLabel(cart)}</i></span>` : ''}
         <span class="cart-item-body">
           <strong>${escapeHtml(cart.name)}</strong>
         </span>
         <span class="cart-visual" aria-hidden="true">
-          <span class="cart-radar outer"></span>
-          <span class="cart-radar inner"></span>
+          <span class="cart-bin-glow"></span>
+          <span class="cart-lid-open"></span>
           <span class="cart-lid"></span>
           <span class="cart-bucket">
             <span class="cart-red-fill"></span>
             <span class="cart-bucket-light"></span>
           </span>
-          <span class="cart-leg left"></span>
-          <span class="cart-leg right"></span>
-          <span class="cart-wheel left"><i></i></span>
-          <span class="cart-wheel right"><i></i></span>
         </span>
         <span class="cart-item-foot">
           <small>${fill}% cheio</small>
