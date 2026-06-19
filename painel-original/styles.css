@@ -11729,22 +11729,22 @@ body.analytic-report-open{overflow:hidden}
 
 .cart-tracking-v2 .cart-bin-fill-zone{
   bottom:13.7% !important;
-  clip-path:polygon(1% 0,99% 0,86% 100%,14% 100%) !important;
+  clip-path:polygon(4% 0,96% 0,86% 100%,14% 100%) !important;
   display:block !important;
-  left:30.8% !important;
+  left:28.8% !important;
   overflow:hidden !important;
   pointer-events:none !important;
   position:absolute !important;
-  right:30.8% !important;
-  top:51.4% !important;
+  right:28.8% !important;
+  top:28.6% !important;
   z-index:3 !important;
 }
 
 .cart-tracking-v2 .cart-bin-empty-shell.open .cart-bin-fill-zone{
   bottom:12.5% !important;
-  left:28.7% !important;
-  right:28.7% !important;
-  top:59.2% !important;
+  left:27.6% !important;
+  right:27.6% !important;
+  top:40.2% !important;
 }
 
 .cart-tracking-v2 .cart-bin-liquid{
