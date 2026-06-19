@@ -9148,6 +9148,8 @@ document.addEventListener("fullscreenchange", () => {
   const STORAGE_KEY = 'idsensor.cartTracking.v8';
   const ROOM_SWITCH_RSSI_MIN = -70;
   const ROOM_SWITCH_CONFIRM_READINGS = 2;
+  const OBSOLETE_CART_IDS = new Set(['cart-flat-03']);
+  const OBSOLETE_CART_MACS = new Set(['AABBCC000003']);
 
   const defaultState = {
     rooms: [
@@ -9178,19 +9180,6 @@ document.addEventListener("fullscreenchange", () => {
         rssi:null,
         lastSeen:'sem leitura',
         transitStep:0
-      },
-      {
-        id:'cart-flat-03',
-        name:'Carrinho 3',
-        mac:'AA:BB:CC:00:00:03',
-        roomId:'sala-bloco-b1',
-        locationStatus:'in_room',
-        fillPercentage:0,
-        consecutiveCriticalReadings:0,
-        rssi:null,
-        lastSeen:'sem leitura',
-        transitStep:0,
-        lidOpen:true
       }
     ]
   };
@@ -9207,6 +9196,13 @@ document.addEventListener("fullscreenchange", () => {
       rooms: Array.isArray(state?.rooms) ? state.rooms : [],
       carts: Array.isArray(state?.carts) ? state.carts : []
     };
+
+    const activeCarts = normalized.carts.filter(cart => {
+      const isObsolete = OBSOLETE_CART_IDS.has(cart?.id) || OBSOLETE_CART_MACS.has(cleanMac(cart?.mac));
+      if(isObsolete) changed = true;
+      return !isObsolete;
+    });
+    normalized.carts = activeCarts;
 
     defaultState.rooms.forEach(defaultRoom => {
       if(!normalized.rooms.some(room => room.id === defaultRoom.id)){
@@ -9546,9 +9542,11 @@ document.addEventListener("fullscreenchange", () => {
   function renderCartCard(cart){
     const fill = Math.max(0, Math.min(100, Number(cart.fillPercentage || 0)));
     const visualFill = fill <= 2 ? 0 : fill;
-    const fillLabel = visualFill ? `${fill}% cheio` : '0% cheio';
     const tone = fillTone(cart);
     const lidOpen = isLidOpen(cart);
+    const fillLabel = lidOpen
+      ? `Tampa aberta · ${fill}% cheio`
+      : (visualFill ? `${fill}% cheio` : '0% cheio');
     const showStatus = cart.locationStatus !== 'in_room' && cart.locationStatus !== 'transit';
 
     return `
