@@ -53,8 +53,8 @@ function nowIso() {
   return new Date().toISOString();
 }
 
-const CART_EMPTY_DISTANCE_MM = Number(process.env.CART_EMPTY_DISTANCE_MM || 700);
-const CART_FULL_DISTANCE_MM = Number(process.env.CART_FULL_DISTANCE_MM || 50);
+const CART_EMPTY_DISTANCE_MM = Number(process.env.CART_EMPTY_DISTANCE_MM || 720);
+const CART_FULL_DISTANCE_MM = Number(process.env.CART_FULL_DISTANCE_MM || 140);
 
 const ACTIVATION_CODE_TTL_MS = 24 * 60 * 60 * 1000;
 
