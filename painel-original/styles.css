@@ -11759,3 +11759,30 @@ body.analytic-report-open{overflow:hidden}
   right:0 !important;
 }
 
+/* ===== Cart open lid visual state ===== */
+.cart-item-card.lid-open,
+.cart-tracking-v2 .cart-item-card.lid-open{
+  background:linear-gradient(145deg,#7c2d12 0%,#d97706 58%,#fbbf24 135%) !important;
+  border-color:rgba(253,186,116,.72) !important;
+  box-shadow:0 14px 30px rgba(217,119,6,.24) !important;
+}
+
+.cart-item-card.lid-open::before,
+.cart-tracking-v2 .cart-item-card.lid-open::before{
+  border-color:rgba(255,237,213,.26) !important;
+  background:radial-gradient(circle,rgba(255,237,213,.24),transparent 68%) !important;
+}
+
+.cart-item-card.lid-open .cart-bin-liquid,
+.cart-tracking-v2 .cart-item-card.lid-open .cart-bin-liquid,
+.cart-tracking-v2 .cart-item-card.lid-open .cart-red-fill{
+  background:linear-gradient(180deg,#fde68a 0%,#f59e0b 50%,#c2410c 100%) !important;
+  box-shadow:0 -8px 16px rgba(245,158,11,.30), inset 0 9px 18px rgba(255,255,255,.18) !important;
+}
+
+.cart-item-card.lid-open .cart-item-foot small,
+.cart-tracking-v2 .cart-item-card.lid-open .cart-item-foot small{
+  color:#fff7ed !important;
+  font-weight:800 !important;
+}
+
