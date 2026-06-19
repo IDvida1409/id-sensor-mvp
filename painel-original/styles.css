@@ -11741,12 +11741,13 @@ body.analytic-report-open{overflow:hidden}
 }
 
 .cart-tracking-v2 .cart-bin-empty-shell.open .cart-bin-fill-zone{
-  bottom:15.8% !important;
-  border-radius:0 0 7px 7px !important;
-  clip-path:polygon(15% 0,85% 0,78% 100%,22% 100%) !important;
-  left:31.4% !important;
-  right:31.4% !important;
-  top:43.8% !important;
+  bottom:10.4% !important;
+  border-radius:0 !important;
+  clip-path:none !important;
+  left:33.8% !important;
+  right:33.8% !important;
+  top:52% !important;
+  z-index:1 !important;
 }
 
 .cart-tracking-v2 .cart-bin-liquid{
