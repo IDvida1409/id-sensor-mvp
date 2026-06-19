@@ -9145,12 +9145,12 @@ document.addEventListener("fullscreenchange", () => {
 
 /* ===== SCRIPT BLOCK 45 | cart-tracking-room-cards-redesign ===== */
 (function(){
-  const STORAGE_KEY = 'idsensor.cartTracking.v7';
+  const STORAGE_KEY = 'idsensor.cartTracking.v8';
 
   const defaultState = {
     rooms: [
       { id:'sala-bloco-b1', name:'SALA BLOCO B1', gatewayDeviceId:'8ec5' },
-      { id:'sala-bloco-a', name:'SALA BLOCO A', gatewayDeviceId:'' }
+      { id:'sala-bloco-a', name:'SALA BLOCO A', gatewayDeviceId:'efde' }
     ],
     carts: [
       {
@@ -9169,7 +9169,7 @@ document.addEventListener("fullscreenchange", () => {
         id:'cart-c4894994a485',
         name:'Carrinho 02',
         mac:'C4:89:49:94:A4:85',
-        roomId:'sala-bloco-b1',
+        roomId:'sala-bloco-a',
         locationStatus:'in_room',
         fillPercentage:0,
         consecutiveCriticalReadings:0,
