@@ -9145,7 +9145,7 @@ document.addEventListener("fullscreenchange", () => {
 
 /* ===== SCRIPT BLOCK 45 | cart-tracking-room-cards-redesign ===== */
 (function(){
-  const STORAGE_KEY = 'idsensor.cartTracking.v5';
+  const STORAGE_KEY = 'idsensor.cartTracking.v6';
 
   const defaultState = {
     rooms: [
@@ -9179,7 +9179,7 @@ document.addEventListener("fullscreenchange", () => {
       },
       {
         id:'cart-flat-03',
-        name:'Carrinho Flat 3',
+        name:'Carrinho 3',
         mac:'AA:BB:CC:00:00:03',
         roomId:'sala-bloco-b1',
         locationStatus:'in_room',

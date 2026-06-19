@@ -11711,6 +11711,11 @@ body.analytic-report-open{overflow:hidden}
   width:100% !important;
 }
 
+.cart-tracking-v2 .cart-bin-empty-shell.closed{
+  transform:scale(.84) !important;
+  transform-origin:center center !important;
+}
+
 .cart-tracking-v2 .cart-bin-empty-img{
   display:block !important;
   height:100% !important;
