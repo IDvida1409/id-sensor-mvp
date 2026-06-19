@@ -9556,10 +9556,10 @@ document.addEventListener("fullscreenchange", () => {
           <strong>${escapeHtml(cart.name)}</strong>
         </span>
         <span class="cart-visual" aria-hidden="true">
-          <span class="cart-bin-empty-shell closed">
+          <span class="cart-bin-empty-shell ${lidOpen ? 'open' : 'closed'}">
             <img
               class="cart-bin-empty-img"
-              src="./assets/cart-bin-closed-empty.png"
+              src="./assets/${lidOpen ? 'cart-bin-open-empty.png' : 'cart-bin-closed-empty.png'}"
               alt=""
               loading="lazy"
             />

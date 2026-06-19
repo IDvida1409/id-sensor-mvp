@@ -11711,7 +11711,8 @@ body.analytic-report-open{overflow:hidden}
   width:100% !important;
 }
 
-.cart-tracking-v2 .cart-bin-empty-shell.closed{
+.cart-tracking-v2 .cart-bin-empty-shell.closed,
+.cart-tracking-v2 .cart-bin-empty-shell.open{
   transform:scale(.84) !important;
   transform-origin:center center !important;
 }
@@ -11741,13 +11742,13 @@ body.analytic-report-open{overflow:hidden}
 }
 
 .cart-tracking-v2 .cart-bin-empty-shell.open .cart-bin-fill-zone{
-  bottom:10.4% !important;
-  border-radius:0 !important;
-  clip-path:none !important;
-  left:33.8% !important;
-  right:33.8% !important;
-  top:52% !important;
-  z-index:1 !important;
+  bottom:3.8% !important;
+  border-radius:0 0 7px 7px !important;
+  clip-path:polygon(5% 0,95% 0,84% 100%,16% 100%) !important;
+  left:28.8% !important;
+  right:28.8% !important;
+  top:48.8% !important;
+  z-index:3 !important;
 }
 
 .cart-tracking-v2 .cart-bin-liquid{
