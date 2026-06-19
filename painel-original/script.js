@@ -9145,7 +9145,7 @@ document.addEventListener("fullscreenchange", () => {
 
 /* ===== SCRIPT BLOCK 45 | cart-tracking-room-cards-redesign ===== */
 (function(){
-  const STORAGE_KEY = 'idsensor.cartTracking.v4';
+  const STORAGE_KEY = 'idsensor.cartTracking.v5';
 
   const defaultState = {
     rooms: [
@@ -9159,10 +9159,10 @@ document.addEventListener("fullscreenchange", () => {
         mac:'DE:08:DB:F4:73:11',
         roomId:'sala-bloco-b1',
         locationStatus:'in_room',
-        fillPercentage:26,
+        fillPercentage:0,
         consecutiveCriticalReadings:0,
-        rssi:-39,
-        lastSeen:'agora',
+        rssi:null,
+        lastSeen:'aguardando leitura',
         transitStep:0
       },
       {
@@ -9171,10 +9171,10 @@ document.addEventListener("fullscreenchange", () => {
         mac:'AA:BB:CC:00:00:02',
         roomId:'sala-bloco-b1',
         locationStatus:'in_room',
-        fillPercentage:82,
+        fillPercentage:0,
         consecutiveCriticalReadings:0,
-        rssi:-78,
-        lastSeen:'agora',
+        rssi:null,
+        lastSeen:'sem leitura',
         transitStep:0
       }
     ]
