@@ -9146,6 +9146,8 @@ document.addEventListener("fullscreenchange", () => {
 /* ===== SCRIPT BLOCK 45 | cart-tracking-room-cards-redesign ===== */
 (function(){
   const STORAGE_KEY = 'idsensor.cartTracking.v8';
+  const ROOM_SWITCH_RSSI_MIN = -70;
+  const ROOM_SWITCH_CONFIRM_READINGS = 2;
 
   const defaultState = {
     rooms: [
@@ -9267,6 +9269,83 @@ document.addEventListener("fullscreenchange", () => {
     return `${hours} h atras`;
   }
 
+  function readingIdentity(reading){
+    return [
+      reading?.id || '',
+      reading?.receivedAt || '',
+      reading?.createdAt || '',
+      reading?.lorawanDeviceId || ''
+    ].join('|');
+  }
+
+  function setCartLocation(cart, nextLocationStatus, nextTransitStep = 0){
+    let changed = false;
+    if(cart.locationStatus !== nextLocationStatus){
+      cart.locationStatus = nextLocationStatus;
+      changed = true;
+    }
+    if(Number(cart.transitStep || 0) !== nextTransitStep){
+      cart.transitStep = nextTransitStep;
+      changed = true;
+    }
+    return changed;
+  }
+
+  function clearPendingRoom(cart){
+    let changed = false;
+    if(cart.pendingRoomId){
+      delete cart.pendingRoomId;
+      changed = true;
+    }
+    if(cart.pendingRoomReadingKey){
+      delete cart.pendingRoomReadingKey;
+      changed = true;
+    }
+    if(cart.pendingRoomReadings){
+      delete cart.pendingRoomReadings;
+      changed = true;
+    }
+    return changed;
+  }
+
+  function applyGatewayRoomToCart(cart, gatewayRoomId, rssi, reading){
+    if(!gatewayRoomId) return false;
+
+    if(cart.roomId === gatewayRoomId){
+      const cleared = clearPendingRoom(cart);
+      const located = setCartLocation(cart, 'in_room', 0);
+      return cleared || located;
+    }
+
+    const strongEnough = rssi !== null && rssi >= ROOM_SWITCH_RSSI_MIN;
+    if(!strongEnough){
+      return clearPendingRoom(cart);
+    }
+
+    const key = readingIdentity(reading);
+    let changed = false;
+    if(cart.pendingRoomId !== gatewayRoomId){
+      cart.pendingRoomId = gatewayRoomId;
+      cart.pendingRoomReadings = 1;
+      cart.pendingRoomReadingKey = key;
+      changed = true;
+    }else if(cart.pendingRoomReadingKey !== key){
+      cart.pendingRoomReadings = Number(cart.pendingRoomReadings || 0) + 1;
+      cart.pendingRoomReadingKey = key;
+      changed = true;
+    }
+
+    if(Number(cart.pendingRoomReadings || 0) >= ROOM_SWITCH_CONFIRM_READINGS){
+      cart.roomId = gatewayRoomId;
+      changed = true;
+      const cleared = clearPendingRoom(cart);
+      const located = setCartLocation(cart, 'in_room', 0);
+      return cleared || located || changed;
+    }
+
+    return setCartLocation(cart, 'near', 1) || changed;
+  }
+
   function applyReadingsToState(state, readings){
     if(!Array.isArray(readings) || !readings.length) return false;
 
@@ -9324,16 +9403,7 @@ document.addEventListener("fullscreenchange", () => {
           changed = true;
         }
       }
-      if(gatewayRoomId && cart.roomId !== gatewayRoomId){
-        cart.roomId = gatewayRoomId;
-        cart.locationStatus = 'in_room';
-        cart.transitStep = 0;
-        changed = true;
-      }else if(gatewayRoomId && cart.locationStatus !== 'in_room'){
-        cart.locationStatus = 'in_room';
-        cart.transitStep = 0;
-        changed = true;
-      }
+      if(applyGatewayRoomToCart(cart, gatewayRoomId, rssi, reading)) changed = true;
     });
 
     return changed;
