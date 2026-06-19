@@ -9462,26 +9462,33 @@ document.addEventListener("fullscreenchange", () => {
 
   function renderCartCard(cart){
     const fill = Math.max(0, Math.min(100, Number(cart.fillPercentage || 0)));
+    const visualFill = fill <= 2 ? 0 : fill;
+    const fillLabel = visualFill ? `${fill}% cheio` : '0% cheio';
     const tone = fillTone(cart);
     const lidOpen = isLidOpen(cart);
     const showStatus = cart.locationStatus !== 'in_room' && cart.locationStatus !== 'transit';
 
     return `
-      <button type="button" class="cart-item-card ${tone} ${lidOpen ? 'lid-open' : ''} ${escapeHtml(cart.locationStatus)}" data-cart-id="${escapeHtml(cart.id)}" style="--cart-fill:${fill}%">
+      <button type="button" class="cart-item-card ${tone} ${lidOpen ? 'lid-open' : ''} ${escapeHtml(cart.locationStatus)}" data-cart-id="${escapeHtml(cart.id)}" style="--cart-fill:${fill}%;--cart-liquid:${visualFill}%">
         ${showStatus ? `<span class="cart-card-status"><i>${locationLabel(cart)}</i></span>` : ''}
         <span class="cart-item-body">
           <strong>${escapeHtml(cart.name)}</strong>
         </span>
         <span class="cart-visual" aria-hidden="true">
-          <img
-            class="cart-bin-approved-img"
-            src="./assets/${lidOpen ? 'cart-bin-open-approved.png' : 'cart-bin-closed-approved.png'}"
-            alt=""
-            loading="lazy"
-          />
+          <span class="cart-bin-empty-shell ${lidOpen ? 'open' : 'closed'}">
+            <img
+              class="cart-bin-empty-img"
+              src="./assets/${lidOpen ? 'cart-bin-open-empty.png' : 'cart-bin-closed-empty.png'}"
+              alt=""
+              loading="lazy"
+            />
+            <span class="cart-bin-fill-zone">
+              <span class="cart-bin-liquid"></span>
+            </span>
+          </span>
         </span>
         <span class="cart-item-foot">
-          <small>${fill}% cheio</small>
+          <small>${fillLabel}</small>
         </span>
       </button>
     `;
