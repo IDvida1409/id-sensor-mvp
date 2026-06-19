@@ -9550,16 +9550,16 @@ document.addEventListener("fullscreenchange", () => {
     const showStatus = cart.locationStatus !== 'in_room' && cart.locationStatus !== 'transit';
 
     return `
-      <button type="button" class="cart-item-card ${tone} ${lidOpen ? 'lid-open' : ''} ${escapeHtml(cart.locationStatus)}" data-cart-id="${escapeHtml(cart.id)}" style="--cart-fill:${fill}%;--cart-liquid:${visualFill}%">
+      <button type="button" class="cart-item-card ${tone} ${escapeHtml(cart.locationStatus)}" data-cart-id="${escapeHtml(cart.id)}" style="--cart-fill:${fill}%;--cart-liquid:${visualFill}%">
         ${showStatus ? `<span class="cart-card-status"><i>${locationLabel(cart)}</i></span>` : ''}
         <span class="cart-item-body">
           <strong>${escapeHtml(cart.name)}</strong>
         </span>
         <span class="cart-visual" aria-hidden="true">
-          <span class="cart-bin-empty-shell ${lidOpen ? 'open' : 'closed'}">
+          <span class="cart-bin-empty-shell closed">
             <img
               class="cart-bin-empty-img"
-              src="./assets/${lidOpen ? 'cart-bin-open-empty-frame.png' : 'cart-bin-closed-empty.png'}"
+              src="./assets/cart-bin-closed-empty.png"
               alt=""
               loading="lazy"
             />
