@@ -9176,6 +9176,19 @@ document.addEventListener("fullscreenchange", () => {
         rssi:null,
         lastSeen:'sem leitura',
         transitStep:0
+      },
+      {
+        id:'cart-flat-03',
+        name:'Carrinho Flat 3',
+        mac:'AA:BB:CC:00:00:03',
+        roomId:'sala-bloco-b1',
+        locationStatus:'in_room',
+        fillPercentage:0,
+        consecutiveCriticalReadings:0,
+        rssi:null,
+        lastSeen:'sem leitura',
+        transitStep:0,
+        lidOpen:true
       }
     ]
   };
@@ -9640,8 +9653,8 @@ document.addEventListener("fullscreenchange", () => {
 
     if(addButton){
       const state = readState();
-      if(state.carts.length >= 2){
-        alert('Neste teste vamos trabalhar com dois carrinhos apenas.');
+      if(state.carts.length >= 3){
+        alert('Neste teste vamos trabalhar com três carrinhos apenas.');
         return;
       }
       openCartDetail(null, addButton.getAttribute('data-cart-add'));

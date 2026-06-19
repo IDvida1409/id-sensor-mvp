@@ -11507,7 +11507,7 @@ body.analytic-report-open{overflow:hidden}
 
 .cart-tracking-v2 .cart-items-grid{
   gap:8px !important;
-  grid-template-columns:repeat(auto-fill,minmax(126px,1fr)) !important;
+  grid-template-columns:repeat(auto-fill,minmax(123px,1fr)) !important;
 }
 
 .cart-tracking-v2 .cart-item-card,
@@ -11524,8 +11524,8 @@ body.analytic-report-open{overflow:hidden}
   border:1px solid rgba(178,215,255,.20) !important;
   box-shadow:0 8px 16px rgba(6,34,91,.16) !important;
   gap:5px !important;
-  min-height:148px !important;
-  padding:8px !important;
+  min-height:144px !important;
+  padding:7px !important;
 }
 
 .cart-tracking-v2 .cart-card-status,
@@ -11554,9 +11554,9 @@ body.analytic-report-open{overflow:hidden}
 }
 
 .cart-tracking-v2 .cart-visual{
-  flex:0 0 72px !important;
+  flex:0 0 68px !important;
   margin:auto 0 !important;
-  min-height:72px !important;
+  min-height:68px !important;
 }
 
 .cart-tracking-v2 .cart-lid{
@@ -11599,10 +11599,10 @@ body.analytic-report-open{overflow:hidden}
 
 /* ===== Approved bin icon: compact final override ===== */
 .cart-tracking-v2 .cart-visual{
-  flex:0 0 82px !important;
+  flex:0 0 77px !important;
   margin:auto 0 !important;
-  min-height:82px !important;
-  perspective:230px !important;
+  min-height:77px !important;
+  perspective:216px !important;
 }
 
 .cart-tracking-v2 .cart-bin-glow{
