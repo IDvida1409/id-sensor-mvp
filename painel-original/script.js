@@ -9159,7 +9159,7 @@ document.addEventListener("fullscreenchange", () => {
     carts: [
       {
         id:'cart-de08dbf47311',
-        name:'Carrinho 01',
+        name:'C01',
         mac:'DE:08:DB:F4:73:11',
         roomId:'sala-bloco-b1',
         locationStatus:'in_room',
@@ -9171,7 +9171,7 @@ document.addEventListener("fullscreenchange", () => {
       },
       {
         id:'cart-c4894994a485',
-        name:'Carrinho 02',
+        name:'C02',
         mac:'C4:89:49:94:A4:85',
         roomId:'sala-bloco-a',
         locationStatus:'in_room',
@@ -9218,6 +9218,15 @@ document.addEventListener("fullscreenchange", () => {
       }
     });
 
+    const defaultCartNames = new Map(defaultState.carts.map(cart => [cart.id, cart.name]));
+    normalized.carts.forEach(cart => {
+      const defaultName = defaultCartNames.get(cart.id);
+      if(defaultName && /^Carrinho\s+0?[12]$/i.test(String(cart.name || '').trim())){
+        cart.name = defaultName;
+        changed = true;
+      }
+    });
+
     return { state: normalized, changed };
   }
 
@@ -9246,6 +9255,16 @@ document.addEventListener("fullscreenchange", () => {
   function formatMac(value){
     const compact = cleanMac(value);
     return compact.match(/.{1,2}/g)?.join(':') || '';
+  }
+
+  function cartDisplayName(cart){
+    const name = String(cart?.name || '').trim();
+    const compactMac = cleanMac(cart?.mac);
+    if(compactMac === 'DE08DBF47311') return 'C01';
+    if(compactMac === 'C4894994A485') return 'C02';
+    const numberedName = name.match(/^Carrinho\s+0?(\d+)$/i);
+    if(numberedName) return `C${String(numberedName[1]).padStart(2, '0')}`;
+    return name || 'C--';
   }
 
   function finiteNumberOrNull(value){
@@ -9531,7 +9550,7 @@ document.addEventListener("fullscreenchange", () => {
     return `
       <div class="cart-transit-strip">
         <div>
-          <strong>${escapeHtml(cart.name)}</strong>
+          <strong>${escapeHtml(cartDisplayName(cart))}</strong>
           <small>Em transito - sinal afastando</small>
         </div>
         <div class="cart-transit-steps">${steps}</div>
@@ -9553,7 +9572,7 @@ document.addEventListener("fullscreenchange", () => {
       <button type="button" class="cart-item-card ${tone} ${escapeHtml(cart.locationStatus)}" data-cart-id="${escapeHtml(cart.id)}" style="--cart-fill:${fill}%;--cart-liquid:${visualFill}%">
         ${showStatus ? `<span class="cart-card-status"><i>${locationLabel(cart)}</i></span>` : ''}
         <span class="cart-item-body">
-          <strong>${escapeHtml(cart.name)}</strong>
+          <strong>${escapeHtml(cartDisplayName(cart))}</strong>
         </span>
         <span class="cart-visual" aria-hidden="true">
           <span class="cart-bin-empty-shell ${lidOpen ? 'open' : 'closed'}">
@@ -9598,7 +9617,7 @@ document.addEventListener("fullscreenchange", () => {
           return `
             <button type="button" class="cart-room-transit-status" data-cart-id="${escapeHtml(cart.id)}">
               <span>
-                <strong>${escapeHtml(cart.name)} em transito</strong>
+                <strong>${escapeHtml(cartDisplayName(cart))} em transito</strong>
                 <small>Sinal afastando da sala</small>
               </span>
               <span class="cart-room-transit-steps">${steps}</span>
