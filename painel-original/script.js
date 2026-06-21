@@ -9516,6 +9516,11 @@ if(false){(function(){
     ].includes(rawStatus);
   }
 
+  function cartReadingDetail(cart){
+    if(isLidOpen(cart)) return 'Porta aberta, carrinho fora da calibração';
+    return cart?.distanceMm ? `${cart.distanceMm} mm` : '';
+  }
+
   function normalizeCartSearch(value){
     return String(value || '')
       .normalize('NFD')
@@ -10008,8 +10013,9 @@ if(false){(function(){
 
     if(title) title.textContent = cart?.name || 'Novo carrinho';
     if(meta){
-      const distanceText = cart?.distanceMm ? ` - ${cart.distanceMm} mm` : '';
-      meta.textContent = cart ? `${locationLabel(cart)} - ${fillLabel(cart)}${distanceText}` : 'Cadastro manual';
+      const readingDetail = cart ? cartReadingDetail(cart) : '';
+      const readingText = readingDetail ? ` - ${readingDetail}` : '';
+      meta.textContent = cart ? `${locationLabel(cart)} - ${fillLabel(cart)}${readingText}` : 'Cadastro manual';
     }
     if(name) name.value = cart?.name || '';
     if(mac) mac.value = cart ? formatMac(cart.mac) : '';
