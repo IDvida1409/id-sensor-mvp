@@ -5396,8 +5396,8 @@ document.getElementById('infoMacOverlay')?.addEventListener('click', ()=> openIn
       if(gestaoBtn) gestaoBtn.style.display = 'none';
       if(chipAreas) chipAreas.style.display = 'none';
       if(chipClients) chipClients.style.display = 'none';
-      if(subtitleEl) subtitleEl.textContent = 'Laboratório IDvida · Lab carrinho';
-      if(typeof selectedArea !== 'undefined') selectedArea = 'Lab carrinho';
+      if(subtitleEl) subtitleEl.textContent = 'Laboratório IDvida · Carrinhos de resíduo';
+      if(typeof selectedArea !== 'undefined') selectedArea = 'Carrinhos de resíduo';
       if(typeof selectedClient !== 'undefined') selectedClient = 'Laboratório IDvida';
       if(typeof window.openCartTrackingView === 'function') window.openCartTrackingView({ profileMode:true });
     }
@@ -8733,7 +8733,7 @@ document.addEventListener("fullscreenchange", () => {
 })();
 
 /* ===== SCRIPT BLOCK 44 | cart-tracking-test-view ===== */
-(function(){
+if(false){(function(){
   const STORAGE_KEY = 'idsensor.cartTracking.v1';
   const ROOM_STATUSES = {
     in_room: 'Na sala',
@@ -9141,7 +9141,7 @@ document.addEventListener("fullscreenchange", () => {
   document.addEventListener('DOMContentLoaded', ensureCartTrackingUi);
   window.openCartTrackingView = openCartTrackingView;
   window.closeCartTrackingView = closeCartTrackingView;
-})();
+})();}
 
 /* ===== SCRIPT BLOCK 45 | cart-tracking-room-cards-redesign ===== */
 (function(){
@@ -9150,11 +9150,16 @@ document.addEventListener("fullscreenchange", () => {
   const ROOM_SWITCH_CONFIRM_READINGS = 2;
   const OBSOLETE_CART_IDS = new Set(['cart-flat-03']);
   const OBSOLETE_CART_MACS = new Set(['AABBCC000003']);
+  const RESIDUE_ROOM_ID = 'sala-residuos';
+  const HYGIENE_ROOM_ID = 'sala-higienizacao';
+  const SPECIAL_ROOM_IDS = new Set([RESIDUE_ROOM_ID, HYGIENE_ROOM_ID]);
 
   const defaultState = {
     rooms: [
       { id:'sala-bloco-b1', name:'SALA BLOCO B1', gatewayDeviceId:'8ec5' },
-      { id:'sala-bloco-a', name:'SALA BLOCO A', gatewayDeviceId:'efde' }
+      { id:'sala-bloco-a', name:'SALA BLOCO A', gatewayDeviceId:'efde' },
+      { id:'sala-residuos', name:'SALA DE RESÍDUOS', gatewayDeviceId:'' },
+      { id:'sala-higienizacao', name:'SALA DE HIGIENIZAÇÃO', gatewayDeviceId:'' }
     ],
     carts: [
       {
@@ -9185,6 +9190,10 @@ document.addEventListener("fullscreenchange", () => {
   };
 
   let previousSubtitle = '';
+  let previousTitle = '';
+  let activeCartFilter = 'all';
+  let activeRoomFilter = '';
+  let cartSearchTerm = '';
 
   function clone(value){
     return JSON.parse(JSON.stringify(value));
@@ -9474,28 +9483,24 @@ document.addEventListener("fullscreenchange", () => {
   }
 
   function locationLabel(cart){
-    if(cart.locationStatus === 'near') return 'Proximo';
+    if(cart.locationStatus === 'near') return 'Próximo';
     if(cart.locationStatus === 'transit') return 'Em transito';
-    if(cart.locationStatus === 'offline') return 'Offline';
+    if(cart.locationStatus === 'offline') return 'Perdido';
     return 'Na sala';
   }
 
   function fillLabel(cart){
     const fill = Number(cart.fillPercentage || 0);
-    const criticalReads = Number(cart.consecutiveCriticalReadings || 0);
-    if(fill >= 90 && criticalReads >= 3) return 'Cheio';
-    if(fill >= 90) return `Confirmando ${criticalReads}/3`;
-    if(fill >= 75) return 'Proximo do limite';
-    if(fill <= 30) return 'Vazio';
-    return 'Normal';
+    if(fill >= 50) return 'Cheio';
+    if(fill >= 40) return 'Próximo do limite';
+    return 'Livre';
   }
 
   function fillTone(cart){
     const fill = Number(cart.fillPercentage || 0);
-    const criticalReads = Number(cart.consecutiveCriticalReadings || 0);
-    if(fill >= 90 && criticalReads >= 3) return 'full';
-    if(fill >= 75) return 'near-limit';
-    if(fill <= 30) return 'empty';
+    if(fill >= 50) return 'full';
+    if(fill >= 40) return 'near-limit';
+    if(fill < 40) return 'empty';
     return 'normal';
   }
 
@@ -9511,32 +9516,118 @@ document.addEventListener("fullscreenchange", () => {
     ].includes(rawStatus);
   }
 
+  function normalizeCartSearch(value){
+    return String(value || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .trim();
+  }
+
+  function isLostCart(cart){
+    return cart.locationStatus === 'offline' || !cart.roomId;
+  }
+
+  function isFreeCart(cart){
+    return !isLostCart(cart) && Number(cart.fillPercentage || 0) < 40;
+  }
+
+  function cartMatchesFilter(cart, filter = activeCartFilter){
+    if(!filter || filter === 'all') return true;
+    if(filter === 'empty') return isFreeCart(cart);
+    if(filter === 'full') return fillTone(cart) === 'full';
+    if(filter === 'near') return fillTone(cart) === 'near-limit';
+    if(filter === 'lost') return isLostCart(cart);
+    return true;
+  }
+
+  function cartMatchesSearch(cart, room, query){
+    if(!query) return true;
+    return normalizeCartSearch([
+      cartDisplayName(cart),
+      cart?.name,
+      cart?.mac,
+      cleanMac(cart?.mac),
+      room?.name,
+      room?.gatewayDeviceId
+    ].join(' ')).includes(query);
+  }
+
+  function roomMatchesSearch(room, carts, query){
+    if(!query) return true;
+    if(normalizeCartSearch([room?.name, room?.gatewayDeviceId].join(' ')).includes(query)) return true;
+    return carts.some(cart => cart.roomId === room.id && cartMatchesSearch(cart, room, query));
+  }
+
+  function visibleRoomCarts(room, carts){
+    const query = normalizeCartSearch(cartSearchTerm);
+    const roomMatched = query && normalizeCartSearch([room?.name, room?.gatewayDeviceId].join(' ')).includes(query);
+    return carts
+      .filter(cart => cart.roomId === room.id && cart.locationStatus !== 'transit')
+      .filter(cart => cartMatchesFilter(cart))
+      .filter(cart => !query || roomMatched || cartMatchesSearch(cart, room, query));
+  }
+
   function roomStats(room, carts){
     const roomCarts = carts.filter(cart => cart.roomId === room.id && cart.locationStatus !== 'transit');
     return {
       total: roomCarts.length,
-      full: roomCarts.filter(cart => fillTone(cart) === 'full').length,
-      empty: roomCarts.filter(cart => fillTone(cart) === 'empty').length,
+      full: roomCarts.filter(cart => cartMatchesFilter(cart, 'full')).length,
+      empty: roomCarts.filter(cart => cartMatchesFilter(cart, 'empty')).length,
       nearLimit: roomCarts.filter(cart => fillTone(cart) === 'near-limit').length
     };
   }
 
   function globalStats(state){
-    const empty = state.carts.filter(cart => fillTone(cart) === 'empty').length;
-    const nearLimit = state.carts.filter(cart => fillTone(cart) === 'near-limit').length;
-    const full = state.carts.filter(cart => fillTone(cart) === 'full').length;
-    return { total: state.carts.length, empty, nearLimit, full };
+    const empty = state.carts.filter(cart => cartMatchesFilter(cart, 'empty')).length;
+    const nearLimit = state.carts.filter(cart => cartMatchesFilter(cart, 'near')).length;
+    const full = state.carts.filter(cart => cartMatchesFilter(cart, 'full')).length;
+    const lost = state.carts.filter(cart => cartMatchesFilter(cart, 'lost')).length;
+    return { total: state.carts.length, empty, nearLimit, full, lost };
+  }
+
+  function roomCartTotal(state, roomId){
+    return state.carts.filter(cart => cart.roomId === roomId).length;
   }
 
   function renderSummary(state){
     const summary = document.getElementById('cartTrackingSummary');
     if(!summary) return;
     const stats = globalStats(state);
+    const countText = value => String(Math.max(0, Number(value || 0)));
     summary.innerHTML = `
-      <span><b>${stats.total}</b> Carrinhos</span>
-      <span><b>${stats.full}</b> Cheios</span>
-      <span><b>${stats.empty}</b> Vazios</span>
-      <span><b>${stats.nearLimit}</b> Proximo limite</span>
+      <article class="cart-overview-card cart-overview-total cart-overview-status">
+        <div class="cart-status-strip">
+          <button type="button" class="cart-status-total ${activeCartFilter === 'all' ? 'active' : ''}" data-cart-filter="all" aria-pressed="${activeCartFilter === 'all' ? 'true' : 'false'}">
+            <span class="cart-total-label">Total:</span>
+            <span class="cart-total-value"><strong>${countText(stats.total)}</strong><small>carrinhos</small></span>
+          </button>
+          <button type="button" class="cart-status-item empty ${activeCartFilter === 'empty' ? 'active' : ''}" data-cart-filter="empty" aria-pressed="${activeCartFilter === 'empty' ? 'true' : 'false'}">
+            <em><i></i>Vazios</em>
+            <strong>${countText(stats.empty)}</strong>
+          </button>
+          <button type="button" class="cart-status-item full ${activeCartFilter === 'full' ? 'active' : ''}" data-cart-filter="full" aria-pressed="${activeCartFilter === 'full' ? 'true' : 'false'}">
+            <em><i></i>Cheios</em>
+            <strong>${countText(stats.full)}</strong>
+          </button>
+          <button type="button" class="cart-status-item lost ${activeCartFilter === 'lost' ? 'active' : ''}" data-cart-filter="lost" aria-pressed="${activeCartFilter === 'lost' ? 'true' : 'false'}">
+            <em><i></i>Perdidos</em>
+            <strong>${countText(stats.lost)}</strong>
+          </button>
+        </div>
+      </article>
+      <article class="cart-overview-card cart-overview-flow">
+        <button type="button" class="cart-flow-item residue" data-cart-room-modal="residue" aria-label="Abrir sala de resíduos">
+          <img class="cart-flow-img" src="./assets/cr-icon-residue-clean.png" alt="" loading="lazy">
+          <span class="cart-flow-label">Resíduos</span>
+        </button>
+        <button type="button" class="cart-flow-item hygiene" data-cart-room-modal="hygiene" aria-label="Abrir sala de higienização">
+          <img class="cart-flow-img hygiene" src="./assets/cr-icon-hygiene-clean.png" alt="" loading="lazy">
+          <span class="cart-flow-label">Higienização</span>
+        </button>
+      </article>
+      <article class="cart-overview-card cart-overview-empty" aria-hidden="true"></article>
+      <article class="cart-overview-card cart-overview-empty" aria-hidden="true"></article>
     `;
   }
 
@@ -9563,13 +9654,11 @@ document.addEventListener("fullscreenchange", () => {
     const visualFill = fill <= 2 ? 0 : fill;
     const tone = fillTone(cart);
     const lidOpen = isLidOpen(cart);
-    const fillLabel = lidOpen
-      ? `Tampa aberta · ${fill}% cheio`
-      : (visualFill ? `${fill}% cheio` : '0% cheio');
+    const cardLabel = `${fill}%`;
     const showStatus = cart.locationStatus !== 'in_room' && cart.locationStatus !== 'transit';
 
     return `
-      <button type="button" class="cart-item-card ${tone} ${escapeHtml(cart.locationStatus)}" data-cart-id="${escapeHtml(cart.id)}" style="--cart-fill:${fill}%;--cart-liquid:${visualFill}%">
+      <button type="button" class="cart-item-card ${tone} ${escapeHtml(cart.locationStatus)} ${lidOpen ? 'lid-open' : 'lid-closed'}" data-cart-id="${escapeHtml(cart.id)}" style="--cart-fill:${fill}%;--cart-liquid:${visualFill}%">
         ${showStatus ? `<span class="cart-card-status"><i>${locationLabel(cart)}</i></span>` : ''}
         <span class="cart-item-body">
           <strong>${escapeHtml(cartDisplayName(cart))}</strong>
@@ -9588,16 +9677,19 @@ document.addEventListener("fullscreenchange", () => {
           </span>
         </span>
         <span class="cart-item-foot">
-          <small>${fillLabel}</small>
+          <small>${cardLabel}</small>
         </span>
       </button>
     `;
   }
 
   function renderRoomCarts(room, carts){
-    const roomCarts = carts.filter(cart => cart.roomId === room.id && cart.locationStatus !== 'transit');
+    const roomCarts = visibleRoomCarts(room, carts);
     if(!roomCarts.length){
-      return `<div class="cart-room-empty">Nenhum carrinho nesta sala.</div>`;
+      const emptyMessage = activeCartFilter === 'all' && !normalizeCartSearch(cartSearchTerm)
+        ? 'Nenhum CR nesta sala.'
+        : 'Nenhum CR neste filtro.';
+      return `<div class="cart-room-empty">${emptyMessage}</div>`;
     }
     return roomCarts.map(renderCartCard).join('');
   }
@@ -9635,8 +9727,20 @@ document.addEventListener("fullscreenchange", () => {
     const grid = document.getElementById('cartRoomGrid');
     if(!grid) return;
 
-    grid.innerHTML = state.rooms.map(room => {
-      const stats = roomStats(room, state.carts);
+    const query = normalizeCartSearch(cartSearchTerm);
+    const visibleRooms = state.rooms.filter(room => {
+      if(activeRoomFilter && room.id !== activeRoomFilter) return false;
+      if(SPECIAL_ROOM_IDS.has(room.id) && room.id !== activeRoomFilter) return false;
+      if(!query && activeCartFilter === 'all') return true;
+      return roomMatchesSearch(room, state.carts, query) && visibleRoomCarts(room, state.carts).length > 0;
+    });
+
+    if(!visibleRooms.length){
+      grid.innerHTML = '<div class="cart-room-empty cart-room-empty-wide">Nenhum CR encontrado.</div>';
+      return;
+    }
+
+    grid.innerHTML = visibleRooms.map(room => {
       return `
         <article class="cart-room-card">
           <header class="cart-room-header">
@@ -9646,14 +9750,7 @@ document.addEventListener("fullscreenchange", () => {
                 Gateway: ${escapeHtml(room.gatewayDeviceId || 'nao vinculado')}
               </button>
             </div>
-            <strong>${stats.total}</strong>
           </header>
-          <div class="cart-room-kpis">
-            <span><b>${stats.total}</b>Total</span>
-            <span><b>${stats.empty}</b>Vazios</span>
-            <span><b>${stats.nearLimit}</b>Prox. limite</span>
-            <span><b>${stats.full}</b>Cheios</span>
-          </div>
           <div class="cart-items-grid">
             ${renderRoomCarts(room, state.carts)}
           </div>
@@ -9664,6 +9761,20 @@ document.addEventListener("fullscreenchange", () => {
         </article>
       `;
     }).join('');
+  }
+
+  function syncCartSearchUi(){
+    const view = document.getElementById('cartTrackingView');
+    const input = document.getElementById('cartSearchInput');
+    const toggle = document.getElementById('cartSearchToggle');
+    if(!view || !input || !toggle) return;
+    const hasValue = Boolean(input.value.trim());
+    const isFocused = document.activeElement === input;
+    const isOpen = hasValue || isFocused || view.classList.contains('search-open');
+    const width = Math.min(520, Math.max(220, 150 + input.value.length * 8));
+    view.style.setProperty('--cart-search-width', `${width}px`);
+    view.classList.toggle('search-open', isOpen);
+    toggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
   }
 
   function ensureCartTrackingUi(){
@@ -9679,12 +9790,21 @@ document.addEventListener("fullscreenchange", () => {
     view.hidden = true;
     view.innerHTML = `
       <div class="cart-tracking-head">
-        <div>
-          <p class="cart-tracking-kicker">Carrinhos por sala</p>
-          <h1>Monitor de carrinhos</h1>
-          <span>Clique no carrinho para editar nome e MAC.</span>
+        <label class="cart-search-box" aria-label="Buscar CR">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="11" cy="11" r="6"></circle>
+            <path d="M20 20l-4.2-4.2"></path>
+          </svg>
+          <input id="cartSearchInput" type="search" placeholder="Buscar sala, CR ou MAC">
+        </label>
+        <div class="cart-tools-strip">
+          <button type="button" class="cart-search-toggle" id="cartSearchToggle" aria-label="Pesquisar CR" aria-expanded="false" aria-controls="cartSearchInput">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="11" cy="11" r="6"></circle>
+              <path d="M20 20l-4.2-4.2"></path>
+            </svg>
+          </button>
         </div>
-        <button type="button" class="cart-secondary-btn" id="cartBackBtn">Voltar ao painel</button>
       </div>
       <div class="cart-summary-strip" id="cartTrackingSummary"></div>
       <div class="cart-room-grid" id="cartRoomGrid"></div>
@@ -9710,6 +9830,21 @@ document.addEventListener("fullscreenchange", () => {
           <button type="button" class="cart-primary-btn" id="cartDetailSaveBtn">Salvar</button>
         </div>
       </div>
+      <div class="cart-room-modal-overlay" id="cartRoomModalOverlay" hidden>
+        <div class="cart-room-modal">
+          <button type="button" class="cart-detail-close" id="cartRoomModalCloseBtn">x</button>
+          <header class="cart-room-modal-header">
+            <div>
+              <h2 id="cartRoomModalTitle">Sala de resíduos</h2>
+              <button type="button" class="cart-room-gateway" id="cartRoomModalGatewayBtn">Gateway: não vinculado</button>
+            </div>
+            <img class="cart-room-modal-icon" id="cartRoomModalIcon" src="./assets/cr-icon-residue-clean.png" alt="">
+          </header>
+          <div class="cart-room-modal-body">
+            <div class="cart-room-empty">Nenhum carrinho nesta sala.</div>
+          </div>
+        </div>
+      </div>
     `;
 
     const layoutNode = document.getElementById('layout');
@@ -9717,21 +9852,116 @@ document.addEventListener("fullscreenchange", () => {
     const parent = layoutNode?.parentNode || toolbarNode?.parentNode || document.body;
     parent.insertBefore(view, layoutNode || toolbarNode?.nextSibling || parent.firstChild);
 
-    document.getElementById('cartBackBtn')?.addEventListener('click', closeCartTrackingView);
+    document.getElementById('cartTrackingSummary')?.addEventListener('click', handleCartFilterClick);
+    document.getElementById('cartSearchToggle')?.addEventListener('click', () => {
+      const view = document.getElementById('cartTrackingView');
+      const input = document.getElementById('cartSearchInput');
+      view?.classList.toggle('search-open');
+      syncCartSearchUi();
+      input?.focus();
+    });
+    document.getElementById('cartSearchInput')?.addEventListener('input', event => {
+      cartSearchTerm = event.target.value || '';
+      activeRoomFilter = '';
+      syncCartSearchUi();
+      renderRooms();
+    });
+    document.getElementById('cartSearchInput')?.addEventListener('focus', syncCartSearchUi);
+    document.getElementById('cartSearchInput')?.addEventListener('blur', () => {
+      window.setTimeout(syncCartSearchUi, 120);
+    });
     document.getElementById('cartRoomGrid')?.addEventListener('click', handleRoomClick);
     document.getElementById('cartDetailCloseBtn')?.addEventListener('click', closeCartDetail);
     document.getElementById('cartDetailSaveBtn')?.addEventListener('click', saveCartDetail);
     document.getElementById('cartDetailOverlay')?.addEventListener('click', event => {
       if(event.target.id === 'cartDetailOverlay') closeCartDetail();
     });
+    document.getElementById('cartRoomModalCloseBtn')?.addEventListener('click', closeCartRoomModal);
+    document.getElementById('cartRoomModalOverlay')?.addEventListener('click', event => {
+      if(event.target.id === 'cartRoomModalOverlay') closeCartRoomModal();
+    });
+    document.getElementById('cartRoomModalGatewayBtn')?.addEventListener('click', saveCartRoomModalGateway);
 
     renderRooms();
   }
 
+  function setCartFilter(filter){
+    activeCartFilter = filter || 'all';
+    activeRoomFilter = '';
+    renderRooms();
+  }
+
+  function handleCartFilterClick(event){
+    const roomModalButton = event.target.closest('[data-cart-room-modal]');
+    if(roomModalButton){
+      openCartRoomModal(roomModalButton.getAttribute('data-cart-room-modal'));
+      return;
+    }
+
+    const roomButton = event.target.closest('[data-cart-room-filter]');
+    if(roomButton){
+      activeRoomFilter = roomButton.getAttribute('data-cart-room-filter') || '';
+      activeCartFilter = 'all';
+      cartSearchTerm = '';
+      const input = document.getElementById('cartSearchInput');
+      if(input) input.value = '';
+      syncCartSearchUi();
+      renderRooms();
+      return;
+    }
+    const filterButton = event.target.closest('[data-cart-filter]');
+    if(!filterButton) return;
+    setCartFilter(filterButton.getAttribute('data-cart-filter'));
+  }
+
+  function openCartRoomModal(kind){
+    const overlay = document.getElementById('cartRoomModalOverlay');
+    const title = document.getElementById('cartRoomModalTitle');
+    const icon = document.getElementById('cartRoomModalIcon');
+    const gateway = document.getElementById('cartRoomModalGatewayBtn');
+    if(!overlay) return;
+
+    const isHygiene = kind === 'hygiene';
+    const roomId = isHygiene ? HYGIENE_ROOM_ID : RESIDUE_ROOM_ID;
+    const state = readState();
+    const room = state.rooms.find(item => item.id === roomId);
+    overlay.dataset.roomId = roomId;
+    if(title) title.textContent = isHygiene ? 'Sala de higienização' : 'Sala de resíduos';
+    if(icon) icon.src = isHygiene ? './assets/cr-icon-hygiene-clean.png' : './assets/cr-icon-residue-clean.png';
+    if(gateway) gateway.textContent = `Gateway: ${room?.gatewayDeviceId || 'não vinculado'}`;
+    overlay.hidden = false;
+  }
+
+  function closeCartRoomModal(){
+    const overlay = document.getElementById('cartRoomModalOverlay');
+    if(overlay) overlay.hidden = true;
+  }
+
+  function saveCartRoomModalGateway(){
+    const overlay = document.getElementById('cartRoomModalOverlay');
+    const roomId = overlay?.dataset.roomId;
+    if(!roomId) return;
+    const state = readState();
+    const room = state.rooms.find(item => item.id === roomId);
+    if(!room) return;
+    const nextGateway = prompt('Device ID do gateway BLE/LoRa desta sala:', room.gatewayDeviceId || '');
+    if(nextGateway === null) return;
+    room.gatewayDeviceId = nextGateway.trim();
+    saveState(state);
+    renderRooms();
+    openCartRoomModal(roomId === HYGIENE_ROOM_ID ? 'hygiene' : 'residue');
+  }
+
   function handleRoomClick(event){
+    const filterButton = event.target.closest('[data-cart-filter]');
     const cartButton = event.target.closest('[data-cart-id]');
     const addButton = event.target.closest('[data-cart-add]');
     const gatewayButton = event.target.closest('[data-gateway-room]');
+
+    if(filterButton){
+      setCartFilter(filterButton.getAttribute('data-cart-filter'));
+      return;
+    }
 
     if(cartButton){
       openCartDetail(cartButton.getAttribute('data-cart-id'));
@@ -9839,9 +10069,14 @@ document.addEventListener("fullscreenchange", () => {
     ensureCartTrackingUi();
     const view = document.getElementById('cartTrackingView');
     if(!view) return;
+    const title = document.querySelector('.brand .title');
     const subtitle = document.getElementById('pageSubtitle');
-    previousSubtitle = subtitle?.textContent || previousSubtitle;
-    if(subtitle) subtitle.textContent = 'Carrinhos por sala';
+    if(!document.body.classList.contains('cart-tracking-open')){
+      previousTitle = title?.textContent || previousTitle;
+      previousSubtitle = subtitle?.textContent || previousSubtitle;
+    }
+    if(title) title.textContent = 'Monitoramento de C.R.';
+    if(subtitle) subtitle.textContent = 'Carrinhos de resíduo';
     view.hidden = false;
     document.body.classList.add('cart-tracking-open');
     renderRooms();
@@ -9850,7 +10085,9 @@ document.addEventListener("fullscreenchange", () => {
 
   function closeCartTrackingView(){
     const view = document.getElementById('cartTrackingView');
+    const title = document.querySelector('.brand .title');
     const subtitle = document.getElementById('pageSubtitle');
+    if(title && previousTitle) title.textContent = previousTitle;
     if(subtitle && previousSubtitle) subtitle.textContent = previousSubtitle;
     if(view) view.hidden = true;
     document.body.classList.remove('cart-tracking-open');
