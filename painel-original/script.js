@@ -9595,12 +9595,13 @@ if(false){(function(){
     if(!summary) return;
     const stats = globalStats(state);
     const countText = value => String(Math.max(0, Number(value || 0)));
+    const totalText = value => countText(value).padStart(2, '0');
     summary.innerHTML = `
       <article class="cart-overview-card cart-overview-total cart-overview-status">
         <div class="cart-status-strip">
           <button type="button" class="cart-status-total ${activeCartFilter === 'all' ? 'active' : ''}" data-cart-filter="all" aria-pressed="${activeCartFilter === 'all' ? 'true' : 'false'}">
             <span class="cart-total-label">Total:</span>
-            <span class="cart-total-value"><strong>${countText(stats.total)}</strong><small>carrinhos</small></span>
+            <span class="cart-total-value"><strong>${totalText(stats.total)}</strong><small>carrinhos</small></span>
           </button>
           <button type="button" class="cart-status-item empty ${activeCartFilter === 'empty' ? 'active' : ''}" data-cart-filter="empty" aria-pressed="${activeCartFilter === 'empty' ? 'true' : 'false'}">
             <em><i></i>Vazios</em>
