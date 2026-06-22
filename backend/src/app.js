@@ -426,6 +426,24 @@ function latestCollectorReadings(db, options = {}) {
   return readings;
 }
 
+function collectorReadingsHistory(db, options = {}) {
+  const limit = Math.max(1, Math.min(500, Number(options.limit || 100)));
+  const macFilters = Array.isArray(options.macFilters) ? options.macFilters.filter(Boolean) : [];
+  const rows = db.prepare(`
+    SELECT *
+    FROM collector_readings
+    ORDER BY created_at DESC
+    LIMIT ?
+  `).all(limit);
+
+  return rows
+    .filter((row) => {
+      const sensorId = compactBleSensorId(row.ble_sensor_id);
+      return sensorId && (!macFilters.length || macFilters.includes(sensorId));
+    })
+    .map(serializeCollectorReading);
+}
+
 function areaIdsAllowAll(value) {
   return normalizeAreaIds(value).some((idValue) => idValue === 'all' || idValue === '*');
 }
@@ -1335,9 +1353,11 @@ addRoute('GET', '/api/cart-tracking/readings', async ({ query, res }) => {
     .split(',')
     .map(compactBleSensorId)
     .filter(Boolean);
+  const history = query.history === 'true' || query.history === '1';
 
   ok(res, {
-    readings: latestCollectorReadings(getDb(), {
+    mode: history ? 'history' : 'latest',
+    readings: (history ? collectorReadingsHistory : latestCollectorReadings)(getDb(), {
       limit: query.limit || 200,
       macFilters
     })
