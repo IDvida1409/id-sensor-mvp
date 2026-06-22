@@ -9167,6 +9167,10 @@ if(false){(function(){
   const CALIBRATION_STABILITY_MIN_MM = 20;
   const CALIBRATION_STABILITY_PERCENT = 5;
   const INVALID_SENSOR_DISTANCE_MM = 60000;
+  const CART_EMPTY_DEADBAND_MM = 40;
+  const CART_EMPTY_DEADBAND_PERCENT = 8;
+  const CART_CRITICAL_PERCENT = 90;
+  const CART_READING_POLL_MS = 5000;
 
   const defaultState = {
     rooms: [
@@ -9349,7 +9353,74 @@ if(false){(function(){
     const full = finiteNumberOrNull(calibration.fullDistanceMm);
     const current = finiteNumberOrNull(distanceMm);
     if(empty === null || full === null || current === null || empty <= full || current < 0) return null;
-    return clampNumber(((empty - current) / (empty - full)) * 100, 0, 100);
+    if(current >= empty - CART_EMPTY_DEADBAND_MM) return 0;
+    return normalizeCartFillPercentage(((empty - current) / (empty - full)) * 100);
+  }
+
+  function normalizeCartFillPercentage(fillPercentage){
+    const fill = finiteNumberOrNull(fillPercentage);
+    if(fill === null || fill < 0) return null;
+    const normalized = clampNumber(fill, 0, 100);
+    return normalized <= CART_EMPTY_DEADBAND_PERCENT ? 0 : normalized;
+  }
+
+  function clearPendingFullReading(cart){
+    let changed = false;
+    if(cart.pendingFullReadingKey){
+      delete cart.pendingFullReadingKey;
+      changed = true;
+    }
+    if(cart.pendingFullReadings){
+      delete cart.pendingFullReadings;
+      changed = true;
+    }
+    return changed;
+  }
+
+  function stabilizeCartFillPercentage(cart, fillPercentage, criticalReadings, reading){
+    const fill = normalizeCartFillPercentage(fillPercentage);
+    if(fill === null) return { fill:null, changed:clearPendingFullReading(cart) };
+
+    const calibration = cartCalibration(cart);
+    const requiredReadings = Math.max(1, Number(calibration.confirmationReadings || DEFAULT_CART_CALIBRATION.confirmationReadings));
+    const currentCriticalReadings = Math.max(0, Number(criticalReadings || 0));
+    const fullLimit = clampNumber(cartRedPercent(cart), 1, 100);
+
+    if(fill >= fullLimit){
+      const previousFill = normalizeCartFillPercentage(cart.fillPercentage);
+      if(previousFill !== null && previousFill >= fullLimit){
+        return { fill, changed:clearPendingFullReading(cart) };
+      }
+
+      const readingKey = readingIdentity(reading);
+      let changed = false;
+
+      if(cart.pendingFullReadingKey !== readingKey){
+        cart.pendingFullReadingKey = readingKey;
+        cart.pendingFullReadings = Math.max(0, Number(cart.pendingFullReadings || 0)) + 1;
+        changed = true;
+      }
+
+      if(Number(cart.pendingFullReadings || 0) < requiredReadings){
+        const guardedLimit = Math.max(0, Math.min(CART_CRITICAL_PERCENT - 1, fullLimit - 1));
+        return {
+          fill:previousFill === null ? 0 : Math.min(previousFill, guardedLimit),
+          changed
+        };
+      }
+
+      return { fill, changed:clearPendingFullReading(cart) || changed };
+    }
+
+    if(fill >= CART_CRITICAL_PERCENT && currentCriticalReadings < requiredReadings){
+      const previousFill = normalizeCartFillPercentage(cart.fillPercentage);
+      return {
+        fill:previousFill === null ? 0 : Math.min(previousFill, CART_CRITICAL_PERCENT - 1),
+        changed:clearPendingFullReading(cart)
+      };
+    }
+
+    return { fill, changed:clearPendingFullReading(cart) };
   }
 
   function cartRedPercent(cart){
@@ -9483,6 +9554,9 @@ if(false){(function(){
       const criticalReads = finiteNumberOrNull(reading.consecutiveCriticalReadings);
       const gatewayRoomId = roomByGateway.get(String(reading.lorawanDeviceId || '').trim().toLowerCase());
       const rawStatus = String(reading.status || '').toLowerCase();
+      const effectiveCriticalReads = criticalReads !== null
+        ? criticalReads
+        : (rawStatus === 'critical_confirmed' ? cartCalibration(cart).confirmationReadings : 0);
       const readingLidOpen = [
         'lid_open',
         'open_lid',
@@ -9494,7 +9568,10 @@ if(false){(function(){
       const calibratedFill = !readingLidOpen && distance !== null
         ? fillPercentageForDistance(cartCalibration(cart), distance)
         : null;
-      const nextFill = calibratedFill !== null ? calibratedFill : fill;
+      const rawNextFill = calibratedFill !== null ? calibratedFill : fill;
+      const stabilizedFill = stabilizeCartFillPercentage(cart, rawNextFill, effectiveCriticalReads, reading);
+      const nextFill = stabilizedFill.fill;
+      if(stabilizedFill.changed) changed = true;
 
       if(nextFill !== null && Math.round(nextFill) !== Math.round(Number(cart.fillPercentage || 0))){
         cart.fillPercentage = Math.round(nextFill);
@@ -9558,7 +9635,7 @@ if(false){(function(){
   function startReadingsPolling(){
     refreshCartReadings();
     if(readingsTimer) return;
-    readingsTimer = setInterval(refreshCartReadings, 15000);
+    readingsTimer = setInterval(refreshCartReadings, CART_READING_POLL_MS);
   }
 
   function escapeHtml(value){
