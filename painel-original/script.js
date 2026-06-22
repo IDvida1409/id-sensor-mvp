@@ -10275,7 +10275,7 @@ if(false){(function(){
     if(!view || !input || !toggle) return;
     const hasValue = Boolean(input.value.trim());
     const isFocused = document.activeElement === input;
-    const isOpen = hasValue || isFocused || view.classList.contains('search-open');
+    const isOpen = hasValue || isFocused;
     const width = Math.min(520, Math.max(220, 150 + input.value.length * 8));
     view.style.setProperty('--cart-search-width', `${width}px`);
     view.classList.toggle('search-open', isOpen);
@@ -10410,9 +10410,15 @@ if(false){(function(){
     document.getElementById('cartSearchToggle')?.addEventListener('click', () => {
       const view = document.getElementById('cartTrackingView');
       const input = document.getElementById('cartSearchInput');
-      view?.classList.toggle('search-open');
-      syncCartSearchUi();
+      const isOpen = view?.classList.contains('search-open');
+      const hasValue = Boolean(input?.value.trim());
+      if(isOpen && !hasValue){
+        input?.blur();
+        syncCartSearchUi();
+        return;
+      }
       input?.focus();
+      syncCartSearchUi();
     });
     document.getElementById('cartSearchInput')?.addEventListener('input', event => {
       cartSearchTerm = event.target.value || '';
@@ -10423,6 +10429,10 @@ if(false){(function(){
     document.getElementById('cartSearchInput')?.addEventListener('focus', syncCartSearchUi);
     document.getElementById('cartSearchInput')?.addEventListener('blur', () => {
       window.setTimeout(syncCartSearchUi, 120);
+    });
+    document.getElementById('cartTrackingView')?.addEventListener('click', event => {
+      if(event.target.closest('.cart-search-box') || event.target.closest('#cartSearchToggle')) return;
+      window.setTimeout(syncCartSearchUi, 0);
     });
     document.getElementById('cartRoomGrid')?.addEventListener('click', handleRoomClick);
     document.getElementById('cartDetailCloseBtn')?.addEventListener('click', closeCartDetail);
