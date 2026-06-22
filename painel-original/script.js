@@ -9569,7 +9569,7 @@ if(false){(function(){
       const effectiveCriticalReads = criticalReads !== null
         ? criticalReads
         : (rawStatus === 'critical_confirmed' ? cartCalibration(cart).confirmationReadings : 0);
-      const readingLidOpen = [
+      const readingLidOpen = distance === null && [
         'lid_open',
         'open_lid',
         'tampa_aberta',
@@ -9694,6 +9694,9 @@ if(false){(function(){
   }
 
   function isLidOpen(cart){
+    const distance = finiteNumberOrNull(cart?.distanceMm);
+    if(distance !== null) return false;
+
     const rawStatus = String(cart.collectorStatus || cart.readingStatus || cart.sensorStatus || '').toLowerCase();
     return cart.lidOpen === true || [
       'lid_open',

@@ -55,15 +55,12 @@ function nowIso() {
 
 const CART_EMPTY_DISTANCE_MM = Number(process.env.CART_EMPTY_DISTANCE_MM || 720);
 const CART_FULL_DISTANCE_MM = Number(process.env.CART_FULL_DISTANCE_MM || 140);
-const CART_LID_OPEN_MARGIN_MM = Number(process.env.CART_LID_OPEN_MARGIN_MM || 80);
 const CART_EMPTY_DEADBAND_MM = Number(process.env.CART_EMPTY_DEADBAND_MM || 40);
 const CART_EMPTY_DEADBAND_PERCENT = Number(process.env.CART_EMPTY_DEADBAND_PERCENT || 8);
 const CART_STABLE_EMPTY_PERCENT = Number(process.env.CART_STABLE_EMPTY_PERCENT || 10);
 const CART_SUSPICIOUS_JUMP_PERCENT = Number(process.env.CART_SUSPICIOUS_JUMP_PERCENT || 75);
 const CART_CRITICAL_PERCENT = Number(process.env.CART_CRITICAL_PERCENT || 90);
 const CART_CRITICAL_CONFIRM_READINGS = Number(process.env.CART_CRITICAL_CONFIRM_READINGS || 3);
-const COLLECTOR_LID_OPEN_STATUS = 'lid_open';
-const COLLECTOR_STATUS_OVERRIDES = new Set([COLLECTOR_LID_OPEN_STATUS]);
 
 const ACTIVATION_CODE_TTL_MS = 24 * 60 * 60 * 1000;
 
@@ -252,10 +249,10 @@ function finiteNumberOrNull(value) {
   return Number.isFinite(number) ? number : null;
 }
 
-function isCollectorLidOpenDistance(distanceMm) {
+function isCollectorEmptyDistance(distanceMm) {
   const distance = finiteNumberOrNull(distanceMm);
   if (distance === null) return false;
-  return distance > CART_EMPTY_DISTANCE_MM + CART_LID_OPEN_MARGIN_MM;
+  return distance >= CART_EMPTY_DISTANCE_MM - CART_EMPTY_DEADBAND_MM;
 }
 
 function normalizeCollectorFillPercentage(fillPercentage) {
@@ -278,8 +275,7 @@ function calculateCollectorFillPercentage(distanceMm) {
 
   if (fillPercentage === null) return null;
 
-  const emptyDeadbandStart = CART_EMPTY_DISTANCE_MM - CART_EMPTY_DEADBAND_MM;
-  if (distance >= emptyDeadbandStart) return 0;
+  if (isCollectorEmptyDistance(distance)) return 0;
 
   return normalizeCollectorFillPercentage(fillPercentage);
 }
@@ -306,13 +302,7 @@ function stabilizeCollectorFillPercentage(fillPercentage, previousFillPercentage
 }
 
 function collectorStatusForRow(row, fillPercentage, consecutiveCriticalReadings) {
-  const computedStatus = getCollectorStatus(fillPercentage, row.created_at, consecutiveCriticalReadings);
-  if (computedStatus === 'offline') return computedStatus;
-
-  const storedStatus = String(row.status || '').trim().toLowerCase();
-  if (COLLECTOR_STATUS_OVERRIDES.has(storedStatus)) return storedStatus;
-
-  return computedStatus;
+  return getCollectorStatus(fillPercentage, row.created_at, consecutiveCriticalReadings);
 }
 
 function compactBleSensorId(value) {
@@ -350,7 +340,9 @@ function previousCollectorReading(db, bleSensorId) {
 
 function serializeCollectorReading(row) {
   const consecutiveCriticalReadings = Number(row.consecutive_critical_readings || 0);
-  const storedFillPercentage = normalizeCollectorFillPercentage(row.fill_percentage);
+  const storedFillPercentage = isCollectorEmptyDistance(row.distance_mm)
+    ? 0
+    : normalizeCollectorFillPercentage(row.fill_percentage);
   const fillPercentage = storedFillPercentage !== null
     && storedFillPercentage >= CART_SUSPICIOUS_JUMP_PERCENT
     && consecutiveCriticalReadings < CART_CRITICAL_CONFIRM_READINGS
@@ -388,21 +380,14 @@ function saveCollectorReading(db, normalizedReading) {
   const receivedAt = collectorPayloadReceivedAt(normalizedReading) || createdAt;
   const distanceMm = finiteNumberOrNull(normalizedReading.distanceMm);
   const previous = previousCollectorReading(db, bleSensorId);
-  const lidOpen = isCollectorLidOpenDistance(distanceMm);
   const previousFillPercentage = normalizeCollectorFillPercentage(previous?.fill_percentage);
-  const rawFillPercentage = lidOpen
-    ? previousFillPercentage
-    : calculateCollectorFillPercentage(distanceMm);
+  const rawFillPercentage = calculateCollectorFillPercentage(distanceMm);
   const previousCriticalReadings = Number(previous?.consecutive_critical_readings || 0);
-  const consecutiveCriticalReadings = lidOpen
-    ? previousCriticalReadings
-    : (rawFillPercentage !== null && rawFillPercentage >= CART_SUSPICIOUS_JUMP_PERCENT ? previousCriticalReadings + 1 : 0);
-  const fillPercentage = lidOpen
-    ? previousFillPercentage
-    : stabilizeCollectorFillPercentage(rawFillPercentage, previousFillPercentage, consecutiveCriticalReadings);
-  const status = lidOpen
-    ? COLLECTOR_LID_OPEN_STATUS
-    : getCollectorStatus(fillPercentage, createdAt, consecutiveCriticalReadings);
+  const consecutiveCriticalReadings = rawFillPercentage !== null && rawFillPercentage >= CART_SUSPICIOUS_JUMP_PERCENT
+    ? previousCriticalReadings + 1
+    : 0;
+  const fillPercentage = stabilizeCollectorFillPercentage(rawFillPercentage, previousFillPercentage, consecutiveCriticalReadings);
+  const status = getCollectorStatus(fillPercentage, createdAt, consecutiveCriticalReadings);
   const row = {
     id: id('collector_reading'),
     bleSensorId,
