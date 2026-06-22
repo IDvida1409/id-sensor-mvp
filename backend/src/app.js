@@ -61,6 +61,7 @@ const CART_STABLE_EMPTY_PERCENT = Number(process.env.CART_STABLE_EMPTY_PERCENT |
 const CART_SUSPICIOUS_JUMP_PERCENT = Number(process.env.CART_SUSPICIOUS_JUMP_PERCENT || 75);
 const CART_CRITICAL_PERCENT = Number(process.env.CART_CRITICAL_PERCENT || 90);
 const CART_CRITICAL_CONFIRM_READINGS = Number(process.env.CART_CRITICAL_CONFIRM_READINGS || 3);
+const CART_READING_CONFLICT_WINDOW_MS = Number(process.env.CART_READING_CONFLICT_WINDOW_MS || 30000);
 
 const ACTIVATION_CODE_TTL_MS = 24 * 60 * 60 * 1000;
 
@@ -327,6 +328,19 @@ function collectorPayloadReceivedAt(reading) {
   return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : null;
 }
 
+function collectorRowTimestamp(row) {
+  const timestamp = new Date(row?.created_at || row?.received_at || '').getTime();
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function isSameCollectorPayload(previous, normalizedReading, receivedAt) {
+  if (!previous) return false;
+
+  return String(previous.received_at || '') === String(receivedAt || '')
+    && String(previous.raw_payload || '') === String(normalizedReading?.rawPayload || '')
+    && String(previous.lorawan_device_id || '') === String(normalizedReading?.lorawanDeviceId || '');
+}
+
 function previousCollectorReading(db, bleSensorId) {
   if (!bleSensorId) return null;
   return db.prepare(`
@@ -372,6 +386,25 @@ function serializeCollectorReading(row) {
   };
 }
 
+function selectLatestCollectorRow(rows) {
+  const candidates = Array.isArray(rows) ? rows.filter(Boolean) : [];
+  if (!candidates.length) return null;
+
+  const latest = candidates[0];
+  const latestTimestamp = collectorRowTimestamp(latest);
+  const recentRows = candidates.filter((row) => {
+    const timestamp = collectorRowTimestamp(row);
+    return latestTimestamp && timestamp && latestTimestamp - timestamp <= CART_READING_CONFLICT_WINDOW_MS;
+  });
+  const emptyDistanceRow = recentRows.find((row) => isCollectorEmptyDistance(row.distance_mm));
+  const suspiciousDistanceRow = recentRows.find((row) => {
+    const fillPercentage = calculateCollectorFillPercentage(row.distance_mm);
+    return fillPercentage !== null && fillPercentage >= CART_SUSPICIOUS_JUMP_PERCENT;
+  });
+
+  return emptyDistanceRow && suspiciousDistanceRow ? emptyDistanceRow : latest;
+}
+
 function saveCollectorReading(db, normalizedReading) {
   const bleSensorId = compactBleSensorId(normalizedReading?.bleSensorId);
   if (!bleSensorId) return null;
@@ -383,8 +416,9 @@ function saveCollectorReading(db, normalizedReading) {
   const previousFillPercentage = normalizeCollectorFillPercentage(previous?.fill_percentage);
   const rawFillPercentage = calculateCollectorFillPercentage(distanceMm);
   const previousCriticalReadings = Number(previous?.consecutive_critical_readings || 0);
+  const samePayloadAsPrevious = isSameCollectorPayload(previous, normalizedReading, receivedAt);
   const consecutiveCriticalReadings = rawFillPercentage !== null && rawFillPercentage >= CART_SUSPICIOUS_JUMP_PERCENT
-    ? previousCriticalReadings + 1
+    ? (samePayloadAsPrevious ? previousCriticalReadings : previousCriticalReadings + 1)
     : 0;
   const fillPercentage = stabilizeCollectorFillPercentage(rawFillPercentage, previousFillPercentage, consecutiveCriticalReadings);
   const status = getCollectorStatus(fillPercentage, createdAt, consecutiveCriticalReadings);
@@ -458,18 +492,20 @@ function latestCollectorReadings(db, options = {}) {
     ORDER BY created_at DESC
     LIMIT ?
   `).all(limit);
-  const seen = new Set();
-  const readings = [];
+  const bySensor = new Map();
 
   for (const row of rows) {
     const sensorId = compactBleSensorId(row.ble_sensor_id);
-    if (!sensorId || seen.has(sensorId)) continue;
+    if (!sensorId) continue;
     if (macFilters.length && !macFilters.includes(sensorId)) continue;
-    seen.add(sensorId);
-    readings.push(serializeCollectorReading(row));
+    if (!bySensor.has(sensorId)) bySensor.set(sensorId, []);
+    bySensor.get(sensorId).push(row);
   }
 
-  return readings;
+  return Array.from(bySensor.values())
+    .map(selectLatestCollectorRow)
+    .filter(Boolean)
+    .map(serializeCollectorReading);
 }
 
 function collectorReadingsHistory(db, options = {}) {
