@@ -9169,6 +9169,8 @@ if(false){(function(){
   const INVALID_SENSOR_DISTANCE_MM = 60000;
   const CART_EMPTY_DEADBAND_MM = 40;
   const CART_EMPTY_DEADBAND_PERCENT = 8;
+  const CART_STABLE_EMPTY_PERCENT = 10;
+  const CART_SUSPICIOUS_JUMP_PERCENT = 75;
   const CART_CRITICAL_PERCENT = 90;
   const CART_READING_POLL_MS = 5000;
 
@@ -9385,9 +9387,19 @@ if(false){(function(){
     const requiredReadings = Math.max(1, Number(calibration.confirmationReadings || DEFAULT_CART_CALIBRATION.confirmationReadings));
     const currentCriticalReadings = Math.max(0, Number(criticalReadings || 0));
     const fullLimit = clampNumber(cartRedPercent(cart), 1, 100);
+    const previousFill = normalizeCartFillPercentage(cart.fillPercentage);
+    const backendFill = normalizeCartFillPercentage(reading?.fillPercentage);
+
+    if(
+      backendFill !== null
+      && backendFill <= CART_STABLE_EMPTY_PERCENT
+      && fill >= CART_SUSPICIOUS_JUMP_PERCENT
+      && currentCriticalReadings < requiredReadings
+    ){
+      return { fill:backendFill, changed:clearPendingFullReading(cart) };
+    }
 
     if(fill >= fullLimit){
-      const previousFill = normalizeCartFillPercentage(cart.fillPercentage);
       if(previousFill !== null && previousFill >= fullLimit){
         return { fill, changed:clearPendingFullReading(cart) };
       }

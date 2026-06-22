@@ -58,6 +58,8 @@ const CART_FULL_DISTANCE_MM = Number(process.env.CART_FULL_DISTANCE_MM || 140);
 const CART_LID_OPEN_MARGIN_MM = Number(process.env.CART_LID_OPEN_MARGIN_MM || 80);
 const CART_EMPTY_DEADBAND_MM = Number(process.env.CART_EMPTY_DEADBAND_MM || 40);
 const CART_EMPTY_DEADBAND_PERCENT = Number(process.env.CART_EMPTY_DEADBAND_PERCENT || 8);
+const CART_STABLE_EMPTY_PERCENT = Number(process.env.CART_STABLE_EMPTY_PERCENT || 10);
+const CART_SUSPICIOUS_JUMP_PERCENT = Number(process.env.CART_SUSPICIOUS_JUMP_PERCENT || 75);
 const CART_CRITICAL_PERCENT = Number(process.env.CART_CRITICAL_PERCENT || 90);
 const CART_CRITICAL_CONFIRM_READINGS = Number(process.env.CART_CRITICAL_CONFIRM_READINGS || 3);
 const COLLECTOR_LID_OPEN_STATUS = 'lid_open';
@@ -286,9 +288,18 @@ function stabilizeCollectorFillPercentage(fillPercentage, previousFillPercentage
   const fill = normalizeCollectorFillPercentage(fillPercentage);
   if (fill === null) return null;
 
-  if (fill >= CART_CRITICAL_PERCENT && consecutiveCriticalReadings < CART_CRITICAL_CONFIRM_READINGS) {
-    const previousFill = normalizeCollectorFillPercentage(previousFillPercentage);
-    return previousFill === null ? 0 : Math.min(previousFill, CART_CRITICAL_PERCENT - 1);
+  const previousFill = normalizeCollectorFillPercentage(previousFillPercentage);
+
+  if (
+    fill >= CART_SUSPICIOUS_JUMP_PERCENT
+    && consecutiveCriticalReadings < CART_CRITICAL_CONFIRM_READINGS
+  ) {
+    const fallbackFill = previousFill === null || previousFill >= CART_SUSPICIOUS_JUMP_PERCENT
+      ? 0
+      : previousFill;
+    return fill >= CART_CRITICAL_PERCENT
+      ? Math.min(fallbackFill, CART_CRITICAL_PERCENT - 1)
+      : fallbackFill;
   }
 
   return fill;
@@ -338,8 +349,13 @@ function previousCollectorReading(db, bleSensorId) {
 }
 
 function serializeCollectorReading(row) {
-  const fillPercentage = normalizeCollectorFillPercentage(row.fill_percentage);
   const consecutiveCriticalReadings = Number(row.consecutive_critical_readings || 0);
+  const storedFillPercentage = normalizeCollectorFillPercentage(row.fill_percentage);
+  const fillPercentage = storedFillPercentage !== null
+    && storedFillPercentage >= CART_SUSPICIOUS_JUMP_PERCENT
+    && consecutiveCriticalReadings < CART_CRITICAL_CONFIRM_READINGS
+    ? 0
+    : storedFillPercentage;
 
   return {
     id: row.id,
@@ -380,7 +396,7 @@ function saveCollectorReading(db, normalizedReading) {
   const previousCriticalReadings = Number(previous?.consecutive_critical_readings || 0);
   const consecutiveCriticalReadings = lidOpen
     ? previousCriticalReadings
-    : (rawFillPercentage !== null && rawFillPercentage >= CART_CRITICAL_PERCENT ? previousCriticalReadings + 1 : 0);
+    : (rawFillPercentage !== null && rawFillPercentage >= CART_SUSPICIOUS_JUMP_PERCENT ? previousCriticalReadings + 1 : 0);
   const fillPercentage = lidOpen
     ? previousFillPercentage
     : stabilizeCollectorFillPercentage(rawFillPercentage, previousFillPercentage, consecutiveCriticalReadings);
