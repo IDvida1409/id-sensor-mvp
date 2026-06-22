@@ -9659,7 +9659,7 @@ if(false){(function(){
     list.innerHTML = sampleList;
   }
 
-  function calibrationPercentOptions(calibration, selectedValue){
+  function calibrationPercentChoices(calibration, selectedValue){
     const selected = Math.round(Number(selectedValue || calibration.redPercent || DEFAULT_CART_CALIBRATION.redPercent));
     const values = new Set([40, 50, 60, 70, 80, 90, 100, selected]);
     return Array.from(values)
@@ -9667,10 +9667,135 @@ if(false){(function(){
       .sort((a, b) => a - b)
       .map(value => {
         const distance = distanceForFillPercentage(calibration, value);
-        const selectedAttr = value === selected ? ' selected' : '';
-        return `<option value="${value}"${selectedAttr}>${value}% (${formatMm(distance)})</option>`;
-      })
-      .join('');
+        return {
+          value,
+          label: `${value}% (${formatMm(distance)})`,
+          selected:value === selected
+        };
+      });
+  }
+
+  function closeCalibrationSelects(exceptPicker = null){
+    document.querySelectorAll('.cart-calibration-select.is-open').forEach(picker => {
+      if(picker === exceptPicker) return;
+      picker.classList.remove('is-open');
+      picker.classList.remove('drop-up');
+      picker.querySelector('.cart-calibration-select-btn')?.setAttribute('aria-expanded', 'false');
+      const options = picker.querySelector('.cart-calibration-options');
+      if(options) options.hidden = true;
+    });
+  }
+
+  function setCalibrationPickerValue(inputId, value){
+    const input = document.getElementById(inputId);
+    const picker = document.querySelector(`[data-calibration-select="${inputId}"]`);
+    if(!input || !picker) return;
+
+    const normalizedValue = String(value || '');
+    const options = Array.from(picker.querySelectorAll(`[data-calibration-option="${inputId}"]`));
+    const selectedOption = options.find(option => option.dataset.value === normalizedValue) || options[0];
+    if(!selectedOption) return;
+
+    const selectedValue = selectedOption.dataset.value || normalizedValue;
+    input.value = selectedValue;
+    picker.dataset.value = selectedValue;
+    const label = picker.querySelector('.cart-calibration-select-btn span');
+    if(label) label.textContent = selectedOption.textContent.trim();
+    options.forEach(option => {
+      const selected = option === selectedOption;
+      option.classList.toggle('is-selected', selected);
+      option.setAttribute('aria-selected', selected ? 'true' : 'false');
+    });
+  }
+
+  function renderCalibrationPercentPicker(inputId, calibration, selectedValue){
+    const input = document.getElementById(inputId);
+    const picker = document.querySelector(`[data-calibration-select="${inputId}"]`);
+    if(!input || !picker) return;
+
+    const choices = calibrationPercentChoices(calibration, selectedValue);
+    const selectedChoice = choices.find(choice => choice.selected) || choices[0];
+    if(!selectedChoice) return;
+
+    input.value = String(selectedChoice.value);
+    picker.dataset.value = String(selectedChoice.value);
+    picker.innerHTML = `
+      <button type="button" class="cart-calibration-select-btn" aria-haspopup="listbox" aria-expanded="false" aria-controls="${escapeHtml(inputId)}Menu">
+        <span>${escapeHtml(selectedChoice.label)}</span>
+      </button>
+      <div class="cart-calibration-options" id="${escapeHtml(inputId)}Menu" role="listbox" hidden>
+        ${choices.map(choice => `
+          <button type="button" class="cart-calibration-option${choice.selected ? ' is-selected' : ''}" role="option" aria-selected="${choice.selected ? 'true' : 'false'}" data-calibration-option="${escapeHtml(inputId)}" data-value="${choice.value}">
+            ${escapeHtml(choice.label)}
+          </button>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  function toggleCalibrationSelect(picker){
+    if(!picker) return;
+    const willOpen = !picker.classList.contains('is-open');
+    closeCalibrationSelects(willOpen ? picker : null);
+    picker.classList.remove('drop-up');
+    picker.classList.toggle('is-open', willOpen);
+    picker.querySelector('.cart-calibration-select-btn')?.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+    const options = picker.querySelector('.cart-calibration-options');
+    if(options) options.hidden = !willOpen;
+    if(willOpen){
+      const trigger = picker.querySelector('.cart-calibration-select-btn');
+      const modal = picker.closest('.cart-detail-modal');
+      const triggerRect = trigger?.getBoundingClientRect();
+      const modalRect = modal?.getBoundingClientRect();
+      if(triggerRect){
+        const menuHeight = Math.min(options?.scrollHeight || 250, 320);
+        const bottomLimit = Math.min(window.innerHeight, modalRect?.bottom || window.innerHeight);
+        const topLimit = Math.max(0, modalRect?.top || 0);
+        const spaceBelow = bottomLimit - triggerRect.bottom;
+        const spaceAbove = triggerRect.top - topLimit;
+        picker.classList.toggle('drop-up', spaceBelow < menuHeight + 16 && spaceAbove > spaceBelow);
+      }
+    }
+  }
+
+  function handleCalibrationSelectClick(event){
+    const option = event.target.closest('[data-calibration-option]');
+    if(option){
+      event.preventDefault();
+      setCalibrationPickerValue(option.dataset.calibrationOption, option.dataset.value);
+      closeCalibrationSelects();
+      return;
+    }
+
+    const button = event.target.closest('.cart-calibration-select-btn');
+    if(button){
+      event.preventDefault();
+      toggleCalibrationSelect(button.closest('.cart-calibration-select'));
+      return;
+    }
+
+    if(!event.target.closest('.cart-calibration-select')) closeCalibrationSelects();
+  }
+
+  function handleCalibrationSelectKeydown(event){
+    const picker = event.target.closest('.cart-calibration-select');
+    if(!picker) return;
+
+    if(event.key === 'Escape'){
+      event.preventDefault();
+      closeCalibrationSelects();
+      picker.querySelector('.cart-calibration-select-btn')?.focus();
+      return;
+    }
+
+    if(event.key === 'Enter' || event.key === ' '){
+      const option = event.target.closest('[data-calibration-option]');
+      if(option){
+        event.preventDefault();
+        setCalibrationPickerValue(option.dataset.calibrationOption, option.dataset.value);
+        closeCalibrationSelects();
+      }
+    }
   }
 
   function setCalibrationExpanded(expanded){
@@ -9688,6 +9813,7 @@ if(false){(function(){
   }
 
   function setCalibrationMode(mode){
+    closeCalibrationSelects();
     const edit = document.getElementById('cartCalibrationEdit');
     const flow = document.getElementById('cartCalibrationNewFlow');
     if(edit) edit.hidden = mode !== 'edit';
@@ -9705,8 +9831,6 @@ if(false){(function(){
     const fullEl = document.getElementById('cartCalibrationFull');
     const modeEl = document.getElementById('cartCalibrationReadMode');
     const redEl = document.getElementById('cartCalibrationRed');
-    const editPercentEl = document.getElementById('cartCalibrationRedPercent');
-    const newPercentEl = document.getElementById('cartCalibrationNewRedPercent');
     const startBtn = document.getElementById('cartCalibrationStartBtn');
     const confirmBtn = document.getElementById('cartCalibrationConfirmBtn');
     const redDistance = distanceForFillPercentage(calibration, calibration.redPercent);
@@ -9716,8 +9840,8 @@ if(false){(function(){
     if(fullEl) fullEl.textContent = formatMm(calibration.fullDistanceMm);
     if(modeEl) modeEl.textContent = 'Por porcentagem';
     if(redEl) redEl.textContent = `${calibration.redPercent}% (${formatMm(redDistance)})`;
-    if(editPercentEl) editPercentEl.innerHTML = calibrationPercentOptions(calibration, calibration.redPercent);
-    if(newPercentEl) newPercentEl.innerHTML = calibrationPercentOptions(calibration, calibration.redPercent);
+    renderCalibrationPercentPicker('cartCalibrationRedPercent', calibration, calibration.redPercent);
+    renderCalibrationPercentPicker('cartCalibrationNewRedPercent', calibration, calibration.redPercent);
 
     if(startBtn) startBtn.disabled = !cart;
     if(confirmBtn) confirmBtn.disabled = true;
@@ -10231,7 +10355,8 @@ if(false){(function(){
               <div class="cart-calibration-edit" id="cartCalibrationEdit" hidden>
                 <label>
                   Limite crítico
-                  <select id="cartCalibrationRedPercent"></select>
+                  <input id="cartCalibrationRedPercent" type="hidden" value="50">
+                  <div class="cart-calibration-select" data-calibration-select="cartCalibrationRedPercent"></div>
                 </label>
                 <div class="cart-calibration-actions">
                   <button type="button" class="cart-primary-btn" id="cartCalibrationSaveBtn">Salvar limite</button>
@@ -10245,7 +10370,8 @@ if(false){(function(){
                 <p class="cart-calibration-draft" id="cartCalibrationDraft"></p>
                 <label>
                   Limite crítico
-                  <select id="cartCalibrationNewRedPercent"></select>
+                  <input id="cartCalibrationNewRedPercent" type="hidden" value="50">
+                  <div class="cart-calibration-select" data-calibration-select="cartCalibrationNewRedPercent"></div>
                 </label>
                 <p class="cart-calibration-status" id="cartCalibrationNewStatus"></p>
                 <div class="cart-calibration-actions">
@@ -10310,6 +10436,8 @@ if(false){(function(){
     });
     document.getElementById('cartRoomModalGatewayBtn')?.addEventListener('click', saveCartRoomModalGateway);
     document.getElementById('cartCalibrationToggle')?.addEventListener('click', toggleCartCalibrationPanel);
+    document.getElementById('cartCalibrationPanel')?.addEventListener('click', handleCalibrationSelectClick);
+    document.getElementById('cartCalibrationPanel')?.addEventListener('keydown', handleCalibrationSelectKeydown);
     document.getElementById('cartCalibrationEditBtn')?.addEventListener('click', openCartCalibrationEdit);
     document.getElementById('cartCalibrationNewBtn')?.addEventListener('click', openCartCalibrationNew);
     document.getElementById('cartCalibrationStartBtn')?.addEventListener('click', startCartCalibration);

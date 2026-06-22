@@ -10473,7 +10473,7 @@ body.analytic-report-open{overflow:hidden}
   border-radius:8px;
   display:grid;
   gap:0;
-  overflow:hidden;
+  overflow:visible;
   padding:0;
 }
 
@@ -10572,6 +10572,116 @@ body.analytic-report-open{overflow:hidden}
   display:grid;
   gap:10px;
   padding:12px;
+}
+
+.cart-calibration-edit label,
+.cart-calibration-new label{
+  position:relative;
+}
+
+.cart-calibration-select{
+  position:relative;
+}
+
+.cart-calibration-select-btn{
+  align-items:center;
+  background:#fff;
+  border:1px solid #cbd5e1;
+  border-radius:8px;
+  color:#061329;
+  cursor:pointer;
+  display:flex;
+  font:inherit;
+  font-size:13px;
+  font-weight:900;
+  justify-content:space-between;
+  min-height:46px;
+  padding:10px 12px;
+  text-align:left;
+  width:100%;
+}
+
+.cart-calibration-select-btn::after{
+  border-bottom:2px solid currentColor;
+  border-right:2px solid currentColor;
+  content:"";
+  display:block;
+  height:8px;
+  margin-left:12px;
+  transform:rotate(45deg) translateY(-2px);
+  width:8px;
+}
+
+.cart-calibration-select.is-open .cart-calibration-select-btn,
+.cart-calibration-select-btn:focus{
+  border-color:#2563eb;
+  box-shadow:0 0 0 3px rgba(37,99,235,.13);
+  outline:none;
+}
+
+.cart-calibration-options{
+  background:#fff;
+  border:1px solid #cbd5e1;
+  border-radius:8px;
+  box-shadow:0 18px 36px rgba(15,23,42,.18);
+  display:grid;
+  gap:4px;
+  left:0;
+  max-height:320px;
+  overflow:auto;
+  padding:6px;
+  position:absolute;
+  right:0;
+  top:calc(100% + 6px);
+  z-index:10;
+}
+
+.cart-calibration-options::-webkit-scrollbar{
+  width:8px;
+}
+
+.cart-calibration-options::-webkit-scrollbar-thumb{
+  background:#cbd5e1;
+  border-radius:999px;
+}
+
+.cart-calibration-options::-webkit-scrollbar-track{
+  background:#f8fafc;
+}
+
+.cart-calibration-select.drop-up .cart-calibration-options{
+  bottom:calc(100% + 6px);
+  top:auto;
+}
+
+.cart-calibration-options[hidden]{
+  display:none !important;
+}
+
+.cart-calibration-option{
+  background:transparent;
+  border:0;
+  border-radius:7px;
+  color:#061329;
+  cursor:pointer;
+  font:inherit;
+  font-size:13px;
+  font-weight:850;
+  min-height:38px;
+  padding:9px 10px;
+  text-align:left;
+}
+
+.cart-calibration-option:hover,
+.cart-calibration-option:focus{
+  background:#eaf3ff;
+  color:#1d4ed8;
+  outline:none;
+}
+
+.cart-calibration-option.is-selected{
+  background:#2563eb;
+  color:#fff;
 }
 
 .cart-calibration-samples{
