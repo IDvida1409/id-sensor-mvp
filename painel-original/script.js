@@ -9694,23 +9694,13 @@ if(false){(function(){
   }
 
   function isLidOpen(cart){
-    const distance = finiteNumberOrNull(cart?.distanceMm);
-    if(distance !== null) return false;
-
-    const rawStatus = String(cart.collectorStatus || cart.readingStatus || cart.sensorStatus || '').toLowerCase();
-    return cart.lidOpen === true || [
-      'lid_open',
-      'open_lid',
-      'tampa_aberta',
-      'tampa aberta',
-      'invalid_reading',
-      'out_of_range'
-    ].includes(rawStatus);
+    return false;
   }
 
   function cartReadingDetail(cart){
-    if(isLidOpen(cart)) return 'Porta aberta, carrinho fora da calibração';
-    return cart?.distanceMm ? `${cart.distanceMm} mm` : '';
+    const distance = finiteNumberOrNull(cart?.distanceMm);
+    if(distance !== null) return `${Math.round(distance)} mm`;
+    return '';
   }
 
   function formatMm(value){

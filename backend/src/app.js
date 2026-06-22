@@ -62,6 +62,7 @@ const CART_SUSPICIOUS_JUMP_PERCENT = Number(process.env.CART_SUSPICIOUS_JUMP_PER
 const CART_CRITICAL_PERCENT = Number(process.env.CART_CRITICAL_PERCENT || 90);
 const CART_CRITICAL_CONFIRM_READINGS = Number(process.env.CART_CRITICAL_CONFIRM_READINGS || 3);
 const CART_READING_CONFLICT_WINDOW_MS = Number(process.env.CART_READING_CONFLICT_WINDOW_MS || 30000);
+// C01/C02 are vertical ToF sensors. A long distance means ceiling/empty, not an open lid.
 
 const ACTIVATION_CODE_TTL_MS = 24 * 60 * 60 * 1000;
 
