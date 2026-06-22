@@ -10379,10 +10379,12 @@ body.analytic-report-open{overflow:hidden}
   box-shadow:0 24px 70px rgba(15,23,42,.28);
   display:grid;
   gap:14px;
-  max-width:480px;
+  max-height:min(88vh,920px);
+  max-width:640px;
+  overflow-y:auto;
   padding:24px;
   position:relative;
-  width:min(480px,100%);
+  width:min(640px,100%);
 }
 
 .cart-detail-close{
@@ -10448,7 +10450,8 @@ body.analytic-report-open{overflow:hidden}
   gap:6px;
 }
 
-.cart-detail-modal input{
+.cart-detail-modal input,
+.cart-detail-modal select{
   background:#f8fafc;
   border:1px solid #cbd5e1;
   border-radius:8px;
@@ -10458,10 +10461,202 @@ body.analytic-report-open{overflow:hidden}
   padding:10px 12px;
 }
 
-.cart-detail-modal input:focus{
+.cart-detail-modal input:focus,
+.cart-detail-modal select:focus{
   border-color:#2563eb;
   box-shadow:0 0 0 3px rgba(37,99,235,.13);
   outline:none;
+}
+
+.cart-calibration-panel{
+  border:1px solid #d9e4f1;
+  border-radius:8px;
+  display:grid;
+  gap:0;
+  overflow:hidden;
+  padding:0;
+}
+
+.cart-calibration-toggle{
+  align-items:center;
+  background:#f8fafc;
+  border:0;
+  color:#0f172a;
+  cursor:pointer;
+  display:flex;
+  gap:12px;
+  justify-content:space-between;
+  min-height:70px;
+  padding:14px 16px;
+  text-align:left;
+  width:100%;
+}
+
+.cart-calibration-toggle strong{
+  color:#061329;
+  display:block;
+  font-size:15px;
+  font-weight:900;
+}
+
+.cart-calibration-toggle small{
+  color:#64748b;
+  display:block;
+  font-size:11px;
+  font-weight:800;
+  margin-top:2px;
+}
+
+.cart-calibration-toggle > em{
+  background:#eaf3ff;
+  border:1px solid #cfe3ff;
+  border-radius:999px;
+  color:#1d4ed8;
+  font-size:11px;
+  font-style:normal;
+  font-weight:900;
+  padding:6px 8px;
+  white-space:nowrap;
+}
+
+.cart-calibration-body{
+  border-top:1px solid #d9e4f1;
+  display:grid;
+  gap:12px;
+  padding:14px;
+}
+
+.cart-calibration-body[hidden],
+.cart-calibration-edit[hidden],
+.cart-calibration-new[hidden]{
+  display:none !important;
+}
+
+.cart-calibration-grid{
+  display:grid;
+  gap:8px;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+}
+
+.cart-calibration-grid span{
+  background:#f8fafc;
+  border:1px solid #e2e8f0;
+  border-radius:8px;
+  display:grid;
+  gap:4px;
+  min-height:58px;
+  padding:9px;
+}
+
+.cart-calibration-grid em{
+  color:#64748b;
+  font-size:10px;
+  font-style:normal;
+  font-weight:900;
+  line-height:1.1;
+  text-transform:uppercase;
+}
+
+.cart-calibration-grid strong{
+  color:#061329;
+  font-size:13px;
+  font-weight:900;
+  line-height:1.2;
+}
+
+.cart-calibration-edit,
+.cart-calibration-new{
+  background:#f8fafc;
+  border:1px solid #e2e8f0;
+  border-radius:8px;
+  display:grid;
+  gap:10px;
+  padding:12px;
+}
+
+.cart-calibration-samples{
+  display:grid;
+  gap:8px;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+}
+
+.cart-calibration-samples span{
+  align-items:center;
+  background:#f8fafc;
+  border:1px dashed #cbd5e1;
+  border-radius:8px;
+  display:flex;
+  gap:8px;
+  min-height:42px;
+  padding:7px 9px;
+}
+
+.cart-calibration-samples span.active{
+  border-color:#2563eb;
+  box-shadow:0 0 0 3px rgba(37,99,235,.10);
+}
+
+.cart-calibration-samples em{
+  align-items:center;
+  background:#dbeafe;
+  border-radius:999px;
+  color:#1d4ed8;
+  display:flex;
+  font-size:11px;
+  font-style:normal;
+  font-weight:900;
+  height:22px;
+  justify-content:center;
+  width:22px;
+}
+
+.cart-calibration-samples strong{
+  color:#0f172a;
+  font-size:13px;
+  font-weight:900;
+}
+
+.cart-calibration-status{
+  color:#475569;
+  font-size:12px;
+  font-weight:800;
+  line-height:1.35;
+  margin:0;
+}
+
+.cart-calibration-status[data-tone="success"]{color:#047857}
+.cart-calibration-status[data-tone="warn"]{color:#a16207}
+.cart-calibration-status[data-tone="error"]{color:#b91c1c}
+
+.cart-calibration-note,
+.cart-calibration-draft{
+  color:#475569;
+  font-size:12px;
+  font-weight:800;
+  line-height:1.4;
+  margin:0;
+}
+
+.cart-calibration-draft{
+  color:#061329;
+}
+
+.cart-calibration-actions{
+  display:grid;
+  gap:8px;
+  grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+}
+
+.cart-calibration-actions button{
+  min-height:40px;
+  white-space:normal;
+}
+
+@media (max-width:640px){
+  .cart-calibration-grid,
+  .cart-calibration-actions{
+    grid-template-columns:1fr;
+  }
 }
 
 @media (max-width:840px){
