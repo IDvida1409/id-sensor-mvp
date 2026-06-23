@@ -9560,6 +9560,7 @@ if(false){(function(){
       if(!reading) return;
 
       const fill = finiteNumberOrNull(reading.fillPercentage);
+      const candidateFill = finiteNumberOrNull(reading.candidateFillPercentage);
       const distance = finiteNumberOrNull(reading.distanceMm);
       const battery = finiteNumberOrNull(reading.battery);
       const rssi = finiteNumberOrNull(reading.rssiBle);
@@ -9591,9 +9592,17 @@ if(false){(function(){
         ? fillPercentageForDistance(cartCalibration(cart), distance)
         : null;
       const nextFill = backendFill !== null ? backendFill : calibratedFill;
+      const visualCandidateFill = normalizeCartFillPercentage(candidateFill);
+      const nextDisplayFill = visualCandidateFill !== null
+        ? visualCandidateFill
+        : nextFill;
 
       if(nextFill !== null && Math.round(nextFill) !== Math.round(Number(cart.fillPercentage || 0))){
         cart.fillPercentage = Math.round(nextFill);
+        changed = true;
+      }
+      if(nextDisplayFill !== null && Math.round(nextDisplayFill) !== Math.round(Number(cart.displayFillPercentage ?? cart.fillPercentage ?? 0))){
+        cart.displayFillPercentage = Math.round(nextDisplayFill);
         changed = true;
       }
       if(distance !== null && cart.distanceMm !== distance){
@@ -10307,10 +10316,11 @@ if(false){(function(){
 
   function renderCartCard(cart){
     const fill = Math.max(0, Math.min(100, Number(cart.fillPercentage || 0)));
-    const visualFill = fill <= 2 ? 0 : fill;
+    const displayFill = Math.max(0, Math.min(100, Number(cart.displayFillPercentage ?? fill)));
+    const visualFill = displayFill <= 2 ? 0 : displayFill;
     const tone = fillTone(cart);
     const lidOpen = isLidOpen(cart);
-    const cardLabel = `${fill}%`;
+    const cardLabel = `${Math.round(displayFill)}%`;
     const showStatus = cart.locationStatus !== 'in_room' && cart.locationStatus !== 'transit';
 
     return `
