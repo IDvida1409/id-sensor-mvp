@@ -168,6 +168,18 @@ function initDb() {
       original_payload_json TEXT
     );
 
+    CREATE TABLE IF NOT EXISTS collector_calibrations (
+      ble_sensor_id TEXT PRIMARY KEY,
+      empty_distance_mm REAL NOT NULL,
+      full_distance_mm REAL NOT NULL,
+      red_percent REAL NOT NULL DEFAULT 50,
+      open_margin_percent REAL NOT NULL DEFAULT 30,
+      open_margin_min_mm REAL NOT NULL DEFAULT 250,
+      confirmation_readings INTEGER NOT NULL DEFAULT 4,
+      samples_json TEXT,
+      updated_at TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS simulation_state (
       id TEXT PRIMARY KEY,
       enabled INTEGER NOT NULL DEFAULT 0,

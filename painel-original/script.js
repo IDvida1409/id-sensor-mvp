@@ -9570,6 +9570,9 @@ if(false){(function(){
       const gatewayRoomId = roomByGateway.get(String(reading.lorawanDeviceId || '').trim().toLowerCase());
       const rawStatus = String(reading.status || '').toLowerCase();
       const confirmedLidState = String(reading.confirmedLidState || '').toLowerCase();
+      const readingCalibration = reading.calibration
+        ? normalizeCartCalibration({ ...cartCalibration(cart), ...reading.calibration })
+        : null;
       const readingLidOpen = [
         'lid_open',
         'open_lid',
@@ -9577,6 +9580,13 @@ if(false){(function(){
         'tampa aberta'
       ].includes(rawStatus) || confirmedLidState === 'open' || reading.lidOpen === true;
       const backendFill = normalizeCartFillPercentage(fill);
+      const currentCalibration = cartCalibration(cart);
+      const shouldUseBackendCalibration = readingCalibration
+        && (readingCalibration.updatedAt || !currentCalibration.updatedAt);
+      if(shouldUseBackendCalibration && JSON.stringify(cart.calibration || null) !== JSON.stringify(readingCalibration)){
+        cart.calibration = readingCalibration;
+        changed = true;
+      }
       const calibratedFill = backendFill === null && !readingLidOpen && distance !== null
         ? fillPercentageForDistance(cartCalibration(cart), distance)
         : null;
@@ -9978,6 +9988,21 @@ if(false){(function(){
     return payload?.data?.readings?.[0] || null;
   }
 
+  async function saveCartCalibrationToBackend(cart, calibration){
+    const mac = cleanMac(cart?.mac);
+    if(mac.length !== 12) throw new Error('MAC do sensor invalido.');
+    const response = await fetch(`/api/cart-tracking/calibration/${encodeURIComponent(mac)}`, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ calibration })
+    });
+    const payload = await response.json().catch(() => null);
+    if(!response.ok || payload?.ok === false){
+      throw new Error(payload?.message || 'Falha ao salvar calibracao.');
+    }
+    return normalizeCartCalibration(payload?.data?.calibration || calibration);
+  }
+
   function wait(ms){
     return new Promise(resolve => window.setTimeout(resolve, ms));
   }
@@ -10041,7 +10066,7 @@ if(false){(function(){
     }
   }
 
-  function saveCartCalibrationLimit(){
+  async function saveCartCalibrationLimit(){
     const overlay = document.getElementById('cartDetailOverlay');
     const cartId = overlay?.dataset.cartId;
     if(!cartId){
@@ -10061,16 +10086,22 @@ if(false){(function(){
       updatedAt: new Date().toISOString()
     });
 
-    cart.calibration = next;
-    saveState(state);
-    renderCartCalibrationPanel(cart);
-    renderRooms();
-    setCalibrationExpanded(true);
-    setCalibrationMode('');
-    setCalibrationStatus('Limite crítico salvo.', 'success');
+    try{
+      setCalibrationStatus('Salvando calibracao no backend...', 'info');
+      cart.calibration = await saveCartCalibrationToBackend(cart, next);
+      saveState(state);
+      renderCartCalibrationPanel(cart);
+      renderRooms();
+      setCalibrationExpanded(true);
+      setCalibrationMode('');
+      setCalibrationStatus('Limite critico salvo no backend.', 'success');
+    }catch(err){
+      console.warn('Falha ao salvar calibracao', err);
+      setCalibrationStatus('Nao foi possivel salvar a calibracao no backend.', 'error');
+    }
   }
 
-  function confirmCartCalibration(){
+  async function confirmCartCalibration(){
     const overlay = document.getElementById('cartDetailOverlay');
     const cartId = overlay?.dataset.cartId;
     const draftEmpty = finiteNumberOrNull(overlay?.dataset.calibrationDraftEmpty);
@@ -10103,13 +10134,19 @@ if(false){(function(){
       next.fullDistanceMm = Math.max(0, next.emptyDistanceMm - 50);
     }
 
-    cart.calibration = next;
-    saveState(state);
-    renderCartCalibrationPanel(cart);
-    renderRooms();
-    setCalibrationExpanded(true);
-    setCalibrationMode('');
-    setCalibrationStatus('Nova calibração salva neste painel.', 'success');
+    try{
+      setCalibrationNewStatus('Salvando nova calibracao no backend...', 'info');
+      cart.calibration = await saveCartCalibrationToBackend(cart, next);
+      saveState(state);
+      renderCartCalibrationPanel(cart);
+      renderRooms();
+      setCalibrationExpanded(true);
+      setCalibrationMode('');
+      setCalibrationStatus('Nova calibracao salva no backend.', 'success');
+    }catch(err){
+      console.warn('Falha ao confirmar calibracao', err);
+      setCalibrationNewStatus('Nao foi possivel salvar a calibracao no backend.', 'error');
+    }
   }
 
   function cancelCartCalibrationDraft(){

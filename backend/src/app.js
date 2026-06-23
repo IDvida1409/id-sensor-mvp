@@ -76,6 +76,15 @@ const COLLECTOR_EMPTY_LEVEL_STATUS = 'empty';
 const COLLECTOR_NORMAL_LEVEL_STATUS = 'normal';
 const COLLECTOR_ATTENTION_LEVEL_STATUS = 'attention';
 const COLLECTOR_CRITICAL_LEVEL_STATUS = 'critical';
+const DEFAULT_COLLECTOR_CALIBRATION = {
+  emptyDistanceMm: CART_EMPTY_DISTANCE_MM,
+  fullDistanceMm: CART_FULL_DISTANCE_MM,
+  redPercent: 50,
+  openMarginPercent: CART_LID_OPEN_MARGIN_PERCENT,
+  openMarginMinMm: CART_LID_OPEN_MARGIN_MM,
+  confirmationReadings: CART_LEVEL_CONFIRM_READINGS,
+  samples: []
+};
 // C01/C02 are vertical ToF sensors. A stable distance far beyond calibration means the lid is open.
 
 const ACTIVATION_CODE_TTL_MS = 24 * 60 * 60 * 1000;
@@ -265,48 +274,169 @@ function finiteNumberOrNull(value) {
   return Number.isFinite(number) ? number : null;
 }
 
-function collectorOpenDistanceLimit() {
-  const empty = finiteNumberOrNull(CART_EMPTY_DISTANCE_MM);
-  if (empty === null) return null;
-  const dynamicMargin = Math.round(empty * (CART_LID_OPEN_MARGIN_PERCENT / 100));
-  return empty + Math.max(CART_LID_OPEN_MARGIN_MM, dynamicMargin);
+function clampNumber(value, min, max) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return min;
+  return Math.min(max, Math.max(min, number));
 }
 
-function collectorCloseDistanceLimit() {
-  const empty = finiteNumberOrNull(CART_EMPTY_DISTANCE_MM);
+function normalizeCollectorCalibration(value = {}) {
+  const source = value && typeof value === 'object' ? value : {};
+  const empty = finiteNumberOrNull(source.emptyDistanceMm ?? source.empty_distance_mm);
+  const full = finiteNumberOrNull(source.fullDistanceMm ?? source.full_distance_mm);
+  const redPercent = finiteNumberOrNull(source.redPercent ?? source.red_percent);
+  const openMarginPercent = finiteNumberOrNull(source.openMarginPercent ?? source.open_margin_percent);
+  const openMarginMinMm = finiteNumberOrNull(source.openMarginMinMm ?? source.open_margin_min_mm);
+  const confirmationReadings = finiteNumberOrNull(source.confirmationReadings ?? source.confirmation_readings);
+  let samples = source.samples;
+
+  if (!Array.isArray(samples) && typeof source.samples_json === 'string') {
+    try {
+      const parsed = JSON.parse(source.samples_json);
+      if (Array.isArray(parsed)) samples = parsed;
+    } catch {}
+  }
+
+  const normalizedEmpty = empty !== null && empty > 0
+    ? Math.round(empty)
+    : DEFAULT_COLLECTOR_CALIBRATION.emptyDistanceMm;
+  let normalizedFull = full !== null && full >= 0
+    ? Math.round(full)
+    : DEFAULT_COLLECTOR_CALIBRATION.fullDistanceMm;
+
+  if (normalizedFull >= normalizedEmpty) {
+    normalizedFull = Math.max(0, normalizedEmpty - 50);
+  }
+
+  return {
+    emptyDistanceMm: normalizedEmpty,
+    fullDistanceMm: normalizedFull,
+    redPercent: redPercent !== null
+      ? clampNumber(Math.round(redPercent), 1, 100)
+      : DEFAULT_COLLECTOR_CALIBRATION.redPercent,
+    openMarginPercent: openMarginPercent !== null
+      ? clampNumber(openMarginPercent, 1, 200)
+      : DEFAULT_COLLECTOR_CALIBRATION.openMarginPercent,
+    openMarginMinMm: openMarginMinMm !== null
+      ? Math.max(1, Math.round(openMarginMinMm))
+      : DEFAULT_COLLECTOR_CALIBRATION.openMarginMinMm,
+    confirmationReadings: confirmationReadings !== null
+      ? Math.max(1, Math.round(confirmationReadings))
+      : DEFAULT_COLLECTOR_CALIBRATION.confirmationReadings,
+    samples: Array.isArray(samples)
+      ? samples.map(Number).filter(Number.isFinite).slice(-10)
+      : [],
+    updatedAt: source.updatedAt ?? source.updated_at ?? null
+  };
+}
+
+function collectorCalibrationForSensor(db, bleSensorId) {
+  const sensorId = compactBleSensorId(bleSensorId);
+  if (!sensorId) return normalizeCollectorCalibration();
+
+  const row = db.prepare(`
+    SELECT *
+    FROM collector_calibrations
+    WHERE ble_sensor_id = ?
+  `).get(sensorId);
+
+  return normalizeCollectorCalibration(row || {});
+}
+
+function saveCollectorCalibration(db, bleSensorId, calibration) {
+  const sensorId = compactBleSensorId(bleSensorId);
+  if (!sensorId) {
+    const error = new Error('MAC do sensor invalido.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const normalized = normalizeCollectorCalibration(calibration);
+  const updatedAt = nowIso();
+
+  db.prepare(`
+    INSERT INTO collector_calibrations (
+      ble_sensor_id, empty_distance_mm, full_distance_mm, red_percent,
+      open_margin_percent, open_margin_min_mm, confirmation_readings,
+      samples_json, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(ble_sensor_id) DO UPDATE SET
+      empty_distance_mm = excluded.empty_distance_mm,
+      full_distance_mm = excluded.full_distance_mm,
+      red_percent = excluded.red_percent,
+      open_margin_percent = excluded.open_margin_percent,
+      open_margin_min_mm = excluded.open_margin_min_mm,
+      confirmation_readings = excluded.confirmation_readings,
+      samples_json = excluded.samples_json,
+      updated_at = excluded.updated_at
+  `).run(
+    sensorId,
+    normalized.emptyDistanceMm,
+    normalized.fullDistanceMm,
+    normalized.redPercent,
+    normalized.openMarginPercent,
+    normalized.openMarginMinMm,
+    normalized.confirmationReadings,
+    safeJsonStringify(normalized.samples),
+    updatedAt
+  );
+
+  return {
+    ...normalized,
+    updatedAt
+  };
+}
+
+function serializeCollectorCalibration(calibration) {
+  return normalizeCollectorCalibration(calibration);
+}
+
+function collectorOpenDistanceLimit(calibration) {
+  const normalized = normalizeCollectorCalibration(calibration);
+  const empty = finiteNumberOrNull(normalized.emptyDistanceMm);
+  if (empty === null) return null;
+  const dynamicMargin = Math.round(empty * (normalized.openMarginPercent / 100));
+  return empty + Math.max(normalized.openMarginMinMm, dynamicMargin);
+}
+
+function collectorCloseDistanceLimit(calibration) {
+  const normalized = normalizeCollectorCalibration(calibration);
+  const empty = finiteNumberOrNull(normalized.emptyDistanceMm);
   if (empty === null) return null;
   return empty + Math.max(CART_EMPTY_DEADBAND_MM, CART_LID_CLOSE_MARGIN_MM);
 }
 
-function collectorValidDistanceMin() {
-  const range = Math.max(0, CART_EMPTY_DISTANCE_MM - CART_FULL_DISTANCE_MM);
+function collectorValidDistanceMin(calibration) {
+  const normalized = normalizeCollectorCalibration(calibration);
+  const range = Math.max(0, normalized.emptyDistanceMm - normalized.fullDistanceMm);
   const tolerance = Math.max(CART_EMPTY_DEADBAND_MM, Math.round(range * 0.1));
-  return Math.max(CART_VALID_DISTANCE_MIN_MM, CART_FULL_DISTANCE_MM - tolerance);
+  return Math.max(CART_VALID_DISTANCE_MIN_MM, normalized.fullDistanceMm - tolerance);
 }
 
-function isCollectorCalibratedDistance(distanceMm) {
+function isCollectorCalibratedDistance(distanceMm, calibration) {
   const distance = finiteNumberOrNull(distanceMm);
-  const closeLimit = collectorCloseDistanceLimit();
+  const closeLimit = collectorCloseDistanceLimit(calibration);
   if (distance === null || closeLimit === null) return false;
-  return distance >= collectorValidDistanceMin() && distance <= closeLimit;
+  return distance >= collectorValidDistanceMin(calibration) && distance <= closeLimit;
 }
 
-function isCollectorEmptyDistance(distanceMm) {
+function isCollectorEmptyDistance(distanceMm, calibration) {
+  const normalized = normalizeCollectorCalibration(calibration);
   const distance = finiteNumberOrNull(distanceMm);
   if (distance === null) return false;
-  return isCollectorCalibratedDistance(distance)
-    && distance >= CART_EMPTY_DISTANCE_MM - CART_EMPTY_DEADBAND_MM;
+  return isCollectorCalibratedDistance(distance, normalized)
+    && distance >= normalized.emptyDistanceMm - CART_EMPTY_DEADBAND_MM;
 }
 
-function isCollectorLidOpenDistance(distanceMm) {
+function isCollectorLidOpenDistance(distanceMm, calibration) {
   const distance = finiteNumberOrNull(distanceMm);
-  const openLimit = collectorOpenDistanceLimit();
+  const openLimit = collectorOpenDistanceLimit(calibration);
   if (distance === null || openLimit === null) return false;
   return distance > openLimit;
 }
 
-function isCollectorLidClosedDistance(distanceMm) {
-  return isCollectorCalibratedDistance(distanceMm);
+function isCollectorLidClosedDistance(distanceMm, calibration) {
+  return isCollectorCalibratedDistance(distanceMm, calibration);
 }
 
 function normalizeCollectorFillPercentage(fillPercentage) {
@@ -317,30 +447,38 @@ function normalizeCollectorFillPercentage(fillPercentage) {
   return normalized <= CART_EMPTY_DEADBAND_PERCENT ? 0 : normalized;
 }
 
-function calculateCollectorFillPercentage(distanceMm) {
+function calculateCollectorFillPercentage(distanceMm, calibration) {
+  const normalized = normalizeCollectorCalibration(calibration);
   const distance = finiteNumberOrNull(distanceMm);
   if (distance === null) return null;
-  if (!isCollectorCalibratedDistance(distance)) return null;
+  if (!isCollectorCalibratedDistance(distance, normalized)) return null;
 
   const fillPercentage = calculateFillPercentage(
-    CART_EMPTY_DISTANCE_MM,
-    CART_FULL_DISTANCE_MM,
+    normalized.emptyDistanceMm,
+    normalized.fullDistanceMm,
     distance
   );
 
   if (fillPercentage === null) return null;
 
-  if (isCollectorEmptyDistance(distance)) return 0;
+  if (isCollectorEmptyDistance(distance, normalized)) return 0;
 
   return normalizeCollectorFillPercentage(fillPercentage);
 }
 
-function collectorLevelForFillPercentage(fillPercentage) {
+function collectorLevelForFillPercentage(fillPercentage, calibration = null) {
   const fill = normalizeCollectorFillPercentage(fillPercentage);
   if (fill === null) return null;
+  const normalizedCalibration = normalizeCollectorCalibration(calibration);
+  const criticalPercent = clampNumber(
+    normalizedCalibration.redPercent || CART_CRITICAL_PERCENT,
+    1,
+    100
+  );
+  const attentionPercent = Math.max(CART_STABLE_EMPTY_PERCENT + 1, criticalPercent - 10);
   if (fill <= CART_STABLE_EMPTY_PERCENT) return COLLECTOR_EMPTY_LEVEL_STATUS;
-  if (fill >= CART_CRITICAL_PERCENT) return COLLECTOR_CRITICAL_LEVEL_STATUS;
-  if (fill >= CART_SUSPICIOUS_JUMP_PERCENT) return COLLECTOR_ATTENTION_LEVEL_STATUS;
+  if (fill >= criticalPercent) return COLLECTOR_CRITICAL_LEVEL_STATUS;
+  if (fill >= attentionPercent) return COLLECTOR_ATTENTION_LEVEL_STATUS;
   return COLLECTOR_NORMAL_LEVEL_STATUS;
 }
 
@@ -373,7 +511,7 @@ function collectorLidStateForRow(row) {
   return COLLECTOR_LID_CLOSED_STATE;
 }
 
-function collectorLevelForRow(row, fillPercentage) {
+function collectorLevelForRow(row, fillPercentage, calibration = null) {
   const storedLevel = String(row?.confirmed_level_status || '').trim().toLowerCase();
   if ([
     COLLECTOR_EMPTY_LEVEL_STATUS,
@@ -388,17 +526,22 @@ function collectorLevelForRow(row, fillPercentage) {
   if (storedStatus === 'critical_confirmed' || storedStatus === 'critical') return COLLECTOR_CRITICAL_LEVEL_STATUS;
   if (storedStatus === 'attention') return COLLECTOR_ATTENTION_LEVEL_STATUS;
 
-  return collectorLevelForFillPercentage(fillPercentage) || COLLECTOR_EMPTY_LEVEL_STATUS;
+  return collectorLevelForFillPercentage(fillPercentage, calibration) || COLLECTOR_EMPTY_LEVEL_STATUS;
 }
 
-function collectorStatusForRow(row, fillPercentage) {
+function collectorStatusForRow(row, fillPercentage, calibration = null) {
   if (isCollectorReadingOffline(row.created_at)) return 'offline';
   if (collectorLidStateForRow(row) === COLLECTOR_LID_OPEN_STATE) return COLLECTOR_LID_OPEN_STATUS;
-  return collectorStatusForLevel(collectorLevelForRow(row, fillPercentage));
+  return collectorStatusForLevel(collectorLevelForRow(row, fillPercentage, calibration));
 }
 
 function compactBleSensorId(value) {
-  return String(value || '').replace(/[^0-9a-f]/gi, '').toLowerCase().slice(0, 12);
+  const text = String(value || '');
+  let decoded = text;
+  try {
+    decoded = decodeURIComponent(text);
+  } catch {}
+  return decoded.replace(/[^0-9a-f]/gi, '').toLowerCase().slice(0, 12);
 }
 
 function formatBleSensorId(value) {
@@ -438,14 +581,15 @@ function previousCollectorReading(db, bleSensorId) {
   `).get(bleSensorId);
 }
 
-function serializeCollectorReading(row) {
+function serializeCollectorReading(row, calibration = null) {
+  const rowCalibration = serializeCollectorCalibration(calibration || row.calibration || {});
   const consecutiveCriticalReadings = Number(row.consecutive_critical_readings || 0);
   const consecutiveLidOpenReadings = Number(row.consecutive_lid_open_readings || 0);
   const consecutiveLidClosedReadings = Number(row.consecutive_lid_closed_readings || 0);
   const candidateLevelReadings = Number(row.candidate_level_readings || 0);
   const fillPercentage = normalizeCollectorFillPercentage(row.fill_percentage);
   const confirmedLidState = collectorLidStateForRow(row);
-  const levelStatus = collectorLevelForRow(row, fillPercentage);
+  const levelStatus = collectorLevelForRow(row, fillPercentage, rowCalibration);
 
   return {
     id: row.id,
@@ -455,7 +599,7 @@ function serializeCollectorReading(row) {
     lorawanGatewayId: row.lorawan_gateway_id,
     distanceMm: finiteNumberOrNull(row.distance_mm),
     fillPercentage,
-    status: collectorStatusForRow(row, fillPercentage),
+    status: collectorStatusForRow(row, fillPercentage, rowCalibration),
     levelStatus,
     confirmedLidState,
     lidOpen: confirmedLidState === COLLECTOR_LID_OPEN_STATE,
@@ -471,10 +615,7 @@ function serializeCollectorReading(row) {
     rawPayload: row.raw_payload,
     receivedAt: row.received_at,
     createdAt: row.created_at,
-    calibration: {
-      emptyDistanceMm: CART_EMPTY_DISTANCE_MM,
-      fullDistanceMm: CART_FULL_DISTANCE_MM
-    }
+    calibration: rowCalibration
   };
 }
 
@@ -490,29 +631,31 @@ function saveCollectorReading(db, normalizedReading) {
   const createdAt = nowIso();
   const receivedAt = collectorPayloadReceivedAt(normalizedReading) || createdAt;
   const distanceMm = finiteNumberOrNull(normalizedReading.distanceMm);
+  const calibration = collectorCalibrationForSensor(db, bleSensorId);
+  const requiredReadings = Math.max(1, Number(calibration.confirmationReadings || CART_LEVEL_CONFIRM_READINGS));
   const previous = previousCollectorReading(db, bleSensorId);
   const previousFillPercentage = normalizeCollectorFillPercentage(previous?.fill_percentage);
   const previousConfirmedFill = previousFillPercentage !== null ? previousFillPercentage : 0;
-  const previousConfirmedLevel = collectorLevelForRow(previous, previousFillPercentage);
+  const previousConfirmedLevel = collectorLevelForRow(previous, previousFillPercentage, calibration);
   const previousLidState = collectorLidStateForRow(previous);
   const previousLidOpenReadings = Number(previous?.consecutive_lid_open_readings || 0);
   const previousLidClosedReadings = Number(previous?.consecutive_lid_closed_readings || 0);
   const samePayloadAsPrevious = isSameCollectorPayload(previous, normalizedReading, receivedAt);
-  const lidOpenCandidate = isCollectorLidOpenDistance(distanceMm);
-  const lidClosedCandidate = isCollectorLidClosedDistance(distanceMm);
+  const lidOpenCandidate = isCollectorLidOpenDistance(distanceMm, calibration);
+  const lidClosedCandidate = isCollectorLidClosedDistance(distanceMm, calibration);
   let confirmedLidState = previousLidState;
   let consecutiveLidOpenReadings = previousLidOpenReadings;
   let consecutiveLidClosedReadings = previousLidClosedReadings;
 
   if (previousLidState === COLLECTOR_LID_OPEN_STATE) {
-    consecutiveLidOpenReadings = Math.max(previousLidOpenReadings, CART_LID_OPEN_CONFIRM_READINGS);
+    consecutiveLidOpenReadings = Math.max(previousLidOpenReadings, requiredReadings);
 
     if (lidClosedCandidate) {
       consecutiveLidClosedReadings = samePayloadAsPrevious
         ? previousLidClosedReadings
         : previousLidClosedReadings + 1;
 
-      if (consecutiveLidClosedReadings >= CART_LID_CLOSE_CONFIRM_READINGS) {
+      if (consecutiveLidClosedReadings >= requiredReadings) {
         confirmedLidState = COLLECTOR_LID_CLOSED_STATE;
         consecutiveLidOpenReadings = 0;
       }
@@ -525,7 +668,7 @@ function saveCollectorReading(db, normalizedReading) {
       : previousLidOpenReadings + 1;
     consecutiveLidClosedReadings = 0;
 
-    if (consecutiveLidOpenReadings >= CART_LID_OPEN_CONFIRM_READINGS) {
+    if (consecutiveLidOpenReadings >= requiredReadings) {
       confirmedLidState = COLLECTOR_LID_OPEN_STATE;
     }
   } else {
@@ -536,8 +679,8 @@ function saveCollectorReading(db, normalizedReading) {
     confirmedLidState = COLLECTOR_LID_CLOSED_STATE;
   }
 
-  const rawFillPercentage = calculateCollectorFillPercentage(distanceMm);
-  const rawLevelStatus = collectorLevelForFillPercentage(rawFillPercentage);
+  const rawFillPercentage = calculateCollectorFillPercentage(distanceMm, calibration);
+  const rawLevelStatus = collectorLevelForFillPercentage(rawFillPercentage, calibration);
   const previousCandidateLevel = String(previous?.candidate_level_status || '').trim().toLowerCase();
   const previousCandidateReadings = Number(previous?.candidate_level_readings || 0);
   let candidateLevelStatus = null;
@@ -557,7 +700,7 @@ function saveCollectorReading(db, normalizedReading) {
         ? previousCandidateReadings
         : (previousCandidateLevel === rawLevelStatus ? previousCandidateReadings + 1 : 1);
 
-      if (candidateLevelReadings >= CART_LEVEL_CONFIRM_READINGS) {
+      if (candidateLevelReadings >= requiredReadings) {
         fillPercentage = rawFillPercentage;
         confirmedLevelStatus = rawLevelStatus;
       }
@@ -568,7 +711,7 @@ function saveCollectorReading(db, normalizedReading) {
   const criticalCandidate = candidateLevelStatus === COLLECTOR_CRITICAL_LEVEL_STATUS;
   const consecutiveCriticalReadings = criticalCandidate
     ? candidateLevelReadings
-    : (confirmedCritical ? Math.max(CART_CRITICAL_CONFIRM_READINGS, Number(previous?.consecutive_critical_readings || 0)) : 0);
+    : (confirmedCritical ? Math.max(requiredReadings, Number(previous?.consecutive_critical_readings || 0)) : 0);
   const status = confirmedLidState === COLLECTOR_LID_OPEN_STATE
     ? COLLECTOR_LID_OPEN_STATUS
     : collectorStatusForLevel(confirmedLevelStatus);
@@ -653,7 +796,7 @@ function saveCollectorReading(db, normalizedReading) {
     raw_payload: row.rawPayload,
     received_at: row.receivedAt,
     created_at: row.createdAt
-  });
+  }, calibration);
 }
 
 function latestCollectorReadings(db, options = {}) {
@@ -678,7 +821,7 @@ function latestCollectorReadings(db, options = {}) {
   return Array.from(bySensor.values())
     .map(selectLatestCollectorRow)
     .filter(Boolean)
-    .map(serializeCollectorReading);
+    .map((row) => serializeCollectorReading(row, collectorCalibrationForSensor(db, row.ble_sensor_id)));
 }
 
 function collectorReadingsHistory(db, options = {}) {
@@ -696,7 +839,7 @@ function collectorReadingsHistory(db, options = {}) {
       const sensorId = compactBleSensorId(row.ble_sensor_id);
       return sensorId && (!macFilters.length || macFilters.includes(sensorId));
     })
-    .map(serializeCollectorReading);
+    .map((row) => serializeCollectorReading(row, collectorCalibrationForSensor(db, row.ble_sensor_id)));
 }
 
 function areaIdsAllowAll(value) {
@@ -1617,6 +1760,28 @@ addRoute('GET', '/api/cart-tracking/readings', async ({ query, res }) => {
       macFilters
     })
   });
+});
+
+addRoute('GET', '/api/cart-tracking/calibration/:mac', async ({ params, res }) => {
+  const sensorId = compactBleSensorId(params.mac);
+  if (!sensorId) return fail(res, 400, 'MAC do sensor invalido.');
+
+  ok(res, {
+    mac: formatBleSensorId(sensorId),
+    calibration: collectorCalibrationForSensor(getDb(), sensorId)
+  });
+});
+
+addRoute('POST', '/api/cart-tracking/calibration/:mac', async ({ params, body, res }) => {
+  try {
+    const calibration = saveCollectorCalibration(getDb(), params.mac, body?.calibration || body);
+    ok(res, {
+      mac: formatBleSensorId(params.mac),
+      calibration
+    });
+  } catch (error) {
+    return fail(res, error.statusCode || 500, error.message || 'Erro ao salvar calibracao.');
+  }
 });
 
 addRoute('POST', '/activation-code', async ({ body, req, res }) => {
