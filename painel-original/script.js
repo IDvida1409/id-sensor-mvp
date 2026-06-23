@@ -9157,9 +9157,9 @@ if(false){(function(){
     emptyDistanceMm:720,
     fullDistanceMm:140,
     redPercent:50,
-    openMarginPercent:20,
-    openMarginMinMm:100,
-    confirmationReadings:3,
+    openMarginPercent:30,
+    openMarginMinMm:250,
+    confirmationReadings:4,
     samples:[]
   };
   const CALIBRATION_SAMPLE_COUNT = 3;
@@ -9565,25 +9565,22 @@ if(false){(function(){
       const rssi = finiteNumberOrNull(reading.rssiBle);
       const criticalReads = finiteNumberOrNull(reading.consecutiveCriticalReadings);
       const lidOpenReads = finiteNumberOrNull(reading.consecutiveLidOpenReadings);
+      const lidClosedReads = finiteNumberOrNull(reading.consecutiveLidClosedReadings);
+      const candidateLevelReads = finiteNumberOrNull(reading.candidateLevelReadings);
       const gatewayRoomId = roomByGateway.get(String(reading.lorawanDeviceId || '').trim().toLowerCase());
       const rawStatus = String(reading.status || '').toLowerCase();
-      const effectiveCriticalReads = criticalReads !== null
-        ? criticalReads
-        : (rawStatus === 'critical_confirmed' ? cartCalibration(cart).confirmationReadings : 0);
+      const confirmedLidState = String(reading.confirmedLidState || '').toLowerCase();
       const readingLidOpen = [
         'lid_open',
         'open_lid',
         'tampa_aberta',
         'tampa aberta'
-      ].includes(rawStatus);
-      const readingLidOpening = readingLidOpen || (lidOpenReads !== null && lidOpenReads > 0);
-      const calibratedFill = !readingLidOpening && distance !== null
+      ].includes(rawStatus) || confirmedLidState === 'open' || reading.lidOpen === true;
+      const backendFill = normalizeCartFillPercentage(fill);
+      const calibratedFill = backendFill === null && !readingLidOpen && distance !== null
         ? fillPercentageForDistance(cartCalibration(cart), distance)
         : null;
-      const rawNextFill = calibratedFill !== null ? calibratedFill : fill;
-      const stabilizedFill = stabilizeCartFillPercentage(cart, rawNextFill, effectiveCriticalReads, reading);
-      const nextFill = stabilizedFill.fill;
-      if(stabilizedFill.changed) changed = true;
+      const nextFill = backendFill !== null ? backendFill : calibratedFill;
 
       if(nextFill !== null && Math.round(nextFill) !== Math.round(Number(cart.fillPercentage || 0))){
         cart.fillPercentage = Math.round(nextFill);
@@ -9607,6 +9604,26 @@ if(false){(function(){
       }
       if(lidOpenReads !== null && cart.consecutiveLidOpenReadings !== lidOpenReads){
         cart.consecutiveLidOpenReadings = lidOpenReads;
+        changed = true;
+      }
+      if(lidClosedReads !== null && cart.consecutiveLidClosedReadings !== lidClosedReads){
+        cart.consecutiveLidClosedReadings = lidClosedReads;
+        changed = true;
+      }
+      if(candidateLevelReads !== null && cart.candidateLevelReadings !== candidateLevelReads){
+        cart.candidateLevelReadings = candidateLevelReads;
+        changed = true;
+      }
+      if(reading.levelStatus && cart.levelStatus !== reading.levelStatus){
+        cart.levelStatus = reading.levelStatus;
+        changed = true;
+      }
+      if(confirmedLidState && cart.confirmedLidState !== confirmedLidState){
+        cart.confirmedLidState = confirmedLidState;
+        changed = true;
+      }
+      if(cart.lidOpen !== readingLidOpen){
+        cart.lidOpen = readingLidOpen;
         changed = true;
       }
       if(reading.status && cart.collectorStatus !== reading.status){
@@ -9700,7 +9717,8 @@ if(false){(function(){
 
   function isLidOpen(cart){
     const rawStatus = String(cart?.collectorStatus || cart?.readingStatus || cart?.sensorStatus || '').toLowerCase();
-    return cart?.lidOpen === true || [
+    const lidState = String(cart?.confirmedLidState || '').toLowerCase();
+    return cart?.lidOpen === true || lidState === 'open' || [
       'lid_open',
       'open_lid',
       'tampa_aberta',

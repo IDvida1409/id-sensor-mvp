@@ -17,8 +17,8 @@ const { sendActivationEmail } = require('./services/emailService');
 const { sendExpoPush } = require('./services/pushService');
 const { alertMessageForAlert } = require('./services/alertText');
 const {
+  OFFLINE_AFTER_MS,
   calculateFillPercentage,
-  getCollectorStatus,
   normalizeTtnCollectorPayloads
 } = require('./integrations/ttn');
 const {
@@ -55,15 +55,27 @@ function nowIso() {
 
 const CART_EMPTY_DISTANCE_MM = Number(process.env.CART_EMPTY_DISTANCE_MM || 720);
 const CART_FULL_DISTANCE_MM = Number(process.env.CART_FULL_DISTANCE_MM || 140);
-const CART_LID_OPEN_MARGIN_MM = Number(process.env.CART_LID_OPEN_MARGIN_MM || 120);
+const CART_LID_OPEN_MARGIN_MM = Number(process.env.CART_LID_OPEN_MARGIN_MM || 250);
+const CART_LID_OPEN_MARGIN_PERCENT = Number(process.env.CART_LID_OPEN_MARGIN_PERCENT || 30);
+const CART_LID_CLOSE_MARGIN_MM = Number(process.env.CART_LID_CLOSE_MARGIN_MM || 120);
 const CART_EMPTY_DEADBAND_MM = Number(process.env.CART_EMPTY_DEADBAND_MM || 40);
 const CART_EMPTY_DEADBAND_PERCENT = Number(process.env.CART_EMPTY_DEADBAND_PERCENT || 8);
 const CART_STABLE_EMPTY_PERCENT = Number(process.env.CART_STABLE_EMPTY_PERCENT || 10);
+const CART_VALID_DISTANCE_MIN_MM = Number(process.env.CART_VALID_DISTANCE_MIN_MM || 80);
+const CART_FILL_CHANGE_DEADBAND_PERCENT = Number(process.env.CART_FILL_CHANGE_DEADBAND_PERCENT || 5);
 const CART_SUSPICIOUS_JUMP_PERCENT = Number(process.env.CART_SUSPICIOUS_JUMP_PERCENT || 75);
 const CART_CRITICAL_PERCENT = Number(process.env.CART_CRITICAL_PERCENT || 90);
-const CART_CRITICAL_CONFIRM_READINGS = Number(process.env.CART_CRITICAL_CONFIRM_READINGS || 3);
-const CART_LID_OPEN_CONFIRM_READINGS = Number(process.env.CART_LID_OPEN_CONFIRM_READINGS || 3);
+const CART_LEVEL_CONFIRM_READINGS = Number(process.env.CART_LEVEL_CONFIRM_READINGS || 4);
+const CART_CRITICAL_CONFIRM_READINGS = Number(process.env.CART_CRITICAL_CONFIRM_READINGS || CART_LEVEL_CONFIRM_READINGS);
+const CART_LID_OPEN_CONFIRM_READINGS = Number(process.env.CART_LID_OPEN_CONFIRM_READINGS || 4);
+const CART_LID_CLOSE_CONFIRM_READINGS = Number(process.env.CART_LID_CLOSE_CONFIRM_READINGS || CART_LID_OPEN_CONFIRM_READINGS);
 const COLLECTOR_LID_OPEN_STATUS = 'lid_open';
+const COLLECTOR_LID_OPEN_STATE = 'open';
+const COLLECTOR_LID_CLOSED_STATE = 'closed';
+const COLLECTOR_EMPTY_LEVEL_STATUS = 'empty';
+const COLLECTOR_NORMAL_LEVEL_STATUS = 'normal';
+const COLLECTOR_ATTENTION_LEVEL_STATUS = 'attention';
+const COLLECTOR_CRITICAL_LEVEL_STATUS = 'critical';
 // C01/C02 are vertical ToF sensors. A stable distance far beyond calibration means the lid is open.
 
 const ACTIVATION_CODE_TTL_MS = 24 * 60 * 60 * 1000;
@@ -253,17 +265,48 @@ function finiteNumberOrNull(value) {
   return Number.isFinite(number) ? number : null;
 }
 
+function collectorOpenDistanceLimit() {
+  const empty = finiteNumberOrNull(CART_EMPTY_DISTANCE_MM);
+  if (empty === null) return null;
+  const dynamicMargin = Math.round(empty * (CART_LID_OPEN_MARGIN_PERCENT / 100));
+  return empty + Math.max(CART_LID_OPEN_MARGIN_MM, dynamicMargin);
+}
+
+function collectorCloseDistanceLimit() {
+  const empty = finiteNumberOrNull(CART_EMPTY_DISTANCE_MM);
+  if (empty === null) return null;
+  return empty + Math.max(CART_EMPTY_DEADBAND_MM, CART_LID_CLOSE_MARGIN_MM);
+}
+
+function collectorValidDistanceMin() {
+  const range = Math.max(0, CART_EMPTY_DISTANCE_MM - CART_FULL_DISTANCE_MM);
+  const tolerance = Math.max(CART_EMPTY_DEADBAND_MM, Math.round(range * 0.1));
+  return Math.max(CART_VALID_DISTANCE_MIN_MM, CART_FULL_DISTANCE_MM - tolerance);
+}
+
+function isCollectorCalibratedDistance(distanceMm) {
+  const distance = finiteNumberOrNull(distanceMm);
+  const closeLimit = collectorCloseDistanceLimit();
+  if (distance === null || closeLimit === null) return false;
+  return distance >= collectorValidDistanceMin() && distance <= closeLimit;
+}
+
 function isCollectorEmptyDistance(distanceMm) {
   const distance = finiteNumberOrNull(distanceMm);
   if (distance === null) return false;
-  return distance >= CART_EMPTY_DISTANCE_MM - CART_EMPTY_DEADBAND_MM
-    && !isCollectorLidOpenDistance(distance);
+  return isCollectorCalibratedDistance(distance)
+    && distance >= CART_EMPTY_DISTANCE_MM - CART_EMPTY_DEADBAND_MM;
 }
 
 function isCollectorLidOpenDistance(distanceMm) {
   const distance = finiteNumberOrNull(distanceMm);
-  if (distance === null) return false;
-  return distance > CART_EMPTY_DISTANCE_MM + CART_LID_OPEN_MARGIN_MM;
+  const openLimit = collectorOpenDistanceLimit();
+  if (distance === null || openLimit === null) return false;
+  return distance > openLimit;
+}
+
+function isCollectorLidClosedDistance(distanceMm) {
+  return isCollectorCalibratedDistance(distanceMm);
 }
 
 function normalizeCollectorFillPercentage(fillPercentage) {
@@ -277,6 +320,7 @@ function normalizeCollectorFillPercentage(fillPercentage) {
 function calculateCollectorFillPercentage(distanceMm) {
   const distance = finiteNumberOrNull(distanceMm);
   if (distance === null) return null;
+  if (!isCollectorCalibratedDistance(distance)) return null;
 
   const fillPercentage = calculateFillPercentage(
     CART_EMPTY_DISTANCE_MM,
@@ -291,40 +335,66 @@ function calculateCollectorFillPercentage(distanceMm) {
   return normalizeCollectorFillPercentage(fillPercentage);
 }
 
-function stabilizeCollectorFillPercentage(fillPercentage, previousFillPercentage, consecutiveCriticalReadings) {
+function collectorLevelForFillPercentage(fillPercentage) {
   const fill = normalizeCollectorFillPercentage(fillPercentage);
   if (fill === null) return null;
-
-  const previousFill = normalizeCollectorFillPercentage(previousFillPercentage);
-
-  if (
-    fill >= CART_SUSPICIOUS_JUMP_PERCENT
-    && consecutiveCriticalReadings < CART_CRITICAL_CONFIRM_READINGS
-  ) {
-    const fallbackFill = previousFill === null || previousFill >= CART_SUSPICIOUS_JUMP_PERCENT
-      ? 0
-      : previousFill;
-    return fill >= CART_CRITICAL_PERCENT
-      ? Math.min(fallbackFill, CART_CRITICAL_PERCENT - 1)
-      : fallbackFill;
-  }
-
-  return fill;
+  if (fill <= CART_STABLE_EMPTY_PERCENT) return COLLECTOR_EMPTY_LEVEL_STATUS;
+  if (fill >= CART_CRITICAL_PERCENT) return COLLECTOR_CRITICAL_LEVEL_STATUS;
+  if (fill >= CART_SUSPICIOUS_JUMP_PERCENT) return COLLECTOR_ATTENTION_LEVEL_STATUS;
+  return COLLECTOR_NORMAL_LEVEL_STATUS;
 }
 
-function collectorStatusForRow(row, fillPercentage, consecutiveCriticalReadings, consecutiveLidOpenReadings) {
-  const computedStatus = getCollectorStatus(fillPercentage, row.created_at, consecutiveCriticalReadings);
-  if (computedStatus === 'offline') return computedStatus;
+function collectorStatusForLevel(levelStatus) {
+  if (levelStatus === COLLECTOR_CRITICAL_LEVEL_STATUS) return 'critical_confirmed';
+  if (levelStatus === COLLECTOR_ATTENTION_LEVEL_STATUS) return 'attention';
+  return 'normal';
+}
 
+function isCollectorReadingOffline(createdAt) {
+  const timestamp = new Date(createdAt || '').getTime();
+  return Number.isFinite(timestamp) && Date.now() - timestamp > OFFLINE_AFTER_MS;
+}
+
+function collectorLidStateForRow(row) {
+  if (!row) return COLLECTOR_LID_CLOSED_STATE;
   const storedStatus = String(row.status || '').trim().toLowerCase();
   if (
     storedStatus === COLLECTOR_LID_OPEN_STATUS
-    && Number(consecutiveLidOpenReadings || 0) >= CART_LID_OPEN_CONFIRM_READINGS
+    && Number(row.consecutive_lid_open_readings || 0) >= CART_LID_OPEN_CONFIRM_READINGS
   ) {
-    return COLLECTOR_LID_OPEN_STATUS;
+    return COLLECTOR_LID_OPEN_STATE;
   }
 
-  return computedStatus;
+  const storedLidState = String(row.confirmed_lid_state || '').trim().toLowerCase();
+  if ([COLLECTOR_LID_OPEN_STATE, COLLECTOR_LID_CLOSED_STATE].includes(storedLidState)) {
+    return storedLidState;
+  }
+
+  return COLLECTOR_LID_CLOSED_STATE;
+}
+
+function collectorLevelForRow(row, fillPercentage) {
+  const storedLevel = String(row?.confirmed_level_status || '').trim().toLowerCase();
+  if ([
+    COLLECTOR_EMPTY_LEVEL_STATUS,
+    COLLECTOR_NORMAL_LEVEL_STATUS,
+    COLLECTOR_ATTENTION_LEVEL_STATUS,
+    COLLECTOR_CRITICAL_LEVEL_STATUS
+  ].includes(storedLevel)) {
+    return storedLevel;
+  }
+
+  const storedStatus = String(row?.status || '').trim().toLowerCase();
+  if (storedStatus === 'critical_confirmed' || storedStatus === 'critical') return COLLECTOR_CRITICAL_LEVEL_STATUS;
+  if (storedStatus === 'attention') return COLLECTOR_ATTENTION_LEVEL_STATUS;
+
+  return collectorLevelForFillPercentage(fillPercentage) || COLLECTOR_EMPTY_LEVEL_STATUS;
+}
+
+function collectorStatusForRow(row, fillPercentage) {
+  if (isCollectorReadingOffline(row.created_at)) return 'offline';
+  if (collectorLidStateForRow(row) === COLLECTOR_LID_OPEN_STATE) return COLLECTOR_LID_OPEN_STATUS;
+  return collectorStatusForLevel(collectorLevelForRow(row, fillPercentage));
 }
 
 function compactBleSensorId(value) {
@@ -371,12 +441,11 @@ function previousCollectorReading(db, bleSensorId) {
 function serializeCollectorReading(row) {
   const consecutiveCriticalReadings = Number(row.consecutive_critical_readings || 0);
   const consecutiveLidOpenReadings = Number(row.consecutive_lid_open_readings || 0);
-  const storedFillPercentage = normalizeCollectorFillPercentage(row.fill_percentage);
-  const fillPercentage = storedFillPercentage !== null
-    && storedFillPercentage >= CART_SUSPICIOUS_JUMP_PERCENT
-    && consecutiveCriticalReadings < CART_CRITICAL_CONFIRM_READINGS
-    ? 0
-    : storedFillPercentage;
+  const consecutiveLidClosedReadings = Number(row.consecutive_lid_closed_readings || 0);
+  const candidateLevelReadings = Number(row.candidate_level_readings || 0);
+  const fillPercentage = normalizeCollectorFillPercentage(row.fill_percentage);
+  const confirmedLidState = collectorLidStateForRow(row);
+  const levelStatus = collectorLevelForRow(row, fillPercentage);
 
   return {
     id: row.id,
@@ -386,11 +455,18 @@ function serializeCollectorReading(row) {
     lorawanGatewayId: row.lorawan_gateway_id,
     distanceMm: finiteNumberOrNull(row.distance_mm),
     fillPercentage,
-    status: collectorStatusForRow(row, fillPercentage, consecutiveCriticalReadings, consecutiveLidOpenReadings),
+    status: collectorStatusForRow(row, fillPercentage),
+    levelStatus,
+    confirmedLidState,
+    lidOpen: confirmedLidState === COLLECTOR_LID_OPEN_STATE,
     battery: finiteNumberOrNull(row.battery),
     rssiBle: finiteNumberOrNull(row.rssi_ble),
     consecutiveCriticalReadings,
     consecutiveLidOpenReadings,
+    consecutiveLidClosedReadings,
+    candidateLevelStatus: row.candidate_level_status || null,
+    candidateLevelReadings,
+    candidateFillPercentage: normalizeCollectorFillPercentage(row.candidate_fill_percentage),
     fPort: row.f_port === null || row.f_port === undefined ? null : Number(row.f_port),
     rawPayload: row.raw_payload,
     receivedAt: row.received_at,
@@ -416,25 +492,86 @@ function saveCollectorReading(db, normalizedReading) {
   const distanceMm = finiteNumberOrNull(normalizedReading.distanceMm);
   const previous = previousCollectorReading(db, bleSensorId);
   const previousFillPercentage = normalizeCollectorFillPercentage(previous?.fill_percentage);
-  const previousCriticalReadings = Number(previous?.consecutive_critical_readings || 0);
+  const previousConfirmedFill = previousFillPercentage !== null ? previousFillPercentage : 0;
+  const previousConfirmedLevel = collectorLevelForRow(previous, previousFillPercentage);
+  const previousLidState = collectorLidStateForRow(previous);
   const previousLidOpenReadings = Number(previous?.consecutive_lid_open_readings || 0);
+  const previousLidClosedReadings = Number(previous?.consecutive_lid_closed_readings || 0);
   const samePayloadAsPrevious = isSameCollectorPayload(previous, normalizedReading, receivedAt);
   const lidOpenCandidate = isCollectorLidOpenDistance(distanceMm);
-  const consecutiveLidOpenReadings = lidOpenCandidate
-    ? (samePayloadAsPrevious ? previousLidOpenReadings : previousLidOpenReadings + 1)
-    : 0;
-  const rawFillPercentage = lidOpenCandidate ? previousFillPercentage : calculateCollectorFillPercentage(distanceMm);
-  const consecutiveCriticalReadings = !lidOpenCandidate
-    && rawFillPercentage !== null
-    && rawFillPercentage >= CART_SUSPICIOUS_JUMP_PERCENT
-    ? (samePayloadAsPrevious ? previousCriticalReadings : previousCriticalReadings + 1)
-    : 0;
-  const fillPercentage = lidOpenCandidate
-    ? previousFillPercentage
-    : stabilizeCollectorFillPercentage(rawFillPercentage, previousFillPercentage, consecutiveCriticalReadings);
-  const status = lidOpenCandidate && consecutiveLidOpenReadings >= CART_LID_OPEN_CONFIRM_READINGS
+  const lidClosedCandidate = isCollectorLidClosedDistance(distanceMm);
+  let confirmedLidState = previousLidState;
+  let consecutiveLidOpenReadings = previousLidOpenReadings;
+  let consecutiveLidClosedReadings = previousLidClosedReadings;
+
+  if (previousLidState === COLLECTOR_LID_OPEN_STATE) {
+    consecutiveLidOpenReadings = Math.max(previousLidOpenReadings, CART_LID_OPEN_CONFIRM_READINGS);
+
+    if (lidClosedCandidate) {
+      consecutiveLidClosedReadings = samePayloadAsPrevious
+        ? previousLidClosedReadings
+        : previousLidClosedReadings + 1;
+
+      if (consecutiveLidClosedReadings >= CART_LID_CLOSE_CONFIRM_READINGS) {
+        confirmedLidState = COLLECTOR_LID_CLOSED_STATE;
+        consecutiveLidOpenReadings = 0;
+      }
+    } else {
+      consecutiveLidClosedReadings = 0;
+    }
+  } else if (lidOpenCandidate) {
+    consecutiveLidOpenReadings = samePayloadAsPrevious
+      ? previousLidOpenReadings
+      : previousLidOpenReadings + 1;
+    consecutiveLidClosedReadings = 0;
+
+    if (consecutiveLidOpenReadings >= CART_LID_OPEN_CONFIRM_READINGS) {
+      confirmedLidState = COLLECTOR_LID_OPEN_STATE;
+    }
+  } else {
+    consecutiveLidOpenReadings = 0;
+    consecutiveLidClosedReadings = lidClosedCandidate
+      ? (samePayloadAsPrevious ? previousLidClosedReadings : previousLidClosedReadings + 1)
+      : 0;
+    confirmedLidState = COLLECTOR_LID_CLOSED_STATE;
+  }
+
+  const rawFillPercentage = calculateCollectorFillPercentage(distanceMm);
+  const rawLevelStatus = collectorLevelForFillPercentage(rawFillPercentage);
+  const previousCandidateLevel = String(previous?.candidate_level_status || '').trim().toLowerCase();
+  const previousCandidateReadings = Number(previous?.candidate_level_readings || 0);
+  let candidateLevelStatus = null;
+  let candidateLevelReadings = 0;
+  let candidateFillPercentage = null;
+  let fillPercentage = previousConfirmedFill;
+  let confirmedLevelStatus = previousConfirmedLevel;
+
+  if (rawFillPercentage !== null && rawLevelStatus) {
+    const materialLevelChange = rawLevelStatus !== previousConfirmedLevel;
+    const materialFillChange = Math.abs(rawFillPercentage - previousConfirmedFill) >= CART_FILL_CHANGE_DEADBAND_PERCENT;
+
+    if (materialLevelChange || materialFillChange || previousFillPercentage === null) {
+      candidateLevelStatus = rawLevelStatus;
+      candidateFillPercentage = rawFillPercentage;
+      candidateLevelReadings = samePayloadAsPrevious
+        ? previousCandidateReadings
+        : (previousCandidateLevel === rawLevelStatus ? previousCandidateReadings + 1 : 1);
+
+      if (candidateLevelReadings >= CART_LEVEL_CONFIRM_READINGS) {
+        fillPercentage = rawFillPercentage;
+        confirmedLevelStatus = rawLevelStatus;
+      }
+    }
+  }
+
+  const confirmedCritical = confirmedLevelStatus === COLLECTOR_CRITICAL_LEVEL_STATUS;
+  const criticalCandidate = candidateLevelStatus === COLLECTOR_CRITICAL_LEVEL_STATUS;
+  const consecutiveCriticalReadings = criticalCandidate
+    ? candidateLevelReadings
+    : (confirmedCritical ? Math.max(CART_CRITICAL_CONFIRM_READINGS, Number(previous?.consecutive_critical_readings || 0)) : 0);
+  const status = confirmedLidState === COLLECTOR_LID_OPEN_STATE
     ? COLLECTOR_LID_OPEN_STATUS
-    : getCollectorStatus(fillPercentage, createdAt, consecutiveCriticalReadings);
+    : collectorStatusForLevel(confirmedLevelStatus);
   const row = {
     id: id('collector_reading'),
     bleSensorId,
@@ -447,6 +584,12 @@ function saveCollectorReading(db, normalizedReading) {
     rssiBle: finiteNumberOrNull(normalizedReading.rssiBle),
     consecutiveCriticalReadings,
     consecutiveLidOpenReadings,
+    consecutiveLidClosedReadings,
+    confirmedLidState,
+    confirmedLevelStatus,
+    candidateLevelStatus,
+    candidateLevelReadings,
+    candidateFillPercentage,
     fPort: finiteNumberOrNull(normalizedReading.fPort),
     rawPayload: normalizedReading.rawPayload || null,
     receivedAt,
@@ -458,9 +601,11 @@ function saveCollectorReading(db, normalizedReading) {
     INSERT INTO collector_readings (
       id, ble_sensor_id, lorawan_device_id, lorawan_gateway_id,
       distance_mm, fill_percentage, status, battery, rssi_ble,
-      consecutive_critical_readings, consecutive_lid_open_readings, f_port, raw_payload, received_at,
+      consecutive_critical_readings, consecutive_lid_open_readings, consecutive_lid_closed_readings,
+      confirmed_lid_state, confirmed_level_status, candidate_level_status, candidate_level_readings,
+      candidate_fill_percentage, f_port, raw_payload, received_at,
       created_at, original_payload_json
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     row.id,
     row.bleSensorId,
@@ -473,6 +618,12 @@ function saveCollectorReading(db, normalizedReading) {
     row.rssiBle,
     row.consecutiveCriticalReadings,
     row.consecutiveLidOpenReadings,
+    row.consecutiveLidClosedReadings,
+    row.confirmedLidState,
+    row.confirmedLevelStatus,
+    row.candidateLevelStatus,
+    row.candidateLevelReadings,
+    row.candidateFillPercentage,
     row.fPort,
     row.rawPayload,
     row.receivedAt,
@@ -492,6 +643,12 @@ function saveCollectorReading(db, normalizedReading) {
     rssi_ble: row.rssiBle,
     consecutive_critical_readings: row.consecutiveCriticalReadings,
     consecutive_lid_open_readings: row.consecutiveLidOpenReadings,
+    consecutive_lid_closed_readings: row.consecutiveLidClosedReadings,
+    confirmed_lid_state: row.confirmedLidState,
+    confirmed_level_status: row.confirmedLevelStatus,
+    candidate_level_status: row.candidateLevelStatus,
+    candidate_level_readings: row.candidateLevelReadings,
+    candidate_fill_percentage: row.candidateFillPercentage,
     f_port: row.fPort,
     raw_payload: row.rawPayload,
     received_at: row.receivedAt,
