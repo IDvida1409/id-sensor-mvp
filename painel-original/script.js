@@ -8813,7 +8813,7 @@ if(false){(function(){
   }
 
   function statusForCart(cart){
-    const fill = Number(cart.fillPercentage || 0);
+    const fill = cartVisualFill(cart);
     const criticalReads = Number(cart.consecutiveCriticalReadings || 0);
 
     if(cart.locationStatus === 'offline'){
@@ -9726,8 +9726,14 @@ if(false){(function(){
     return 'Livre';
   }
 
+  function cartVisualFill(cart){
+    const displayFill = finiteNumberOrNull(cart?.displayFillPercentage);
+    const confirmedFill = finiteNumberOrNull(cart?.fillPercentage);
+    return Math.max(0, Math.min(100, Number(displayFill ?? confirmedFill ?? 0)));
+  }
+
   function fillTone(cart){
-    const fill = Number(cart.fillPercentage || 0);
+    const fill = cartVisualFill(cart);
     if(fill >= cartRedPercent(cart)) return 'full';
     if(fill >= cartNearPercent(cart)) return 'near-limit';
     if(fill < cartNearPercent(cart)) return 'empty';
@@ -10315,8 +10321,7 @@ if(false){(function(){
   }
 
   function renderCartCard(cart){
-    const fill = Math.max(0, Math.min(100, Number(cart.fillPercentage || 0)));
-    const displayFill = Math.max(0, Math.min(100, Number(cart.displayFillPercentage ?? fill)));
+    const displayFill = cartVisualFill(cart);
     const visualFill = displayFill <= 2 ? 0 : displayFill;
     const tone = fillTone(cart);
     const lidOpen = isLidOpen(cart);
@@ -10324,7 +10329,7 @@ if(false){(function(){
     const showStatus = cart.locationStatus !== 'in_room' && cart.locationStatus !== 'transit';
 
     return `
-      <button type="button" class="cart-item-card ${tone} ${escapeHtml(cart.locationStatus)} ${lidOpen ? 'lid-open' : 'lid-closed'}" data-cart-id="${escapeHtml(cart.id)}" style="--cart-fill:${fill}%;--cart-liquid:${visualFill}%">
+      <button type="button" class="cart-item-card ${tone} ${escapeHtml(cart.locationStatus)} ${lidOpen ? 'lid-open' : 'lid-closed'}" data-cart-id="${escapeHtml(cart.id)}" style="--cart-fill:${visualFill}%;--cart-liquid:${visualFill}%">
         ${showStatus ? `<span class="cart-card-status"><i>${locationLabel(cart)}</i></span>` : ''}
         <span class="cart-item-body">
           <strong>${escapeHtml(cartDisplayName(cart))}</strong>
