@@ -87,23 +87,23 @@ const DEFAULT_COLLECTOR_CALIBRATION = {
 };
 const KNOWN_COLLECTOR_CALIBRATIONS = {
   de08dbf47311: {
-    emptyDistanceMm: 648,
+    emptyDistanceMm: 719,
     fullDistanceMm: 140,
     redPercent: 40,
     openMarginPercent: CART_LID_OPEN_MARGIN_PERCENT,
     openMarginMinMm: CART_LID_OPEN_MARGIN_MM,
     confirmationReadings: CART_LEVEL_CONFIRM_READINGS,
-    samples: [648, 648, 648],
+    samples: [719, 719, 719],
     updatedAt: 'known-c01-default'
   },
   c4894994a485: {
-    emptyDistanceMm: 709,
+    emptyDistanceMm: 708,
     fullDistanceMm: 20,
     redPercent: 50,
     openMarginPercent: CART_LID_OPEN_MARGIN_PERCENT,
     openMarginMinMm: CART_LID_OPEN_MARGIN_MM,
     confirmationReadings: CART_LEVEL_CONFIRM_READINGS,
-    samples: [709, 709, 709],
+    samples: [708, 708, 708],
     updatedAt: 'known-c02-default'
   }
 };
