@@ -85,6 +85,28 @@ const DEFAULT_COLLECTOR_CALIBRATION = {
   confirmationReadings: CART_LEVEL_CONFIRM_READINGS,
   samples: []
 };
+const KNOWN_COLLECTOR_CALIBRATIONS = {
+  de08dbf47311: {
+    emptyDistanceMm: 648,
+    fullDistanceMm: 140,
+    redPercent: 40,
+    openMarginPercent: CART_LID_OPEN_MARGIN_PERCENT,
+    openMarginMinMm: CART_LID_OPEN_MARGIN_MM,
+    confirmationReadings: CART_LEVEL_CONFIRM_READINGS,
+    samples: [648, 648, 648],
+    updatedAt: 'known-c01-default'
+  },
+  c4894994a485: {
+    emptyDistanceMm: 709,
+    fullDistanceMm: 20,
+    redPercent: 50,
+    openMarginPercent: CART_LID_OPEN_MARGIN_PERCENT,
+    openMarginMinMm: CART_LID_OPEN_MARGIN_MM,
+    confirmationReadings: CART_LEVEL_CONFIRM_READINGS,
+    samples: [709, 709, 709],
+    updatedAt: 'known-c02-default'
+  }
+};
 // C01/C02 are vertical ToF sensors. A stable distance far beyond calibration means the lid is open.
 
 const ACTIVATION_CODE_TTL_MS = 24 * 60 * 60 * 1000;
@@ -340,7 +362,7 @@ function collectorCalibrationForSensor(db, bleSensorId) {
     WHERE ble_sensor_id = ?
   `).get(sensorId);
 
-  return normalizeCollectorCalibration(row || {});
+  return normalizeCollectorCalibration(row || KNOWN_COLLECTOR_CALIBRATIONS[sensorId] || {});
 }
 
 function saveCollectorCalibration(db, bleSensorId, calibration) {
