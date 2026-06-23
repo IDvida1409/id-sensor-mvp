@@ -410,7 +410,7 @@ function collectorValidDistanceMin(calibration) {
   const normalized = normalizeCollectorCalibration(calibration);
   const range = Math.max(0, normalized.emptyDistanceMm - normalized.fullDistanceMm);
   const tolerance = Math.max(CART_EMPTY_DEADBAND_MM, Math.round(range * 0.1));
-  return Math.max(CART_VALID_DISTANCE_MIN_MM, normalized.fullDistanceMm - tolerance);
+  return Math.max(0, normalized.fullDistanceMm - tolerance);
 }
 
 function isCollectorCalibratedDistance(distanceMm, calibration) {
