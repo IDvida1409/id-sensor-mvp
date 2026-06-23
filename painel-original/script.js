@@ -9564,20 +9564,20 @@ if(false){(function(){
       const battery = finiteNumberOrNull(reading.battery);
       const rssi = finiteNumberOrNull(reading.rssiBle);
       const criticalReads = finiteNumberOrNull(reading.consecutiveCriticalReadings);
+      const lidOpenReads = finiteNumberOrNull(reading.consecutiveLidOpenReadings);
       const gatewayRoomId = roomByGateway.get(String(reading.lorawanDeviceId || '').trim().toLowerCase());
       const rawStatus = String(reading.status || '').toLowerCase();
       const effectiveCriticalReads = criticalReads !== null
         ? criticalReads
         : (rawStatus === 'critical_confirmed' ? cartCalibration(cart).confirmationReadings : 0);
-      const readingLidOpen = distance === null && [
+      const readingLidOpen = [
         'lid_open',
         'open_lid',
         'tampa_aberta',
-        'tampa aberta',
-        'invalid_reading',
-        'out_of_range'
+        'tampa aberta'
       ].includes(rawStatus);
-      const calibratedFill = !readingLidOpen && distance !== null
+      const readingLidOpening = readingLidOpen || (lidOpenReads !== null && lidOpenReads > 0);
+      const calibratedFill = !readingLidOpening && distance !== null
         ? fillPercentageForDistance(cartCalibration(cart), distance)
         : null;
       const rawNextFill = calibratedFill !== null ? calibratedFill : fill;
@@ -9603,6 +9603,10 @@ if(false){(function(){
       }
       if(criticalReads !== null && cart.consecutiveCriticalReadings !== criticalReads){
         cart.consecutiveCriticalReadings = criticalReads;
+        changed = true;
+      }
+      if(lidOpenReads !== null && cart.consecutiveLidOpenReadings !== lidOpenReads){
+        cart.consecutiveLidOpenReadings = lidOpenReads;
         changed = true;
       }
       if(reading.status && cart.collectorStatus !== reading.status){
@@ -9679,6 +9683,7 @@ if(false){(function(){
   }
 
   function fillLabel(cart){
+    if(isLidOpen(cart)) return 'Porta aberta';
     const fill = Number(cart.fillPercentage || 0);
     if(fill >= cartRedPercent(cart)) return 'Cheio';
     if(fill >= cartNearPercent(cart)) return 'Próximo do limite';
@@ -9694,11 +9699,20 @@ if(false){(function(){
   }
 
   function isLidOpen(cart){
-    return false;
+    const rawStatus = String(cart?.collectorStatus || cart?.readingStatus || cart?.sensorStatus || '').toLowerCase();
+    return cart?.lidOpen === true || [
+      'lid_open',
+      'open_lid',
+      'tampa_aberta',
+      'tampa aberta'
+    ].includes(rawStatus);
   }
 
   function cartReadingDetail(cart){
     const distance = finiteNumberOrNull(cart?.distanceMm);
+    if(isLidOpen(cart)){
+      return distance !== null ? `Porta aberta - ${Math.round(distance)} mm` : 'Porta aberta';
+    }
     if(distance !== null) return `${Math.round(distance)} mm`;
     return '';
   }

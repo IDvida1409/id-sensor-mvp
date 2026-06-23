@@ -154,6 +154,7 @@ function initDb() {
       battery REAL,
       rssi_ble REAL,
       consecutive_critical_readings INTEGER NOT NULL DEFAULT 0,
+      consecutive_lid_open_readings INTEGER NOT NULL DEFAULT 0,
       f_port INTEGER,
       raw_payload TEXT,
       received_at TEXT,
@@ -185,6 +186,7 @@ function initDb() {
   ensureColumn(database, 'app_devices', 'area_nome', 'TEXT');
   ensureColumn(database, 'app_devices', 'area_ids', 'TEXT');
   ensureColumn(database, 'app_devices', 'usuario_perfil', 'TEXT');
+  ensureColumn(database, 'collector_readings', 'consecutive_lid_open_readings', 'INTEGER NOT NULL DEFAULT 0');
   database.exec(`
     CREATE INDEX IF NOT EXISTS idx_alert_ack_app_device
     ON alert_acknowledgements (app_device_id, alert_id);

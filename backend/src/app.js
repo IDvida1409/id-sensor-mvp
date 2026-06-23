@@ -55,14 +55,16 @@ function nowIso() {
 
 const CART_EMPTY_DISTANCE_MM = Number(process.env.CART_EMPTY_DISTANCE_MM || 720);
 const CART_FULL_DISTANCE_MM = Number(process.env.CART_FULL_DISTANCE_MM || 140);
+const CART_LID_OPEN_MARGIN_MM = Number(process.env.CART_LID_OPEN_MARGIN_MM || 120);
 const CART_EMPTY_DEADBAND_MM = Number(process.env.CART_EMPTY_DEADBAND_MM || 40);
 const CART_EMPTY_DEADBAND_PERCENT = Number(process.env.CART_EMPTY_DEADBAND_PERCENT || 8);
 const CART_STABLE_EMPTY_PERCENT = Number(process.env.CART_STABLE_EMPTY_PERCENT || 10);
 const CART_SUSPICIOUS_JUMP_PERCENT = Number(process.env.CART_SUSPICIOUS_JUMP_PERCENT || 75);
 const CART_CRITICAL_PERCENT = Number(process.env.CART_CRITICAL_PERCENT || 90);
 const CART_CRITICAL_CONFIRM_READINGS = Number(process.env.CART_CRITICAL_CONFIRM_READINGS || 3);
-const CART_READING_CONFLICT_WINDOW_MS = Number(process.env.CART_READING_CONFLICT_WINDOW_MS || 30000);
-// C01/C02 are vertical ToF sensors. A long distance means ceiling/empty, not an open lid.
+const CART_LID_OPEN_CONFIRM_READINGS = Number(process.env.CART_LID_OPEN_CONFIRM_READINGS || 3);
+const COLLECTOR_LID_OPEN_STATUS = 'lid_open';
+// C01/C02 are vertical ToF sensors. A stable distance far beyond calibration means the lid is open.
 
 const ACTIVATION_CODE_TTL_MS = 24 * 60 * 60 * 1000;
 
@@ -254,7 +256,14 @@ function finiteNumberOrNull(value) {
 function isCollectorEmptyDistance(distanceMm) {
   const distance = finiteNumberOrNull(distanceMm);
   if (distance === null) return false;
-  return distance >= CART_EMPTY_DISTANCE_MM - CART_EMPTY_DEADBAND_MM;
+  return distance >= CART_EMPTY_DISTANCE_MM - CART_EMPTY_DEADBAND_MM
+    && !isCollectorLidOpenDistance(distance);
+}
+
+function isCollectorLidOpenDistance(distanceMm) {
+  const distance = finiteNumberOrNull(distanceMm);
+  if (distance === null) return false;
+  return distance > CART_EMPTY_DISTANCE_MM + CART_LID_OPEN_MARGIN_MM;
 }
 
 function normalizeCollectorFillPercentage(fillPercentage) {
@@ -303,8 +312,19 @@ function stabilizeCollectorFillPercentage(fillPercentage, previousFillPercentage
   return fill;
 }
 
-function collectorStatusForRow(row, fillPercentage, consecutiveCriticalReadings) {
-  return getCollectorStatus(fillPercentage, row.created_at, consecutiveCriticalReadings);
+function collectorStatusForRow(row, fillPercentage, consecutiveCriticalReadings, consecutiveLidOpenReadings) {
+  const computedStatus = getCollectorStatus(fillPercentage, row.created_at, consecutiveCriticalReadings);
+  if (computedStatus === 'offline') return computedStatus;
+
+  const storedStatus = String(row.status || '').trim().toLowerCase();
+  if (
+    storedStatus === COLLECTOR_LID_OPEN_STATUS
+    && Number(consecutiveLidOpenReadings || 0) >= CART_LID_OPEN_CONFIRM_READINGS
+  ) {
+    return COLLECTOR_LID_OPEN_STATUS;
+  }
+
+  return computedStatus;
 }
 
 function compactBleSensorId(value) {
@@ -329,11 +349,6 @@ function collectorPayloadReceivedAt(reading) {
   return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : null;
 }
 
-function collectorRowTimestamp(row) {
-  const timestamp = new Date(row?.created_at || row?.received_at || '').getTime();
-  return Number.isFinite(timestamp) ? timestamp : 0;
-}
-
 function isSameCollectorPayload(previous, normalizedReading, receivedAt) {
   if (!previous) return false;
 
@@ -355,9 +370,8 @@ function previousCollectorReading(db, bleSensorId) {
 
 function serializeCollectorReading(row) {
   const consecutiveCriticalReadings = Number(row.consecutive_critical_readings || 0);
-  const storedFillPercentage = isCollectorEmptyDistance(row.distance_mm)
-    ? 0
-    : normalizeCollectorFillPercentage(row.fill_percentage);
+  const consecutiveLidOpenReadings = Number(row.consecutive_lid_open_readings || 0);
+  const storedFillPercentage = normalizeCollectorFillPercentage(row.fill_percentage);
   const fillPercentage = storedFillPercentage !== null
     && storedFillPercentage >= CART_SUSPICIOUS_JUMP_PERCENT
     && consecutiveCriticalReadings < CART_CRITICAL_CONFIRM_READINGS
@@ -372,10 +386,11 @@ function serializeCollectorReading(row) {
     lorawanGatewayId: row.lorawan_gateway_id,
     distanceMm: finiteNumberOrNull(row.distance_mm),
     fillPercentage,
-    status: collectorStatusForRow(row, fillPercentage, consecutiveCriticalReadings),
+    status: collectorStatusForRow(row, fillPercentage, consecutiveCriticalReadings, consecutiveLidOpenReadings),
     battery: finiteNumberOrNull(row.battery),
     rssiBle: finiteNumberOrNull(row.rssi_ble),
     consecutiveCriticalReadings,
+    consecutiveLidOpenReadings,
     fPort: row.f_port === null || row.f_port === undefined ? null : Number(row.f_port),
     rawPayload: row.raw_payload,
     receivedAt: row.received_at,
@@ -389,21 +404,7 @@ function serializeCollectorReading(row) {
 
 function selectLatestCollectorRow(rows) {
   const candidates = Array.isArray(rows) ? rows.filter(Boolean) : [];
-  if (!candidates.length) return null;
-
-  const latest = candidates[0];
-  const latestTimestamp = collectorRowTimestamp(latest);
-  const recentRows = candidates.filter((row) => {
-    const timestamp = collectorRowTimestamp(row);
-    return latestTimestamp && timestamp && latestTimestamp - timestamp <= CART_READING_CONFLICT_WINDOW_MS;
-  });
-  const emptyDistanceRow = recentRows.find((row) => isCollectorEmptyDistance(row.distance_mm));
-  const suspiciousDistanceRow = recentRows.find((row) => {
-    const fillPercentage = calculateCollectorFillPercentage(row.distance_mm);
-    return fillPercentage !== null && fillPercentage >= CART_SUSPICIOUS_JUMP_PERCENT;
-  });
-
-  return emptyDistanceRow && suspiciousDistanceRow ? emptyDistanceRow : latest;
+  return candidates[0] || null;
 }
 
 function saveCollectorReading(db, normalizedReading) {
@@ -415,14 +416,25 @@ function saveCollectorReading(db, normalizedReading) {
   const distanceMm = finiteNumberOrNull(normalizedReading.distanceMm);
   const previous = previousCollectorReading(db, bleSensorId);
   const previousFillPercentage = normalizeCollectorFillPercentage(previous?.fill_percentage);
-  const rawFillPercentage = calculateCollectorFillPercentage(distanceMm);
   const previousCriticalReadings = Number(previous?.consecutive_critical_readings || 0);
+  const previousLidOpenReadings = Number(previous?.consecutive_lid_open_readings || 0);
   const samePayloadAsPrevious = isSameCollectorPayload(previous, normalizedReading, receivedAt);
-  const consecutiveCriticalReadings = rawFillPercentage !== null && rawFillPercentage >= CART_SUSPICIOUS_JUMP_PERCENT
+  const lidOpenCandidate = isCollectorLidOpenDistance(distanceMm);
+  const consecutiveLidOpenReadings = lidOpenCandidate
+    ? (samePayloadAsPrevious ? previousLidOpenReadings : previousLidOpenReadings + 1)
+    : 0;
+  const rawFillPercentage = lidOpenCandidate ? previousFillPercentage : calculateCollectorFillPercentage(distanceMm);
+  const consecutiveCriticalReadings = !lidOpenCandidate
+    && rawFillPercentage !== null
+    && rawFillPercentage >= CART_SUSPICIOUS_JUMP_PERCENT
     ? (samePayloadAsPrevious ? previousCriticalReadings : previousCriticalReadings + 1)
     : 0;
-  const fillPercentage = stabilizeCollectorFillPercentage(rawFillPercentage, previousFillPercentage, consecutiveCriticalReadings);
-  const status = getCollectorStatus(fillPercentage, createdAt, consecutiveCriticalReadings);
+  const fillPercentage = lidOpenCandidate
+    ? previousFillPercentage
+    : stabilizeCollectorFillPercentage(rawFillPercentage, previousFillPercentage, consecutiveCriticalReadings);
+  const status = lidOpenCandidate && consecutiveLidOpenReadings >= CART_LID_OPEN_CONFIRM_READINGS
+    ? COLLECTOR_LID_OPEN_STATUS
+    : getCollectorStatus(fillPercentage, createdAt, consecutiveCriticalReadings);
   const row = {
     id: id('collector_reading'),
     bleSensorId,
@@ -434,6 +446,7 @@ function saveCollectorReading(db, normalizedReading) {
     battery: finiteNumberOrNull(normalizedReading.battery),
     rssiBle: finiteNumberOrNull(normalizedReading.rssiBle),
     consecutiveCriticalReadings,
+    consecutiveLidOpenReadings,
     fPort: finiteNumberOrNull(normalizedReading.fPort),
     rawPayload: normalizedReading.rawPayload || null,
     receivedAt,
@@ -445,9 +458,9 @@ function saveCollectorReading(db, normalizedReading) {
     INSERT INTO collector_readings (
       id, ble_sensor_id, lorawan_device_id, lorawan_gateway_id,
       distance_mm, fill_percentage, status, battery, rssi_ble,
-      consecutive_critical_readings, f_port, raw_payload, received_at,
+      consecutive_critical_readings, consecutive_lid_open_readings, f_port, raw_payload, received_at,
       created_at, original_payload_json
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     row.id,
     row.bleSensorId,
@@ -459,6 +472,7 @@ function saveCollectorReading(db, normalizedReading) {
     row.battery,
     row.rssiBle,
     row.consecutiveCriticalReadings,
+    row.consecutiveLidOpenReadings,
     row.fPort,
     row.rawPayload,
     row.receivedAt,
@@ -477,6 +491,7 @@ function saveCollectorReading(db, normalizedReading) {
     battery: row.battery,
     rssi_ble: row.rssiBle,
     consecutive_critical_readings: row.consecutiveCriticalReadings,
+    consecutive_lid_open_readings: row.consecutiveLidOpenReadings,
     f_port: row.fPort,
     raw_payload: row.rawPayload,
     received_at: row.receivedAt,
