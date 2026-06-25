@@ -116,9 +116,9 @@ const PANEL_AUTH_USERS = {
     role: 'master',
     username: 'idevida.master',
     displayName: 'IDvida Master',
-    organization: 'IDvida',
-    logo: './assets/idsensor-logo.png',
-    avatar: './assets/idsensor-logo.png',
+    organization: 'IDSensor',
+    logo: './assets/idsensor-symbol.png',
+    avatar: './assets/idsensor-symbol.png',
     permissions: { fullAccess: true }
   },
   'idevida.h.einstein': {

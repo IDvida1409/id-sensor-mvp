@@ -5344,9 +5344,9 @@ document.getElementById('infoMacOverlay')?.addEventListener('click', ()=> openIn
     syncGestaoCopy(role);
     const labelMap = {
       master: 'IDvida Master',
-      admin1: 'Admin 1',
-      admin2: 'Admin 2',
-      area: 'Usuário Banco IDvida',
+      admin1: 'DM 1',
+      admin2: 'DM 2',
+      area: 'Teste IDvida',
       cart: 'Hospital Einstein'
     };
     currentUserLabel.textContent = labelMap[role] || 'IDvida Master';
@@ -5475,15 +5475,34 @@ document.getElementById('infoMacOverlay')?.addEventListener('click', ()=> openIn
   const profileChrome = {
     master: {
       displayName: 'IDvida Master',
-      organization: 'IDvida',
-      logo: './assets/idsensor-logo.png',
-      avatar: './assets/idsensor-logo.png'
+      organization: 'IDSensor',
+      logo: './assets/idsensor-symbol.png',
+      avatar: './assets/idsensor-symbol.png'
+    },
+    admin1: {
+      displayName: 'DM 1',
+      organization: 'IDSensor',
+      logo: './assets/idsensor-symbol.png',
+      avatar: './assets/idsensor-symbol.png'
+    },
+    admin2: {
+      displayName: 'DM 2',
+      organization: 'IDSensor',
+      logo: './assets/idsensor-symbol.png',
+      avatar: './assets/idsensor-symbol.png'
+    },
+    area: {
+      displayName: 'Teste IDvida',
+      organization: 'IDSensor',
+      logo: './assets/idsensor-symbol.png',
+      avatar: './assets/idsensor-symbol.png'
     },
     cart: {
       displayName: 'Hospital Einstein',
       organization: 'Hospital Einstein',
       logo: './assets/einstein-logo.png',
-      avatar: './assets/einstein-symbol.png'
+      avatar: './assets/einstein-symbol.png',
+      wideLogo: true
     }
   };
 
@@ -5525,6 +5544,7 @@ document.getElementById('infoMacOverlay')?.addEventListener('click', ()=> openIn
     if(clientLogo){
       clientLogo.src = profile.logo;
       clientLogo.alt = profile.organization;
+      clientLogo.classList.toggle('is-wide-logo', !!profile.wideLogo);
     }
   }
 
