@@ -5506,7 +5506,8 @@ document.getElementById('infoMacOverlay')?.addEventListener('click', ()=> openIn
       organization: 'Hospital Einstein',
       logo: './assets/einstein-logo.png',
       avatar: './assets/einstein-symbol.png',
-      wideLogo: true
+      wideLogo: true,
+      logoHalo: true
     }
   };
 
@@ -5579,6 +5580,7 @@ document.getElementById('infoMacOverlay')?.addEventListener('click', ()=> openIn
     const isWideProfile = !!profile.wideLogo || !!profile.symbolLogo;
     const isFullLogoProfile = !!profile.wideLogo;
     const isSymbolProfile = !!profile.symbolLogo;
+    const hasLogoHalo = !!profile.logoHalo;
     if(loginForm) loginForm.classList.toggle('is-wide-profile', isWideProfile);
     if(profilePreview) profilePreview.textContent = profile.organization;
     if(clientLogo){
@@ -5590,6 +5592,7 @@ document.getElementById('infoMacOverlay')?.addEventListener('click', ()=> openIn
       head?.classList.toggle('is-wide-profile', isWideProfile);
       head?.classList.toggle('is-full-logo-profile', isFullLogoProfile);
       head?.classList.toggle('is-symbol-profile', isSymbolProfile);
+      head?.classList.toggle('is-logo-halo-profile', hasLogoHalo);
     }
     scheduleLoginDiagonalUpdate();
   }
