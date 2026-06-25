@@ -5476,9 +5476,9 @@ document.getElementById('infoMacOverlay')?.addEventListener('click', ()=> openIn
     master: {
       displayName: 'IDvida Master',
       organization: 'ID sensor',
-      logo: './assets/idsensor-symbol.png',
+      logo: './assets/idsensor-logo.png',
       avatar: './assets/idsensor-symbol.png',
-      symbolLogo: true
+      wideLogo: true
     },
     admin1: {
       displayName: 'DM 1',
@@ -5542,6 +5542,38 @@ document.getElementById('infoMacOverlay')?.addEventListener('click', ()=> openIn
     return normalized.indexOf('einstein') >= 0 ? profileChrome.cart : profileChrome.master;
   }
 
+  function updateLoginDiagonal(){
+    if(!loginShell || !loginForm || loginShell.hidden) return;
+    const shellRect = loginShell.getBoundingClientRect();
+    const cardRect = loginForm.getBoundingClientRect();
+    if(!shellRect.width || !shellRect.height || !cardRect.width || !cardRect.height) return;
+
+    if(shellRect.width <= 900){
+      loginForm.style.setProperty('--login-card-diagonal-top', '100%');
+      loginForm.style.setProperty('--login-card-diagonal-left', '0%');
+      return;
+    }
+
+    const diagonalTopRatio = 0.74;
+    const diagonalBottomRatio = 0.295;
+    const diagonalSpan = diagonalTopRatio - diagonalBottomRatio;
+    const localTop = (shellRect.width * (diagonalTopRatio - (diagonalSpan * ((cardRect.top - shellRect.top) / shellRect.height)))) - (cardRect.left - shellRect.left);
+    const localLeft = (shellRect.height * ((diagonalTopRatio - ((cardRect.left - shellRect.left) / shellRect.width)) / diagonalSpan)) - (cardRect.top - shellRect.top);
+    const topPx = Math.max(0, Math.min(cardRect.width, localTop));
+    const leftPx = Math.max(0, Math.min(cardRect.height, localLeft));
+
+    loginForm.style.setProperty('--login-card-diagonal-top', `${topPx.toFixed(2)}px`);
+    loginForm.style.setProperty('--login-card-diagonal-left', `${leftPx.toFixed(2)}px`);
+  }
+
+  function scheduleLoginDiagonalUpdate(){
+    if(typeof requestAnimationFrame === 'function'){
+      requestAnimationFrame(updateLoginDiagonal);
+    } else {
+      setTimeout(updateLoginDiagonal, 0);
+    }
+  }
+
   function updateLoginPreview(){
     const profile = profileFromUsername(usernameInput?.value);
     const isWideProfile = !!profile.wideLogo || !!profile.symbolLogo;
@@ -5559,6 +5591,7 @@ document.getElementById('infoMacOverlay')?.addEventListener('click', ()=> openIn
       head?.classList.toggle('is-full-logo-profile', isFullLogoProfile);
       head?.classList.toggle('is-symbol-profile', isSymbolProfile);
     }
+    scheduleLoginDiagonalUpdate();
   }
 
   function setAvatar(src, alt){
@@ -5598,6 +5631,7 @@ document.getElementById('infoMacOverlay')?.addEventListener('click', ()=> openIn
     if(passwordInput) passwordInput.value = '';
     setFeedback('', '');
     updateLoginPreview();
+    scheduleLoginDiagonalUpdate();
   }
 
   function applySession(session){
@@ -5639,6 +5673,9 @@ document.getElementById('infoMacOverlay')?.addEventListener('click', ()=> openIn
     usernameInput.addEventListener('input', updateLoginPreview);
     usernameInput.addEventListener('blur', updateLoginPreview);
   }
+
+  window.addEventListener('resize', scheduleLoginDiagonalUpdate);
+  window.addEventListener('load', scheduleLoginDiagonalUpdate);
 
   if(loginForm){
     loginForm.addEventListener('submit', async (event) => {
