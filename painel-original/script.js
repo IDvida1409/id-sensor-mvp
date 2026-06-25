@@ -5476,30 +5476,30 @@ document.getElementById('infoMacOverlay')?.addEventListener('click', ()=> openIn
     master: {
       displayName: 'IDvida Master',
       organization: 'ID sensor',
-      logo: './assets/idsensor-logo.png',
+      logo: './assets/idsensor-symbol.png',
       avatar: './assets/idsensor-symbol.png',
-      wideLogo: true
+      symbolLogo: true
     },
     admin1: {
       displayName: 'DM 1',
       organization: 'ID sensor',
-      logo: './assets/idsensor-logo.png',
+      logo: './assets/idsensor-symbol.png',
       avatar: './assets/idsensor-symbol.png',
-      wideLogo: true
+      symbolLogo: true
     },
     admin2: {
       displayName: 'DM 2',
       organization: 'ID sensor',
-      logo: './assets/idsensor-logo.png',
+      logo: './assets/idsensor-symbol.png',
       avatar: './assets/idsensor-symbol.png',
-      wideLogo: true
+      symbolLogo: true
     },
     area: {
       displayName: 'Teste IDvida',
       organization: 'ID sensor',
-      logo: './assets/idsensor-logo.png',
+      logo: './assets/idsensor-symbol.png',
       avatar: './assets/idsensor-symbol.png',
-      wideLogo: true
+      symbolLogo: true
     },
     cart: {
       displayName: 'Hospital Einstein',
@@ -5544,14 +5544,20 @@ document.getElementById('infoMacOverlay')?.addEventListener('click', ()=> openIn
 
   function updateLoginPreview(){
     const profile = profileFromUsername(usernameInput?.value);
-    const isWideProfile = !!profile.wideLogo;
+    const isWideProfile = !!profile.wideLogo || !!profile.symbolLogo;
+    const isFullLogoProfile = !!profile.wideLogo;
+    const isSymbolProfile = !!profile.symbolLogo;
     if(loginForm) loginForm.classList.toggle('is-wide-profile', isWideProfile);
     if(profilePreview) profilePreview.textContent = profile.organization;
     if(clientLogo){
       clientLogo.src = profile.logo;
       clientLogo.alt = profile.organization;
-      clientLogo.classList.toggle('is-wide-logo', isWideProfile);
-      clientLogo.closest('.login-card-head')?.classList.toggle('is-wide-profile', isWideProfile);
+      clientLogo.classList.toggle('is-wide-logo', isFullLogoProfile);
+      clientLogo.classList.toggle('is-symbol-logo', isSymbolProfile);
+      const head = clientLogo.closest('.login-card-head');
+      head?.classList.toggle('is-wide-profile', isWideProfile);
+      head?.classList.toggle('is-full-logo-profile', isFullLogoProfile);
+      head?.classList.toggle('is-symbol-profile', isSymbolProfile);
     }
   }
 
