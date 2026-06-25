@@ -5540,12 +5540,14 @@ document.getElementById('infoMacOverlay')?.addEventListener('click', ()=> openIn
 
   function updateLoginPreview(){
     const profile = profileFromUsername(usernameInput?.value);
+    const isWideProfile = !!profile.wideLogo;
+    if(loginForm) loginForm.classList.toggle('is-wide-profile', isWideProfile);
     if(profilePreview) profilePreview.textContent = profile.organization;
     if(clientLogo){
       clientLogo.src = profile.logo;
       clientLogo.alt = profile.organization;
-      clientLogo.classList.toggle('is-wide-logo', !!profile.wideLogo);
-      clientLogo.closest('.login-card-head')?.classList.toggle('is-wide-profile', !!profile.wideLogo);
+      clientLogo.classList.toggle('is-wide-logo', isWideProfile);
+      clientLogo.closest('.login-card-head')?.classList.toggle('is-wide-profile', isWideProfile);
     }
   }
 
