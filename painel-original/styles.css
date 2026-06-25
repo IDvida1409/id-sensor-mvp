@@ -20,15 +20,14 @@
   .login-kicker{margin:0;font-size:18px;font-weight:900;text-transform:none;letter-spacing:0;color:#111827}
   .login-brand-panel h1{margin:10px 0 0;font-size:38px;line-height:1.05;font-weight:900;letter-spacing:0;max-width:430px}
   .login-card{width:min(460px,100%);border-radius:8px;padding:30px 34px;background:transparent;border:1px solid #dce6f1;box-shadow:0 24px 70px rgba(31,58,95,.18);display:grid;gap:14px;position:relative;overflow:hidden;isolation:isolate}
-  .login-card::before{content:"";position:absolute;inset:0;z-index:0;background:#fff;pointer-events:none}
-  .login-card.is-wide-profile::before{clip-path:polygon(40% 0,100% 0,100% 100%,0 100%,0 50%)}
+  .login-card::before{content:"";position:absolute;inset:0;z-index:0;background:#fff;clip-path:polygon(40% 0,100% 0,100% 100%,0 100%,0 50%);pointer-events:none}
   .login-card > *{position:relative;z-index:1}
   .login-card-head{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:8px;padding-bottom:14px;border-bottom:1px solid #e1eaf3}
   .login-card-head.is-wide-profile{position:relative;gap:12px;padding-top:18px;padding-bottom:24px;border-bottom:0}
-  .login-card-head.is-wide-profile::before{content:"";position:absolute;z-index:0;top:19px;left:calc(50% - 150px);width:88px;height:88px;border-radius:50%;background:#fff;box-shadow:0 0 0 4px rgba(255,255,255,.96)}
+  .login-card-head.is-wide-profile::before{content:"";position:absolute;z-index:0;top:18px;left:calc(50% - 152px);width:96px;height:96px;border-radius:50%;background:#fff;box-shadow:0 0 0 5px #fff}
   .login-card-head.is-wide-profile > *{position:relative;z-index:1}
   .login-client-logo{width:104px;height:104px;object-fit:contain;border-radius:50%;background:#f5f9fd;padding:16px;border:1px solid #e2ebf4}
-  .login-client-logo.is-wide-logo{width:min(300px,100%);height:90px;border-radius:0;padding:0;border:0;background:transparent}
+  .login-client-logo.is-wide-logo{width:min(300px,100%);height:90px;border-radius:0;padding:0;border:0;background:transparent;filter:drop-shadow(-1px 0 #fff) drop-shadow(1px 0 #fff) drop-shadow(0 -1px #fff) drop-shadow(0 1px #fff)}
   .login-card-head.is-wide-profile strong{display:none}
   .login-card-head strong{display:block;font-size:20px;color:#1f3a5f}
   .login-card-head small{display:block;margin-top:0;color:#64748b;font-size:13px}

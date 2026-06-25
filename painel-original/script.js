@@ -5476,26 +5476,30 @@ document.getElementById('infoMacOverlay')?.addEventListener('click', ()=> openIn
     master: {
       displayName: 'IDvida Master',
       organization: 'ID sensor',
-      logo: './assets/idsensor-symbol.png',
-      avatar: './assets/idsensor-symbol.png'
+      logo: './assets/idsensor-logo.png',
+      avatar: './assets/idsensor-symbol.png',
+      wideLogo: true
     },
     admin1: {
       displayName: 'DM 1',
       organization: 'ID sensor',
-      logo: './assets/idsensor-symbol.png',
-      avatar: './assets/idsensor-symbol.png'
+      logo: './assets/idsensor-logo.png',
+      avatar: './assets/idsensor-symbol.png',
+      wideLogo: true
     },
     admin2: {
       displayName: 'DM 2',
       organization: 'ID sensor',
-      logo: './assets/idsensor-symbol.png',
-      avatar: './assets/idsensor-symbol.png'
+      logo: './assets/idsensor-logo.png',
+      avatar: './assets/idsensor-symbol.png',
+      wideLogo: true
     },
     area: {
       displayName: 'Teste IDvida',
       organization: 'ID sensor',
-      logo: './assets/idsensor-symbol.png',
-      avatar: './assets/idsensor-symbol.png'
+      logo: './assets/idsensor-logo.png',
+      avatar: './assets/idsensor-symbol.png',
+      wideLogo: true
     },
     cart: {
       displayName: 'Hospital Einstein',
