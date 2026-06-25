@@ -112,7 +112,7 @@ const KNOWN_COLLECTOR_CALIBRATIONS = {
 const ACTIVATION_CODE_TTL_MS = 24 * 60 * 60 * 1000;
 const PANEL_AUTH_USERS = {
   'idvida.master': {
-    password: process.env.PANEL_MASTER_PASSWORD || 'idevida816',
+    password: process.env.PANEL_MASTER_PASSWORD || 'idvida816',
     role: 'master',
     username: 'idvida.master',
     displayName: 'IDvida Master',
