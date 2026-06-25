@@ -5343,14 +5343,21 @@ document.getElementById('infoMacOverlay')?.addEventListener('click', ()=> openIn
     window.currentRole = role;
     syncGestaoCopy(role);
     const labelMap = {
-      master: 'Lab IDvida',
+      master: 'IDvida Master',
       admin1: 'Admin 1',
       admin2: 'Admin 2',
       area: 'Usuário Banco IDvida',
-      cart: 'Lab carrinho'
+      cart: 'Hospital Einstein'
     };
-    currentUserLabel.textContent = labelMap[role] || 'Lab IDvida';
+    currentUserLabel.textContent = labelMap[role] || 'IDvida Master';
+    document.body.dataset.panelRole = role;
     document.body.classList.toggle('cart-profile-mode', role === 'cart');
+    document.querySelectorAll('.auth-master-only').forEach((element) => {
+      element.hidden = role !== 'master';
+    });
+    if(typeof window.syncPanelRoleChrome === 'function'){
+      window.syncPanelRoleChrome(role);
+    }
 
     if(role === 'master'){
       if(typeof window.closeCartTrackingView === 'function') window.closeCartTrackingView();
@@ -5396,9 +5403,9 @@ document.getElementById('infoMacOverlay')?.addEventListener('click', ()=> openIn
       if(gestaoBtn) gestaoBtn.style.display = 'none';
       if(chipAreas) chipAreas.style.display = 'none';
       if(chipClients) chipClients.style.display = 'none';
-      if(subtitleEl) subtitleEl.textContent = 'Laboratório IDvida · Carrinhos de resíduo';
+      if(subtitleEl) subtitleEl.textContent = 'Hospital Einstein · Carrinhos de resíduo';
       if(typeof selectedArea !== 'undefined') selectedArea = 'Carrinhos de resíduo';
-      if(typeof selectedClient !== 'undefined') selectedClient = 'Laboratório IDvida';
+      if(typeof selectedClient !== 'undefined') selectedClient = 'Hospital Einstein';
       if(typeof window.openCartTrackingView === 'function') window.openCartTrackingView({ profileMode:true });
     }
 
@@ -5447,6 +5454,206 @@ document.getElementById('infoMacOverlay')?.addEventListener('click', ()=> openIn
   }
 
   applyRole('master');
+})();
+
+/* ===== PANEL AUTH | login profiles ===== */
+(function(){
+  const SESSION_KEY = 'idsensor.panel.session.v1';
+  const DEFAULT_API_BASE_URL = 'http://localhost:4000';
+  const loginShell = document.getElementById('loginShell');
+  const loginForm = document.getElementById('panelLoginForm');
+  const usernameInput = document.getElementById('loginUsername');
+  const passwordInput = document.getElementById('loginPassword');
+  const feedback = document.getElementById('loginFeedback');
+  const profilePreview = document.getElementById('loginProfilePreview');
+  const clientLogo = document.getElementById('loginClientLogo');
+  const userMenu = document.getElementById('userMenu');
+  const currentUserLabel = document.getElementById('currentUserLabel');
+  const currentUserAvatar = document.getElementById('currentUserAvatar');
+  const logoutButton = document.getElementById('panelLogoutBtn');
+
+  const profileChrome = {
+    master: {
+      displayName: 'IDvida Master',
+      organization: 'IDvida',
+      logo: './assets/idsensor-logo.png',
+      avatar: './assets/idsensor-logo.png'
+    },
+    cart: {
+      displayName: 'Hospital Einstein',
+      organization: 'Hospital Einstein',
+      logo: './assets/einstein-logo.png',
+      avatar: './assets/einstein-symbol.png'
+    }
+  };
+
+  function getAuthApiBaseUrl(){
+    try {
+      const configuredUrl = localStorage.getItem('PANEL_API_BASE_URL');
+      if(configuredUrl) return configuredUrl.replace(/\/+$/, '');
+    } catch(e) {}
+
+    try {
+      const host = window.location.hostname;
+      const port = window.location.port;
+      const protocol = window.location.protocol;
+      const isLocalHost = host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '';
+      const isStandaloneLocalPanel = isLocalHost && port && port !== '4000';
+
+      if(protocol.indexOf('http') === 0 && window.location.origin && !isStandaloneLocalPanel){
+        return window.location.origin.replace(/\/+$/, '');
+      }
+    } catch(e) {}
+
+    return DEFAULT_API_BASE_URL;
+  }
+
+  function setFeedback(message, tone){
+    if(!feedback) return;
+    feedback.textContent = message || '';
+    feedback.dataset.tone = tone || '';
+  }
+
+  function profileFromUsername(username){
+    const normalized = String(username || '').trim().toLowerCase();
+    return normalized.indexOf('einstein') >= 0 ? profileChrome.cart : profileChrome.master;
+  }
+
+  function updateLoginPreview(){
+    const profile = profileFromUsername(usernameInput?.value);
+    if(profilePreview) profilePreview.textContent = profile.organization;
+    if(clientLogo){
+      clientLogo.src = profile.logo;
+      clientLogo.alt = profile.organization;
+    }
+  }
+
+  function setAvatar(src, alt){
+    if(!currentUserAvatar) return;
+    currentUserAvatar.classList.add('panel-avatar');
+    let image = currentUserAvatar.querySelector('img');
+    if(!image){
+      image = document.createElement('img');
+      currentUserAvatar.textContent = '';
+      currentUserAvatar.appendChild(image);
+    }
+    image.src = src;
+    image.alt = alt || '';
+  }
+
+  function syncProtectedUi(role){
+    const isMaster = role === 'master';
+    document.querySelectorAll('.auth-master-only').forEach((element) => {
+      element.hidden = !isMaster;
+    });
+    document.querySelectorAll('.auth-master-switch').forEach((element) => {
+      element.hidden = window.activePanelSession?.role !== 'master';
+    });
+  }
+
+  function syncPanelRoleChrome(role){
+    const profile = profileChrome[role] || profileChrome.master;
+    if(currentUserLabel) currentUserLabel.textContent = profile.displayName;
+    setAvatar(profile.avatar, profile.organization);
+    syncProtectedUi(role);
+  }
+
+  function showLogin(){
+    document.body.classList.add('auth-pending');
+    document.body.classList.remove('auth-ready');
+    if(loginShell) loginShell.hidden = false;
+    if(passwordInput) passwordInput.value = '';
+    setFeedback('', '');
+    updateLoginPreview();
+  }
+
+  function applySession(session){
+    if(!session || !session.role) return showLogin();
+    window.activePanelSession = session;
+    try {
+      localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+    } catch(e) {}
+
+    document.body.classList.remove('auth-pending');
+    document.body.classList.add('auth-ready');
+    document.body.dataset.authRole = session.role;
+    if(loginShell) loginShell.hidden = true;
+    if(userMenu) userMenu.style.display = 'none';
+
+    if(typeof window.applyPanelRole === 'function'){
+      window.applyPanelRole(session.role);
+    } else {
+      syncPanelRoleChrome(session.role);
+    }
+  }
+
+  async function login(username, password){
+    const response = await fetch(`${getAuthApiBaseUrl()}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+    const payload = await response.json().catch(() => null);
+    if(!response.ok || !payload?.ok){
+      throw new Error(payload?.message || 'Usuario ou senha invalidos.');
+    }
+    return payload.data;
+  }
+
+  window.syncPanelRoleChrome = syncPanelRoleChrome;
+
+  if(usernameInput){
+    usernameInput.addEventListener('input', updateLoginPreview);
+    usernameInput.addEventListener('blur', updateLoginPreview);
+  }
+
+  if(loginForm){
+    loginForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const username = String(usernameInput?.value || '').trim().toLowerCase();
+      const password = String(passwordInput?.value || '');
+
+      if(!username || !password){
+        setFeedback('Informe usuario e senha.', 'error');
+        return;
+      }
+
+      setFeedback('Validando acesso...', 'info');
+      const submitButton = loginForm.querySelector('button[type="submit"]');
+      if(submitButton) submitButton.disabled = true;
+
+      try {
+        applySession(await login(username, password));
+        setFeedback('', '');
+      } catch(error) {
+        showLogin();
+        setFeedback(error?.message || 'Usuario ou senha invalidos.', 'error');
+      } finally {
+        if(submitButton) submitButton.disabled = false;
+      }
+    });
+  }
+
+  if(logoutButton){
+    logoutButton.addEventListener('click', (event) => {
+      event.stopPropagation();
+      try { localStorage.removeItem(SESSION_KEY); } catch(e) {}
+      window.activePanelSession = null;
+      if(userMenu) userMenu.style.display = 'none';
+      showLogin();
+    });
+  }
+
+  let savedSession = null;
+  try {
+    savedSession = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null');
+  } catch(e) {}
+
+  if(savedSession?.role){
+    applySession(savedSession);
+  } else {
+    showLogin();
+  }
 })();
 
 /* ===== SCRIPT BLOCK 21 | clone-overlays-outside ===== */

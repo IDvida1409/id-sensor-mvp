@@ -5,6 +5,40 @@
   }
   *{box-sizing:border-box}
   body{margin:0;font-family:Inter,Segoe UI,Arial,sans-serif;color:var(--text);background:radial-gradient(circle at top,#fff 0%,var(--bg) 45%,var(--bg2) 100%);padding:16px}
+  body.auth-pending{padding:0;background:#eef3f8}
+  body.auth-pending .app{display:none}
+  body.auth-ready .login-shell,
+  .login-shell[hidden],
+  .auth-master-only[hidden],
+  .auth-master-switch[hidden]{display:none !important}
+  .login-shell{min-height:100vh;display:grid;grid-template-columns:minmax(280px,42vw) minmax(320px,460px);align-items:center;justify-content:center;gap:42px;padding:42px;background:linear-gradient(135deg,#1f3a5f 0%,#244f7d 52%,#eef7f5 52%,#ffffff 100%)}
+  .login-brand-panel{min-height:520px;border-radius:8px;color:#fff;padding:44px;display:flex;flex-direction:column;justify-content:center;gap:26px;background:linear-gradient(160deg,rgba(255,255,255,.14),rgba(255,255,255,.04));border:1px solid rgba(255,255,255,.22);box-shadow:0 24px 64px rgba(8,31,59,.28)}
+  .login-brand-mark{width:min(360px,100%);padding:28px 30px;border-radius:8px;background:rgba(255,255,255,.94);box-shadow:0 16px 42px rgba(7,31,56,.24)}
+  .login-brand-mark img{display:block;width:100%;height:auto}
+  .login-kicker{margin:0 0 8px;font-size:13px;font-weight:900;text-transform:uppercase;letter-spacing:.08em;color:#7be1a0}
+  .login-brand-panel h1{margin:0;font-size:42px;line-height:1.04;font-weight:900;letter-spacing:0}
+  .login-brand-panel span{display:block;margin-top:12px;font-size:18px;color:#d7e9f5;font-weight:700}
+  .login-card{width:min(460px,100%);border-radius:8px;padding:34px;background:#fff;border:1px solid #dce6f1;box-shadow:0 24px 70px rgba(31,58,95,.18);display:grid;gap:18px}
+  .login-card-head{display:flex;align-items:center;gap:16px;padding-bottom:14px;border-bottom:1px solid #e1eaf3}
+  .login-client-logo{width:86px;height:60px;object-fit:contain;border-radius:8px;background:#f5f9fd;padding:8px;border:1px solid #e2ebf4}
+  .login-card-head strong{display:block;font-size:20px;color:#1f3a5f}
+  .login-card-head small{display:block;margin-top:4px;color:#64748b;font-size:13px}
+  .login-field{display:grid;gap:8px}
+  .login-field span{font-size:12px;font-weight:900;text-transform:uppercase;color:#476073}
+  .login-field input{height:48px;border:1px solid #ccd8e5;border-radius:8px;padding:0 14px;font:inherit;font-size:15px;color:#1f2a37;background:#fbfdff;outline:none}
+  .login-field input:focus{border-color:#2f78bb;box-shadow:0 0 0 3px rgba(47,120,187,.15);background:#fff}
+  .login-feedback{min-height:20px;margin:0;font-size:13px;font-weight:700;color:#64748b}
+  .login-feedback[data-tone="error"]{color:#b4232c}
+  .login-feedback[data-tone="info"]{color:#1f5f95}
+  .login-submit{height:50px;border:0;border-radius:8px;background:#1f3a5f;color:#fff;font:inherit;font-weight:900;cursor:pointer;box-shadow:0 12px 24px rgba(31,58,95,.22)}
+  .login-submit:hover{background:#244f7d}
+  .login-submit:disabled{opacity:.62;cursor:wait}
+  @media (max-width:900px){
+    .login-shell{grid-template-columns:1fr;padding:24px;background:linear-gradient(180deg,#1f3a5f 0%,#244f7d 42%,#eef7f5 42%,#ffffff 100%)}
+    .login-brand-panel{min-height:0;padding:26px}
+    .login-brand-panel h1{font-size:32px}
+    .login-card{padding:24px}
+  }
   .app{max-width:1600px;margin:0 auto}
   .topbar,.toolbar{display:flex;align-items:flex-start;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap}
   .topbar{margin-bottom:16px}.toolbar{margin-bottom:16px}
@@ -6899,6 +6933,24 @@ body.noc-open{
   width:28px !important;
   height:28px !important;
   flex:0 0 28px !important;
+}
+#userSwitcher .panel-avatar{
+  display:grid !important;
+  place-items:center !important;
+  overflow:hidden !important;
+  background:#fff !important;
+  border:1px solid #d7e4ef !important;
+  padding:2px !important;
+}
+#userSwitcher .panel-avatar:before,
+#userSwitcher .panel-avatar:after{
+  display:none !important;
+}
+#userSwitcher .panel-avatar img{
+  width:100% !important;
+  height:100% !important;
+  object-fit:contain !important;
+  display:block !important;
 }
 #userSwitcher .avatar:before{
   width:9px !important;

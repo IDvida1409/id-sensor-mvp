@@ -110,6 +110,33 @@ const KNOWN_COLLECTOR_CALIBRATIONS = {
 // C01/C02 are vertical ToF sensors. A stable distance far beyond calibration means the lid is open.
 
 const ACTIVATION_CODE_TTL_MS = 24 * 60 * 60 * 1000;
+const PANEL_AUTH_USERS = {
+  'idevida.master': {
+    password: process.env.PANEL_MASTER_PASSWORD || 'idevida816',
+    role: 'master',
+    username: 'idevida.master',
+    displayName: 'IDvida Master',
+    organization: 'IDvida',
+    logo: './assets/idsensor-logo.png',
+    avatar: './assets/idsensor-logo.png',
+    permissions: { fullAccess: true }
+  },
+  'idevida.h.einstein': {
+    password: process.env.PANEL_EINSTEIN_PASSWORD || 'einstein123456',
+    role: 'cart',
+    username: 'idevida.h.einstein',
+    displayName: 'Hospital Einstein',
+    organization: 'Hospital Einstein',
+    logo: './assets/einstein-logo.png',
+    avatar: './assets/einstein-symbol.png',
+    permissions: { cartOnly: true }
+  }
+};
+
+function sanitizePanelUser(user) {
+  const { password, ...safeUser } = user;
+  return safeUser;
+}
 
 function activationExpiresAt(createdAt = Date.now()) {
   return new Date(new Date(createdAt).getTime() + ACTIVATION_CODE_TTL_MS).toISOString();
@@ -1632,6 +1659,18 @@ addRoute('GET', '/health', async ({ res }) => {
     datetime: nowIso(),
     version
   });
+});
+
+addRoute('POST', '/api/auth/login', async ({ body, res }) => {
+  const username = String(body?.username || '').trim().toLowerCase();
+  const password = String(body?.password || '');
+  const user = PANEL_AUTH_USERS[username];
+
+  if (!user || user.password !== password) {
+    return fail(res, 401, 'Usuario ou senha invalidos.');
+  }
+
+  ok(res, sanitizePanelUser(user));
 });
 
 addRoute('POST', '/seed', async ({ res }) => {
