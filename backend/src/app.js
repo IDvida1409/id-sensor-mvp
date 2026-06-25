@@ -111,20 +111,20 @@ const KNOWN_COLLECTOR_CALIBRATIONS = {
 
 const ACTIVATION_CODE_TTL_MS = 24 * 60 * 60 * 1000;
 const PANEL_AUTH_USERS = {
-  'idevida.master': {
+  'idvida.master': {
     password: process.env.PANEL_MASTER_PASSWORD || 'idevida816',
     role: 'master',
-    username: 'idevida.master',
+    username: 'idvida.master',
     displayName: 'IDvida Master',
-    organization: 'IDSensor',
+    organization: 'ID sensor',
     logo: './assets/idsensor-symbol.png',
     avatar: './assets/idsensor-symbol.png',
     permissions: { fullAccess: true }
   },
-  'idevida.h.einstein': {
+  'idvida.einstein': {
     password: process.env.PANEL_EINSTEIN_PASSWORD || 'einstein123456',
     role: 'cart',
-    username: 'idevida.h.einstein',
+    username: 'idvida.einstein',
     displayName: 'Hospital Einstein',
     organization: 'Hospital Einstein',
     logo: './assets/einstein-logo.png',
@@ -1667,7 +1667,7 @@ addRoute('POST', '/api/auth/login', async ({ body, res }) => {
   const user = PANEL_AUTH_USERS[username];
 
   if (!user || user.password !== password) {
-    return fail(res, 401, 'Usuario ou senha invalidos.');
+    return fail(res, 401, 'Usuário ou senha inválidos.');
   }
 
   ok(res, sanitizePanelUser(user));

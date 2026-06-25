@@ -5458,7 +5458,7 @@ document.getElementById('infoMacOverlay')?.addEventListener('click', ()=> openIn
 
 /* ===== PANEL AUTH | login profiles ===== */
 (function(){
-  const SESSION_KEY = 'idsensor.panel.session.v1';
+  const SESSION_KEY = 'idsensor.panel.session.v2';
   const DEFAULT_API_BASE_URL = 'http://localhost:4000';
   const loginShell = document.getElementById('loginShell');
   const loginForm = document.getElementById('panelLoginForm');
@@ -5475,25 +5475,25 @@ document.getElementById('infoMacOverlay')?.addEventListener('click', ()=> openIn
   const profileChrome = {
     master: {
       displayName: 'IDvida Master',
-      organization: 'IDSensor',
+      organization: 'ID sensor',
       logo: './assets/idsensor-symbol.png',
       avatar: './assets/idsensor-symbol.png'
     },
     admin1: {
       displayName: 'DM 1',
-      organization: 'IDSensor',
+      organization: 'ID sensor',
       logo: './assets/idsensor-symbol.png',
       avatar: './assets/idsensor-symbol.png'
     },
     admin2: {
       displayName: 'DM 2',
-      organization: 'IDSensor',
+      organization: 'ID sensor',
       logo: './assets/idsensor-symbol.png',
       avatar: './assets/idsensor-symbol.png'
     },
     area: {
       displayName: 'Teste IDvida',
-      organization: 'IDSensor',
+      organization: 'ID sensor',
       logo: './assets/idsensor-symbol.png',
       avatar: './assets/idsensor-symbol.png'
     },
@@ -5545,6 +5545,7 @@ document.getElementById('infoMacOverlay')?.addEventListener('click', ()=> openIn
       clientLogo.src = profile.logo;
       clientLogo.alt = profile.organization;
       clientLogo.classList.toggle('is-wide-logo', !!profile.wideLogo);
+      clientLogo.closest('.login-card-head')?.classList.toggle('is-wide-profile', !!profile.wideLogo);
     }
   }
 
@@ -5615,7 +5616,7 @@ document.getElementById('infoMacOverlay')?.addEventListener('click', ()=> openIn
     });
     const payload = await response.json().catch(() => null);
     if(!response.ok || !payload?.ok){
-      throw new Error(payload?.message || 'Usuario ou senha invalidos.');
+      throw new Error(payload?.message || 'Usuário ou senha inválidos.');
     }
     return payload.data;
   }
@@ -5634,7 +5635,7 @@ document.getElementById('infoMacOverlay')?.addEventListener('click', ()=> openIn
       const password = String(passwordInput?.value || '');
 
       if(!username || !password){
-        setFeedback('Informe usuario e senha.', 'error');
+        setFeedback('Informe usuário e senha.', 'error');
         return;
       }
 
@@ -5647,7 +5648,7 @@ document.getElementById('infoMacOverlay')?.addEventListener('click', ()=> openIn
         setFeedback('', '');
       } catch(error) {
         showLogin();
-        setFeedback(error?.message || 'Usuario ou senha invalidos.', 'error');
+        setFeedback(error?.message || 'Usuário ou senha inválidos.', 'error');
       } finally {
         if(submitButton) submitButton.disabled = false;
       }
