@@ -11,16 +11,18 @@
   .login-shell[hidden],
   .auth-master-only[hidden],
   .auth-master-switch[hidden]{display:none !important}
-  .login-shell{position:fixed;inset:0;z-index:9999;width:100%;min-height:100vh;min-height:100dvh;display:grid;grid-template-columns:minmax(280px,42vw) minmax(320px,460px);align-items:center;justify-content:center;gap:48px;padding:42px;background:linear-gradient(135deg,#1f3a5f 0%,#244f7d 64%,#eef7f5 64%,#ffffff 100%);overflow:auto}
+  .login-shell{position:fixed;inset:0;z-index:9999;width:100%;min-height:100vh;min-height:100dvh;display:grid;grid-template-columns:minmax(280px,42vw) minmax(320px,460px);align-items:center;justify-content:center;gap:48px;padding:42px;background:linear-gradient(135deg,#eef7f5 0%,#ffffff 100%);overflow:auto;isolation:isolate}
+  .login-shell::before{content:"";position:absolute;inset:0;z-index:0;background:linear-gradient(135deg,#1f3a5f 0%,#244f7d 100%);clip-path:polygon(0 0,78% 0,34% 100%,0 100%);pointer-events:none}
+  .login-shell > *{position:relative;z-index:1}
   .login-brand-panel{min-height:520px;color:#fff;padding:44px 28px;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;gap:16px}
   .login-product-mark{width:132px;height:132px;border-radius:50%;display:grid;place-items:center;background:rgba(255,255,255,.96);box-shadow:0 18px 44px rgba(8,31,59,.24);padding:22px}
   .login-product-mark img{display:block;width:100%;height:100%;object-fit:contain}
   .login-kicker{margin:0;font-size:18px;font-weight:900;text-transform:none;letter-spacing:0;color:#111827}
   .login-brand-panel h1{margin:10px 0 0;font-size:38px;line-height:1.05;font-weight:900;letter-spacing:0;max-width:430px}
-  .login-card{width:min(460px,100%);min-height:512px;border-radius:8px;padding:34px;background:#fff;border:1px solid #dce6f1;box-shadow:0 24px 70px rgba(31,58,95,.18);display:grid;gap:18px;grid-template-rows:auto auto auto minmax(20px,auto) auto 1fr auto}
-  .login-card-head{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:8px;padding-bottom:18px;border-bottom:1px solid #e1eaf3}
+  .login-card{width:min(460px,100%);border-radius:8px;padding:30px 34px;background:#fff;border:1px solid #dce6f1;box-shadow:0 24px 70px rgba(31,58,95,.18);display:grid;gap:14px}
+  .login-card-head{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:8px;padding-bottom:14px;border-bottom:1px solid #e1eaf3}
   .login-client-logo{width:104px;height:104px;object-fit:contain;border-radius:50%;background:#f5f9fd;padding:16px;border:1px solid #e2ebf4}
-  .login-client-logo.is-wide-logo{width:min(290px,100%);height:118px;border-radius:8px;padding:10px 14px}
+  .login-client-logo.is-wide-logo{width:min(260px,100%);height:96px;border-radius:8px;padding:10px 14px}
   .login-card-head.is-wide-profile strong{display:none}
   .login-card-head strong{display:block;font-size:20px;color:#1f3a5f}
   .login-card-head small{display:block;margin-top:0;color:#64748b;font-size:13px}
@@ -28,20 +30,21 @@
   .login-field span{font-size:12px;font-weight:900;text-transform:uppercase;color:#476073}
   .login-field input{height:48px;border:1px solid #ccd8e5;border-radius:8px;padding:0 14px;font:inherit;font-size:15px;color:#1f2a37;background:#fbfdff;outline:none}
   .login-field input:focus{border-color:#2f78bb;box-shadow:0 0 0 3px rgba(47,120,187,.15);background:#fff}
-  .login-feedback{min-height:20px;margin:0;font-size:13px;font-weight:700;color:#64748b}
+  .login-feedback{min-height:14px;margin:0;font-size:13px;font-weight:700;color:#64748b}
   .login-feedback[data-tone="error"]{color:#b4232c}
   .login-feedback[data-tone="info"]{color:#1f5f95}
   .login-submit{height:50px;border:0;border-radius:8px;background:#1f3a5f;color:#fff;font:inherit;font-weight:900;cursor:pointer;box-shadow:0 12px 24px rgba(31,58,95,.22)}
   .login-submit:hover{background:#244f7d}
   .login-submit:disabled{opacity:.62;cursor:wait}
-  .login-powered{display:flex;align-items:center;justify-content:center;align-self:end;gap:8px;margin-top:10px;color:#6d7b8d;font-size:12px;font-weight:800}
+  .login-powered{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:0;color:#6d7b8d;font-size:12px;font-weight:800}
   .login-powered img{height:18px;width:auto;display:block}
   @media (max-width:900px){
-    .login-shell{grid-template-columns:1fr;padding:24px;background:linear-gradient(180deg,#1f3a5f 0%,#244f7d 48%,#eef7f5 48%,#ffffff 100%)}
+    .login-shell{grid-template-columns:1fr;padding:24px}
+    .login-shell::before{clip-path:polygon(0 0,100% 0,100% 48%,0 48%)}
     .login-brand-panel{min-height:0;padding:26px;align-items:center;text-align:center}
     .login-product-mark{width:96px;height:96px;padding:16px}
     .login-brand-panel h1{font-size:30px}
-    .login-card{min-height:auto;padding:24px}
+    .login-card{padding:24px}
     .login-card-head{align-items:center}
     .login-client-logo{width:86px;height:86px}
   }
