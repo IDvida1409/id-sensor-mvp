@@ -53,6 +53,7 @@ function payloadSummary(payload, result) {
 
   return {
     kind: rawData ? 'raw_hex' : 'json',
+    flag: payload?.flag || null,
     keys: payload && typeof payload === 'object' ? Object.keys(payload).slice(0, 12) : [],
     deviceCount: deviceArray ? deviceArray.length : null,
     gatewayMac: payload?.gatewayMac || null,
@@ -176,6 +177,90 @@ function parsePublish(header, body) {
   };
 }
 
+function bytesToHex(bytes) {
+  return Buffer.from(bytes).toString('hex');
+}
+
+function signedInt8(value) {
+  return value > 127 ? value - 256 : value;
+}
+
+function parseMokoTofSensor(bytes, startIndex) {
+  if (bytes[startIndex] !== 0x0b || bytes[startIndex + 1] !== 0x01) return null;
+  if (bytes[startIndex + 2] !== 0x00 || bytes[startIndex + 3] !== 0x06) return null;
+
+  const sensor = {
+    typeCode: 11,
+    type: 'tof',
+    mac: bytesToHex(bytes.subarray(startIndex + 4, startIndex + 10))
+  };
+  let offset = startIndex + 10;
+
+  while (offset + 3 <= bytes.length) {
+    if (
+      offset > startIndex + 10
+      && bytes[offset] === 0x0b
+      && bytes[offset + 1] === 0x01
+      && bytes[offset + 2] === 0x00
+      && bytes[offset + 3] === 0x06
+    ) {
+      break;
+    }
+
+    const tag = bytes[offset];
+    const length = bytes.readUInt16BE(offset + 1);
+    const valueStart = offset + 3;
+    const valueEnd = valueStart + length;
+    if (!length || valueEnd > bytes.length) break;
+
+    const value = bytes.subarray(valueStart, valueEnd);
+    if (tag === 0x02 && length >= 1) sensor.connectable = value[0] ? 'Connectable' : 'Non-connectable';
+    if (tag === 0x03 && length >= 4) sensor.timestamp = value.readUInt32BE(0);
+    if (tag === 0x03 && length >= 5) sensor.timezone = value[4];
+    if (tag === 0x04 && length >= 1) sensor.rssi = signedInt8(value[0]);
+    if (tag === 0x0a && length >= 2) sensor.manufacturerVendorCode = value.readUInt16BE(0);
+    if (tag === 0x0b && length >= 2) sensor.battVoltage = `${value.readUInt16BE(0)}mV`;
+    if (tag === 0x0c && length >= 2) sensor.userData = value.readUInt16BE(0);
+    if (tag === 0x0d && length >= 2) sensor.randingDistance = value.readUInt16BE(0);
+
+    offset = valueEnd;
+  }
+
+  return { sensor, nextOffset: offset };
+}
+
+function parseMokoRawPayload(hex) {
+  const bytes = Buffer.from(hex, 'hex');
+  if (bytes.length < 13 || bytes[0] !== 0xef) return null;
+
+  const flag = bytesToHex(bytes.subarray(1, 3));
+  const gatewayMac = bytesToHex(bytes.subarray(3, 9));
+  const length = bytes.readUInt16BE(9);
+  const parsed = {
+    flag,
+    gatewayMac,
+    length,
+    raw_data: hex
+  };
+
+  if (flag !== '30a0') return parsed;
+
+  const deviceArray = [];
+  for (let offset = 13; offset + 10 <= bytes.length;) {
+    const record = parseMokoTofSensor(bytes, offset);
+    if (!record) {
+      offset += 1;
+      continue;
+    }
+
+    deviceArray.push(record.sensor);
+    offset = Math.max(record.nextOffset, offset + 1);
+  }
+
+  parsed.deviceArray = deviceArray;
+  return parsed;
+}
+
 function parsePayload(payload) {
   const text = payload.toString('utf8').trim();
 
@@ -183,8 +268,12 @@ function parsePayload(payload) {
     return JSON.parse(text);
   }
 
+  const rawData = payload.toString('hex');
+  const parsedMokoPayload = parseMokoRawPayload(rawData);
+  if (parsedMokoPayload) return parsedMokoPayload;
+
   return {
-    raw_data: payload.toString('hex')
+    raw_data: rawData
   };
 }
 
@@ -341,5 +430,6 @@ function startMqttBridge({ storePayload }) {
 
 module.exports = {
   getMqttBridgeStatus,
+  parseMokoRawPayload,
   startMqttBridge
 };
