@@ -21,6 +21,13 @@ const defaultDatabasePath = process.env.LOCALAPPDATA
   ? path.join(process.env.LOCALAPPDATA, 'IDSensorMVP', 'id_sensor_mvp.db')
   : path.resolve(rootDir, './runtime/id_sensor_mvp.db');
 
+const defaultMqttHost = 'c0d66ad786a241bf91a20a7509b2ac7c.s1.eu.hivemq.cloud';
+const defaultMqttUsername = 'mkgw4';
+const defaultMqttClientId = 'idsensor-backend-einstein-01';
+const defaultMqttTopic = 'idsensor/einstein/mkgw4-01/uplink';
+const mqttPassword = process.env.MQTT_PASSWORD || '';
+const mqttBridgeEnabledDefault = mqttPassword ? 'true' : 'false';
+
 module.exports = {
   port: Number(process.env.PORT || 4000),
   databasePath: process.env.DATABASE_PATH
@@ -34,13 +41,13 @@ module.exports = {
   appDeviceTokenSecret: process.env.APP_DEVICE_TOKEN_SECRET || 'idsensor-mvp-local-device-token-secret',
   autoSeedDemoData: String(process.env.AUTO_SEED_DEMO_DATA || 'true') === 'true',
   mqttBridge: {
-    enabled: String(process.env.MQTT_BRIDGE_ENABLED || 'false') === 'true',
-    host: process.env.MQTT_HOST || '',
+    enabled: String(process.env.MQTT_BRIDGE_ENABLED || mqttBridgeEnabledDefault) === 'true',
+    host: process.env.MQTT_HOST || defaultMqttHost,
     port: Number(process.env.MQTT_PORT || 8883),
-    username: process.env.MQTT_USERNAME || '',
-    password: process.env.MQTT_PASSWORD || '',
-    clientId: process.env.MQTT_CLIENT_ID || '',
-    topic: process.env.MQTT_TOPIC || 'idsensor/einstein/mkgw4-01/uplink',
+    username: process.env.MQTT_USERNAME || defaultMqttUsername,
+    password: mqttPassword,
+    clientId: process.env.MQTT_CLIENT_ID || defaultMqttClientId,
+    topic: process.env.MQTT_TOPIC || defaultMqttTopic,
     rejectUnauthorized: String(process.env.MQTT_REJECT_UNAUTHORIZED || 'true') !== 'false'
   },
   version: '0.1.0'
