@@ -14,6 +14,7 @@ const { seedDatabase } = require('./db/seed');
 const { id, activationCode } = require('./utils/ids');
 const { buildDeviceCard } = require('./services/deviceCard');
 const { sendActivationEmail } = require('./services/emailService');
+const { getMqttBridgeStatus } = require('./services/mqttBridge');
 const { sendExpoPush } = require('./services/pushService');
 const { alertMessageForAlert } = require('./services/alertText');
 const {
@@ -1678,6 +1679,10 @@ addRoute('GET', '/health', async ({ res }) => {
     datetime: nowIso(),
     version
   });
+});
+
+addRoute('GET', '/api/mqtt/status', async ({ res }) => {
+  ok(res, getMqttBridgeStatus());
 });
 
 addRoute('POST', '/api/auth/login', async ({ body, res }) => {

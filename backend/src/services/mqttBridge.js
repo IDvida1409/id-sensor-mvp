@@ -11,6 +11,37 @@ const MQTT_SUBACK = 9;
 const MQTT_PINGREQ = 12;
 const MQTT_PINGRESP = 13;
 
+const status = {
+  enabled: mqttBridge.enabled,
+  started: false,
+  connected: false,
+  configured: Boolean(mqttBridge.host && mqttBridge.username && mqttBridge.password),
+  hostConfigured: Boolean(mqttBridge.host),
+  port: mqttBridge.port,
+  usernameConfigured: Boolean(mqttBridge.username),
+  passwordConfigured: Boolean(mqttBridge.password),
+  clientIdConfigured: Boolean(mqttBridge.clientId),
+  topic: mqttBridge.topic,
+  rejectUnauthorized: mqttBridge.rejectUnauthorized,
+  messagesReceived: 0,
+  readingsReceived: 0,
+  readingsStored: 0,
+  reconnects: 0,
+  lastConnectedAt: null,
+  lastDisconnectedAt: null,
+  lastMessageAt: null,
+  lastError: null,
+  stopRequested: false
+};
+
+function nowIso() {
+  return new Date().toISOString();
+}
+
+function getMqttBridgeStatus() {
+  return { ...status };
+}
+
 function encodeRemainingLength(length) {
   const bytes = [];
   let value = length;
@@ -135,11 +166,34 @@ function parsePayload(payload) {
 }
 
 function startMqttBridge({ storePayload }) {
-  if (!mqttBridge.enabled) return { started: false, reason: 'disabled' };
+  status.enabled = mqttBridge.enabled;
+  status.configured = Boolean(mqttBridge.host && mqttBridge.username && mqttBridge.password);
+  status.hostConfigured = Boolean(mqttBridge.host);
+  status.usernameConfigured = Boolean(mqttBridge.username);
+  status.passwordConfigured = Boolean(mqttBridge.password);
+  status.clientIdConfigured = Boolean(mqttBridge.clientId);
+  status.topic = mqttBridge.topic;
+  status.port = mqttBridge.port;
+  status.rejectUnauthorized = mqttBridge.rejectUnauthorized;
+  status.stopRequested = false;
+
+  if (!mqttBridge.enabled) {
+    status.started = false;
+    status.connected = false;
+    status.lastError = 'disabled';
+    return { started: false, reason: 'disabled' };
+  }
+
   if (!mqttBridge.host || !mqttBridge.username || !mqttBridge.password) {
+    status.started = false;
+    status.connected = false;
+    status.lastError = 'missing_config';
     console.warn('[mqtt] Ponte desativada: MQTT_HOST, MQTT_USERNAME ou MQTT_PASSWORD ausente.');
     return { started: false, reason: 'missing_config' };
   }
+
+  status.started = true;
+  status.lastError = null;
 
   let socket = null;
   let buffer = Buffer.alloc(0);
@@ -171,6 +225,9 @@ function startMqttBridge({ storePayload }) {
       if (returnCode !== 0) throw new Error(`CONNACK recusado pelo broker: ${returnCode}`);
 
       reconnectDelayMs = 5000;
+      status.connected = true;
+      status.lastConnectedAt = nowIso();
+      status.lastError = null;
       socket.write(subscribePacket(nextPacketId++, mqttBridge.topic));
       clearPing();
       pingTimer = setInterval(() => {
@@ -188,11 +245,17 @@ function startMqttBridge({ storePayload }) {
 
       const payload = parsePayload(message.payload);
       const result = storePayload(payload, { requireDistance: true });
+      status.messagesReceived += 1;
+      status.readingsReceived += Number(result.received || 0);
+      status.readingsStored += Number(result.stored || 0);
+      status.lastMessageAt = nowIso();
+      status.lastError = null;
       console.log(`[mqtt] ${message.topic}: ${result.stored}/${result.received} leitura(s) salvas.`);
     }
   }
 
   function connect() {
+    status.reconnects += status.lastDisconnectedAt ? 1 : 0;
     buffer = Buffer.alloc(0);
     clearPing();
     socket = tls.connect({
@@ -217,15 +280,21 @@ function startMqttBridge({ storePayload }) {
           handlePacket(next);
         }
       } catch (error) {
+        status.connected = false;
+        status.lastError = error.message;
         console.error(`[mqtt] Falha ao processar mensagem: ${error.message}`);
       }
     });
 
     socket.on('error', (error) => {
+      status.connected = false;
+      status.lastError = error.message;
       console.error(`[mqtt] Erro de conexao: ${error.message}`);
     });
 
     socket.on('close', () => {
+      status.connected = false;
+      status.lastDisconnectedAt = nowIso();
       clearPing();
       scheduleReconnect();
     });
@@ -237,6 +306,8 @@ function startMqttBridge({ storePayload }) {
     started: true,
     stop() {
       closedByApp = true;
+      status.stopRequested = true;
+      status.connected = false;
       if (reconnectTimer) clearTimeout(reconnectTimer);
       clearPing();
       if (socket) socket.destroy();
@@ -245,5 +316,6 @@ function startMqttBridge({ storePayload }) {
 }
 
 module.exports = {
+  getMqttBridgeStatus,
   startMqttBridge
 };
