@@ -30,6 +30,7 @@ const status = {
   lastConnectedAt: null,
   lastDisconnectedAt: null,
   lastMessageAt: null,
+  lastPayload: null,
   lastError: null,
   stopRequested: false
 };
@@ -40,6 +41,28 @@ function nowIso() {
 
 function getMqttBridgeStatus() {
   return { ...status };
+}
+
+function payloadSummary(payload, result) {
+  const deviceArray = Array.isArray(payload?.deviceArray) ? payload.deviceArray : null;
+  const firstDevice = deviceArray?.[0] || null;
+  const rawData = typeof payload?.raw_data === 'string' ? payload.raw_data : null;
+  const firstDistance = firstDevice
+    ? firstDevice.randingDistance ?? firstDevice.rangingDistance ?? firstDevice.distanceMm ?? firstDevice.distance
+    : payload?.randingDistance ?? payload?.rangingDistance ?? payload?.distanceMm ?? payload?.distance;
+
+  return {
+    kind: rawData ? 'raw_hex' : 'json',
+    keys: payload && typeof payload === 'object' ? Object.keys(payload).slice(0, 12) : [],
+    deviceCount: deviceArray ? deviceArray.length : null,
+    gatewayMac: payload?.gatewayMac || null,
+    firstMac: firstDevice?.mac || payload?.mac || null,
+    firstDistance: firstDistance ?? null,
+    rawPrefix: rawData ? rawData.slice(0, 160) : null,
+    received: Number(result?.received || 0),
+    stored: Number(result?.stored || 0),
+    ignored: Number(result?.ignored || 0)
+  };
 }
 
 function encodeRemainingLength(length) {
@@ -249,6 +272,7 @@ function startMqttBridge({ storePayload }) {
       status.readingsReceived += Number(result.received || 0);
       status.readingsStored += Number(result.stored || 0);
       status.lastMessageAt = nowIso();
+      status.lastPayload = payloadSummary(payload, result);
       status.lastError = null;
       console.log(`[mqtt] ${message.topic}: ${result.stored}/${result.received} leitura(s) salvas.`);
     }
