@@ -1,8 +1,10 @@
 const BLE_SENSOR_ID_KEYS = ['ble_sensor_id', 'sensor_id', 'sensorId', 'mac', 'ble_mac'];
-const DISTANCE_KEYS = ['distance_mm', 'distanceMm', 'distance'];
-const BATTERY_KEYS = ['battery', 'battery_percent', 'batt_vol', 'battery_voltage'];
+const DISTANCE_KEYS = ['distance_mm', 'distanceMm', 'distance', 'randingDistance', 'rangingDistance'];
+const BATTERY_PERCENT_KEYS = ['battery', 'battery_percent', 'batteryPercent'];
 const RSSI_BLE_KEYS = ['rssi_ble', 'rssiBle', 'rssi'];
 const SENSOR_LIST_KEYS = ['sensors', 'scan_data'];
+const BLE_GATEWAY_ID_KEYS = ['gateway_id', 'gatewayId', 'gw_id', 'gwId', 'device_id', 'deviceId', 'gatewayMac', 'gateway_mac'];
+const BLE_SENSOR_LIST_KEYS = ['sensors', 'scan_data', 'deviceArray', 'devices', 'beacons', 'data'];
 
 function asObject(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
@@ -41,6 +43,20 @@ function numberOrNull(value) {
   }
 
   return null;
+}
+
+function rawDataFrom(source) {
+  const object = asObject(source);
+  return stringOrNull(object.raw_data ?? object.rawData ?? object.advPacket ?? object.advertisingPacket);
+}
+
+function timestampIsoOrNull(value) {
+  const timestamp = numberOrNull(value);
+  if (timestamp === null) return null;
+
+  const ms = timestamp > 1000000000000 ? timestamp : timestamp * 1000;
+  const date = new Date(ms);
+  return Number.isFinite(date.getTime()) ? date.toISOString() : null;
 }
 
 function tofDistanceFromRawData(rawData) {
@@ -103,6 +119,21 @@ function sensorReadingsFrom(payload) {
   return [];
 }
 
+function directBleSensorReadingsFrom(payload) {
+  const root = asObject(payload);
+
+  for (const key of BLE_SENSOR_LIST_KEYS) {
+    const sensors = root[key];
+    if (!Array.isArray(sensors)) continue;
+
+    return sensors
+      .map(asObject)
+      .filter((sensor) => Object.keys(sensor).length > 0);
+  }
+
+  return Object.keys(root).length ? [root] : [];
+}
+
 function commonTtnFields(payload) {
   const root = ttnApplicationUpFrom(payload);
   const originalRoot = asObject(payload);
@@ -126,11 +157,12 @@ function normalizeSensorFields(decodedPayload, sensorPayload) {
   const sensor = asObject(sensorPayload);
   const source = Object.keys(sensor).length ? sensor : decoded;
   const explicitDistance = numberOrNull(firstDefined(source, DISTANCE_KEYS));
+  const rawData = rawDataFrom(source);
 
   return {
     bleSensorId: stringOrNull(firstDefined(source, BLE_SENSOR_ID_KEYS)),
-    distanceMm: explicitDistance ?? tofDistanceFromRawData(source.raw_data),
-    battery: numberOrNull(firstDefined(source, BATTERY_KEYS)),
+    distanceMm: explicitDistance ?? tofDistanceFromRawData(rawData),
+    battery: numberOrNull(firstDefined(source, BATTERY_PERCENT_KEYS)),
     rssiBle: numberOrNull(firstDefined(source, RSSI_BLE_KEYS))
   };
 }
@@ -164,8 +196,40 @@ function normalizeTtnCollectorPayloads(payload) {
   return sensors.map((sensor) => normalizeTtnCollectorPayload(payload, sensor));
 }
 
+function normalizeBleGatewayPayload(payload, sensorPayload = null) {
+  const root = asObject(payload);
+  const sensor = asObject(sensorPayload || payload);
+  const sensorFields = normalizeSensorFields(root, sensor);
+  const gatewayId = stringOrNull(firstDefined(root, BLE_GATEWAY_ID_KEYS));
+  const receivedAt = timestampIsoOrNull(sensor.timestamp ?? root.timestamp)
+    || stringOrNull(root.received_at ?? root.receivedAt ?? root.time ?? root.current_time ?? sensor.current_time);
+
+  return {
+    source: 'ble-gateway',
+    lorawanDeviceId: gatewayId,
+    lorawanGatewayId: gatewayId,
+    bleSensorId: sensorFields.bleSensorId,
+    distanceMm: sensorFields.distanceMm,
+    battery: sensorFields.battery,
+    rssiBle: sensorFields.rssiBle,
+    fPort: null,
+    rawPayload: rawDataFrom(sensor) || rawDataFrom(root),
+    receivedAt,
+    originalPayload: payload
+  };
+}
+
+function normalizeBleGatewayPayloads(payload) {
+  const sensors = directBleSensorReadingsFrom(payload);
+  if (!sensors.length) return [normalizeBleGatewayPayload(payload)];
+
+  return sensors.map((sensor) => normalizeBleGatewayPayload(payload, sensor));
+}
+
 module.exports = {
   tofDistanceFromRawData,
+  normalizeBleGatewayPayload,
+  normalizeBleGatewayPayloads,
   normalizeTtnCollectorPayload,
   normalizeTtnCollectorPayloads
 };

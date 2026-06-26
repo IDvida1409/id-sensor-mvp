@@ -33,5 +33,15 @@ module.exports = {
   resendApiKey: process.env.RESEND_API_KEY || '',
   appDeviceTokenSecret: process.env.APP_DEVICE_TOKEN_SECRET || 'idsensor-mvp-local-device-token-secret',
   autoSeedDemoData: String(process.env.AUTO_SEED_DEMO_DATA || 'true') === 'true',
+  mqttBridge: {
+    enabled: String(process.env.MQTT_BRIDGE_ENABLED || 'false') === 'true',
+    host: process.env.MQTT_HOST || '',
+    port: Number(process.env.MQTT_PORT || 8883),
+    username: process.env.MQTT_USERNAME || '',
+    password: process.env.MQTT_PASSWORD || '',
+    clientId: process.env.MQTT_CLIENT_ID || '',
+    topic: process.env.MQTT_TOPIC || 'idsensor/einstein/mkgw4-01/uplink',
+    rejectUnauthorized: String(process.env.MQTT_REJECT_UNAUTHORIZED || 'true') !== 'false'
+  },
   version: '0.1.0'
 };

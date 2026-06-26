@@ -19,6 +19,7 @@ const { alertMessageForAlert } = require('./services/alertText');
 const {
   OFFLINE_AFTER_MS,
   calculateFillPercentage,
+  normalizeBleGatewayPayloads,
   normalizeTtnCollectorPayloads
 } = require('./integrations/ttn');
 const {
@@ -889,6 +890,24 @@ function collectorReadingsHistory(db, options = {}) {
       return sensorId && (!macFilters.length || macFilters.includes(sensorId));
     })
     .map((row) => serializeCollectorReading(row, collectorCalibrationForSensor(db, row.ble_sensor_id)));
+}
+
+function storeBleGatewayPayload(payload, options = {}) {
+  const db = getDb();
+  const normalizedReadings = normalizeBleGatewayPayloads(payload);
+  const readingsToStore = options.requireDistance
+    ? normalizedReadings.filter((reading) => finiteNumberOrNull(reading.distanceMm) !== null)
+    : normalizedReadings;
+  const storedReadings = readingsToStore
+    .map((reading) => saveCollectorReading(db, reading))
+    .filter(Boolean);
+
+  return {
+    received: normalizedReadings.length,
+    stored: storedReadings.length,
+    ignored: normalizedReadings.length - storedReadings.length,
+    readings: storedReadings
+  };
 }
 
 function areaIdsAllowAll(value) {
@@ -1807,6 +1826,10 @@ addRoute('POST', '/api/ttn/uplink', async ({ body, res }) => {
   });
 });
 
+addRoute('POST', '/api/ble/uplink', async ({ body, res }) => {
+  ok(res, storeBleGatewayPayload(body));
+});
+
 addRoute('GET', '/api/cart-tracking/readings', async ({ query, res }) => {
   const macFilters = String(query.mac || '')
     .split(',')
@@ -2415,5 +2438,6 @@ async function app(req, res) {
 }
 
 module.exports = {
-  app
+  app,
+  storeBleGatewayPayload
 };
