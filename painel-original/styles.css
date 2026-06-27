@@ -13960,7 +13960,7 @@ body.analytic-report-open{overflow:hidden}
 
 .cart-tracking-v2 .cart-items-grid{
   gap:8px !important;
-  grid-template-columns:repeat(2,minmax(0,1fr)) !important;
+  grid-template-columns:repeat(auto-fill,minmax(126px,1fr)) !important;
 }
 
 @media (max-width:900px){
