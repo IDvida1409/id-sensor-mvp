@@ -622,12 +622,16 @@ function collectorLevelForRow(row, fillPercentage, calibration = null) {
 
 function collectorStatusForRow(row, fillPercentage, calibration = null) {
   if (isCollectorReadingOffline(row.created_at)) return 'offline';
+  const normalizedCalibration = normalizeCollectorCalibration(calibration);
   const storedStatus = String(row?.status || '').trim().toLowerCase();
   if ([COLLECTOR_SENSOR_REMOVED_STATUS, COLLECTOR_SENSOR_OBSTRUCTED_STATUS].includes(storedStatus)) {
     return storedStatus;
   }
+  if (!normalizedCalibration.lidDetectionEnabled && storedStatus === COLLECTOR_LID_OPEN_STATUS) {
+    return collectorStatusForLevel(collectorLevelForRow(row, fillPercentage, normalizedCalibration));
+  }
   if (collectorLidStateForRow(row) === COLLECTOR_LID_OPEN_STATE) return COLLECTOR_LID_OPEN_STATUS;
-  return collectorStatusForLevel(collectorLevelForRow(row, fillPercentage, calibration));
+  return collectorStatusForLevel(collectorLevelForRow(row, fillPercentage, normalizedCalibration));
 }
 
 function compactBleSensorId(value) {
@@ -685,6 +689,11 @@ function serializeCollectorReading(row, calibration = null) {
   const fillPercentage = normalizeCollectorFillPercentage(row.fill_percentage);
   const confirmedLidState = collectorLidStateForRow(row);
   const levelStatus = collectorLevelForRow(row, fillPercentage, rowCalibration);
+  const status = collectorStatusForRow(row, fillPercentage, rowCalibration);
+  const lidDetectionEnabled = normalizeCollectorCalibration(rowCalibration).lidDetectionEnabled;
+  const lidOpen = lidDetectionEnabled
+    && ![COLLECTOR_SENSOR_REMOVED_STATUS, COLLECTOR_SENSOR_OBSTRUCTED_STATUS].includes(status)
+    && confirmedLidState === COLLECTOR_LID_OPEN_STATE;
 
   return {
     id: row.id,
@@ -694,10 +703,10 @@ function serializeCollectorReading(row, calibration = null) {
     lorawanGatewayId: row.lorawan_gateway_id,
     distanceMm: finiteNumberOrNull(row.distance_mm),
     fillPercentage,
-    status: collectorStatusForRow(row, fillPercentage, rowCalibration),
+    status,
     levelStatus,
-    confirmedLidState,
-    lidOpen: confirmedLidState === COLLECTOR_LID_OPEN_STATE,
+    confirmedLidState: lidOpen ? COLLECTOR_LID_OPEN_STATE : COLLECTOR_LID_CLOSED_STATE,
+    lidOpen,
     battery: finiteNumberOrNull(row.battery),
     batteryVoltageMv: finiteNumberOrNull(row.battery_voltage_mv),
     rssiBle: finiteNumberOrNull(row.rssi_ble),
@@ -775,6 +784,12 @@ function saveCollectorReading(db, normalizedReading) {
       ? (samePayloadAsPrevious ? previousLidClosedReadings : previousLidClosedReadings + 1)
       : 0;
     confirmedLidState = COLLECTOR_LID_CLOSED_STATE;
+  }
+
+  if (!calibration.lidDetectionEnabled || sensorRemovedCandidate || sensorObstructedCandidate) {
+    confirmedLidState = COLLECTOR_LID_CLOSED_STATE;
+    consecutiveLidOpenReadings = 0;
+    consecutiveLidClosedReadings = 0;
   }
 
   const rawFillPercentage = calculateCollectorFillPercentage(distanceMm, calibration);

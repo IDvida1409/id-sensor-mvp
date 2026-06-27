@@ -9874,17 +9874,21 @@ if(false){(function(){
       const gatewayRoomId = roomByGateway.get(String(reading.lorawanDeviceId || '').trim().toLowerCase());
       const rawStatus = String(reading.status || '').toLowerCase();
       const confirmedLidState = String(reading.confirmedLidState || '').toLowerCase();
-      const readingCalibration = reading.calibration
-        ? normalizeCartCalibration({ ...cartCalibration(cart), ...reading.calibration })
-        : null;
-      const readingLidOpen = [
-        'lid_open',
-        'open_lid',
-        'tampa_aberta',
-        'tampa aberta'
-      ].includes(rawStatus) || confirmedLidState === 'open' || reading.lidOpen === true;
-      const backendFill = normalizeCartFillPercentage(fill);
       const currentCalibration = cartCalibration(cart);
+      const readingCalibration = reading.calibration
+        ? normalizeCartCalibration({ ...currentCalibration, ...reading.calibration })
+        : null;
+      const effectiveCalibration = readingCalibration || currentCalibration;
+      const sensorPositionAlert = rawStatus === 'sensor_removed' || rawStatus === 'sensor_obstructed';
+      const readingLidOpen = effectiveCalibration.lidDetectionEnabled === true
+        && !sensorPositionAlert
+        && ([
+          'lid_open',
+          'open_lid',
+          'tampa_aberta',
+          'tampa aberta'
+        ].includes(rawStatus) || confirmedLidState === 'open' || reading.lidOpen === true);
+      const backendFill = normalizeCartFillPercentage(fill);
       const shouldUseBackendCalibration = readingCalibration
         && (readingCalibration.updatedAt || !currentCalibration.updatedAt);
       if(shouldUseBackendCalibration && JSON.stringify(cart.calibration || null) !== JSON.stringify(readingCalibration)){
@@ -10060,6 +10064,8 @@ if(false){(function(){
 
   function isLidOpen(cart){
     const rawStatus = String(cart?.collectorStatus || cart?.readingStatus || cart?.sensorStatus || '').toLowerCase();
+    if(rawStatus === 'sensor_removed' || rawStatus === 'sensor_obstructed') return false;
+    if(cartCalibration(cart).lidDetectionEnabled !== true) return false;
     const lidState = String(cart?.confirmedLidState || '').toLowerCase();
     return cart?.lidOpen === true || lidState === 'open' || [
       'lid_open',
