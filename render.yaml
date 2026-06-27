@@ -2,7 +2,7 @@ services:
   - type: web
     name: id-sensor-mvp
     runtime: node
-    plan: free
+    plan: starter
     buildCommand: npm install
     startCommand: npm start
     envVars:
@@ -16,6 +16,8 @@ services:
         value: idsensor-mvp-test-device-token-secret
       - key: PUBLIC_API_URL
         value: https://id-sensor-mvp.onrender.com
+      - key: DATABASE_URL
+        sync: false
       - key: MQTT_BRIDGE_ENABLED
         value: true
       - key: MQTT_HOST

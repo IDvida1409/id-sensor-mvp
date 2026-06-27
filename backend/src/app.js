@@ -32,7 +32,7 @@ const {
   startSimulation,
   stopSimulation
 } = require('./services/simulationService');
-const { appDeviceTokenSecret, publicApiUrl, version } = require('./config');
+const { appDeviceTokenSecret, databaseUrl, publicApiUrl, version } = require('./config');
 
 const routes = [];
 const panelDir = path.resolve(__dirname, '../../painel-original');
@@ -1683,6 +1683,13 @@ addRoute('GET', '/health', async ({ res }) => {
 
 addRoute('GET', '/api/mqtt/status', async ({ res }) => {
   ok(res, getMqttBridgeStatus());
+});
+
+addRoute('GET', '/api/db/status', async ({ res }) => {
+  ok(res, {
+    dialect: databaseUrl ? 'postgres' : 'sqlite',
+    databaseUrlConfigured: Boolean(databaseUrl)
+  });
 });
 
 addRoute('POST', '/api/auth/login', async ({ body, res }) => {

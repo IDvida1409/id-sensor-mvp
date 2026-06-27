@@ -1,15 +1,21 @@
 const fs = require('node:fs');
 const path = require('node:path');
-const { DatabaseSync } = require('node:sqlite');
-const { databasePath } = require('../config');
+const { databasePath, databaseUrl } = require('../config');
+const { PostgresSyncDatabase } = require('./postgresSyncDatabase');
 
 let db;
 
 function getDb() {
   if (!db) {
-    fs.mkdirSync(path.dirname(databasePath), { recursive: true });
-    db = new DatabaseSync(databasePath);
-    db.exec('PRAGMA foreign_keys = ON');
+    if (databaseUrl) {
+      db = new PostgresSyncDatabase(databaseUrl);
+    } else {
+      const { DatabaseSync } = require('node:sqlite');
+      fs.mkdirSync(path.dirname(databasePath), { recursive: true });
+      db = new DatabaseSync(databasePath);
+      db.dialect = 'sqlite';
+      db.exec('PRAGMA foreign_keys = ON');
+    }
   }
 
   return db;
@@ -224,7 +230,9 @@ function initDb() {
 }
 
 function ensureColumn(database, table, column, definition) {
-  const columns = database.prepare(`PRAGMA table_info(${table})`).all();
+  const columns = database.dialect === 'postgres'
+    ? database.columns(table)
+    : database.prepare(`PRAGMA table_info(${table})`).all();
   if (columns.some((item) => item.name === column)) return;
   database.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
 }

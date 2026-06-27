@@ -30,6 +30,7 @@ const mqttBridgeEnabledDefault = mqttPassword ? 'true' : 'false';
 
 module.exports = {
   port: Number(process.env.PORT || 4000),
+  databaseUrl: process.env.DATABASE_URL || '',
   databasePath: process.env.DATABASE_PATH
     ? path.resolve(rootDir, process.env.DATABASE_PATH)
     : defaultDatabasePath,

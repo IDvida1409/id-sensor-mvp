@@ -12,5 +12,8 @@
     "backend": "node backend/src/server.js",
     "seed": "node backend/src/scripts/seed.js",
     "mobile:start": "powershell -ExecutionPolicy Bypass -File ./tools/start-mobile-expo.ps1"
+  },
+  "dependencies": {
+    "pg": "^8.16.3"
   }
 }
