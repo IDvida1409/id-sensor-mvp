@@ -10769,6 +10769,8 @@ if(false){(function(){
 
     const query = normalizeCartSearch(cartSearchTerm);
     const canManage = canManageCartSettings();
+    const settingsToggle = document.getElementById('cartSettingsToggle');
+    if(settingsToggle) settingsToggle.hidden = !canManage;
     const visibleRooms = state.rooms.filter(room => {
       if(activeRoomFilter && room.id !== activeRoomFilter) return false;
       if(SPECIAL_ROOM_IDS.has(room.id) && room.id !== activeRoomFilter) return false;
@@ -10785,18 +10787,25 @@ if(false){(function(){
       return `
         <article class="cart-room-card">
           <header class="cart-room-header">
-            <div>
+            <div class="cart-room-title-block">
+              <span class="cart-room-kicker">Sala atual</span>
               <h2>${escapeHtml(room.name)}</h2>
-              ${canManage
-                ? `<button type="button" class="cart-room-gateway" data-gateway-room="${escapeHtml(room.id)}">Gateway: ${escapeHtml(room.gatewayDeviceId || 'nao vinculado')}</button>`
-                : `<span class="cart-room-gateway readonly">Gateway: ${escapeHtml(room.gatewayDeviceId || 'nao vinculado')}</span>`}
+              <span class="cart-room-gateway readonly">Gateway: ${escapeHtml(room.gatewayDeviceId || 'nao vinculado')}</span>
             </div>
+            ${canManage ? `
+              <button type="button" class="cart-room-info-btn" data-room-settings="${escapeHtml(room.id)}" aria-label="Configurar ${escapeHtml(room.name)}">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <circle cx="12" cy="12" r="9"></circle>
+                  <path d="M12 10v6"></path>
+                  <path d="M12 7h.01"></path>
+                </svg>
+              </button>
+            ` : ''}
           </header>
           <div class="cart-items-grid">
             ${renderRoomCarts(room, state.carts)}
           </div>
           ${renderRoomTransitRows(room, state.carts)}
-          ${canManage ? `<footer class="cart-room-footer"><button type="button" data-cart-add="${escapeHtml(room.id)}">Adicionar carrinho</button></footer>` : ''}
         </article>
       `;
     }).join('');
@@ -10837,6 +10846,12 @@ if(false){(function(){
           <input id="cartSearchInput" type="search" placeholder="Buscar sala, CR ou MAC">
         </label>
         <div class="cart-tools-strip">
+          <button type="button" class="cart-settings-toggle" id="cartSettingsToggle" aria-label="Configurar C.R.">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 0 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 0 1-2.8-2.8l.1-.1A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.6-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1A2 2 0 0 1 7.1 4.2l.1.1a1.7 1.7 0 0 0 1.9.3h.1a1.7 1.7 0 0 0 .9-1.5V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 0 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9v.1a1.7 1.7 0 0 0 1.5.9h.1a2 2 0 0 1 0 4H21a1.7 1.7 0 0 0-1.6.9z"></path>
+            </svg>
+          </button>
           <button type="button" class="cart-search-toggle" id="cartSearchToggle" aria-label="Pesquisar CR" aria-expanded="false" aria-controls="cartSearchInput">
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <circle cx="11" cy="11" r="6"></circle>
@@ -10919,6 +10934,30 @@ if(false){(function(){
           <button type="button" class="cart-primary-btn" id="cartDetailSaveBtn">Salvar</button>
         </div>
       </div>
+      <div class="cart-settings-overlay" id="cartSettingsOverlay" hidden>
+        <div class="cart-settings-modal">
+          <button type="button" class="cart-detail-close" id="cartSettingsCloseBtn">x</button>
+          <h2>Configuracoes</h2>
+          <div class="cart-settings-actions">
+            <button type="button" class="cart-primary-btn" id="cartAddDeviceBtn">Adicionar dispositivo</button>
+          </div>
+        </div>
+      </div>
+      <div class="cart-room-settings-overlay" id="cartRoomSettingsOverlay" hidden>
+        <div class="cart-room-settings-modal">
+          <button type="button" class="cart-detail-close" id="cartRoomSettingsCloseBtn">x</button>
+          <h2>Configurar sala</h2>
+          <label>
+            Nome da sala
+            <input id="cartRoomSettingsName" type="text" placeholder="SALA BLOCO B1">
+          </label>
+          <label>
+            Gateway
+            <input id="cartRoomSettingsGateway" type="text" placeholder="e6a69dbb6d2d">
+          </label>
+          <button type="button" class="cart-primary-btn" id="cartRoomSettingsSaveBtn">Salvar</button>
+        </div>
+      </div>
       <div class="cart-room-modal-overlay" id="cartRoomModalOverlay" hidden>
         <div class="cart-room-modal">
           <button type="button" class="cart-detail-close" id="cartRoomModalCloseBtn">x</button>
@@ -10965,8 +11004,22 @@ if(false){(function(){
     document.getElementById('cartSearchInput')?.addEventListener('blur', () => {
       window.setTimeout(syncCartSearchUi, 120);
     });
+    document.getElementById('cartSettingsToggle')?.addEventListener('click', openCartSettings);
+    document.getElementById('cartSettingsCloseBtn')?.addEventListener('click', closeCartSettings);
+    document.getElementById('cartSettingsOverlay')?.addEventListener('click', event => {
+      if(event.target.id === 'cartSettingsOverlay') closeCartSettings();
+    });
+    document.getElementById('cartAddDeviceBtn')?.addEventListener('click', () => {
+      closeCartSettings();
+      openCartDetail(null, '');
+    });
+    document.getElementById('cartRoomSettingsCloseBtn')?.addEventListener('click', closeRoomSettings);
+    document.getElementById('cartRoomSettingsOverlay')?.addEventListener('click', event => {
+      if(event.target.id === 'cartRoomSettingsOverlay') closeRoomSettings();
+    });
+    document.getElementById('cartRoomSettingsSaveBtn')?.addEventListener('click', saveRoomSettings);
     document.getElementById('cartTrackingView')?.addEventListener('click', event => {
-      if(event.target.closest('.cart-search-box') || event.target.closest('#cartSearchToggle')) return;
+      if(event.target.closest('.cart-search-box') || event.target.closest('#cartSearchToggle') || event.target.closest('#cartSettingsToggle')) return;
       window.setTimeout(syncCartSearchUi, 0);
     });
     document.getElementById('cartRoomGrid')?.addEventListener('click', handleRoomClick);
@@ -11062,10 +11115,61 @@ if(false){(function(){
     openCartRoomModal(roomId === HYGIENE_ROOM_ID ? 'hygiene' : 'residue');
   }
 
+  function openCartSettings(){
+    if(!canManageCartSettings()) return;
+    const overlay = document.getElementById('cartSettingsOverlay');
+    if(overlay) overlay.hidden = false;
+  }
+
+  function closeCartSettings(){
+    const overlay = document.getElementById('cartSettingsOverlay');
+    if(overlay) overlay.hidden = true;
+  }
+
+  function openRoomSettings(roomId){
+    if(!canManageCartSettings()) return;
+    const state = readState();
+    const room = state.rooms.find(item => item.id === roomId);
+    const overlay = document.getElementById('cartRoomSettingsOverlay');
+    if(!room || !overlay) return;
+    overlay.dataset.roomId = room.id;
+    const name = document.getElementById('cartRoomSettingsName');
+    const gateway = document.getElementById('cartRoomSettingsGateway');
+    if(name) name.value = room.name || '';
+    if(gateway) gateway.value = room.gatewayDeviceId || '';
+    overlay.hidden = false;
+    name?.focus();
+  }
+
+  function closeRoomSettings(){
+    const overlay = document.getElementById('cartRoomSettingsOverlay');
+    if(overlay) overlay.hidden = true;
+  }
+
+  function saveRoomSettings(){
+    if(!canManageCartSettings()) return;
+    const overlay = document.getElementById('cartRoomSettingsOverlay');
+    const roomId = overlay?.dataset.roomId;
+    const state = readState();
+    const room = state.rooms.find(item => item.id === roomId);
+    if(!room) return;
+    const name = document.getElementById('cartRoomSettingsName')?.value.trim();
+    const gateway = document.getElementById('cartRoomSettingsGateway')?.value.trim();
+    if(!name){
+      alert('Informe o nome da sala.');
+      return;
+    }
+    room.name = name.toUpperCase();
+    room.gatewayDeviceId = gateway || '';
+    saveState(state);
+    closeRoomSettings();
+    renderRooms();
+  }
+
   function handleRoomClick(event){
     const filterButton = event.target.closest('[data-cart-filter]');
     const cartButton = event.target.closest('[data-cart-id]');
-    const addButton = event.target.closest('[data-cart-add]');
+    const roomSettingsButton = event.target.closest('[data-room-settings]');
     const gatewayButton = event.target.closest('[data-gateway-room]');
 
     if(filterButton){
@@ -11078,14 +11182,8 @@ if(false){(function(){
       return;
     }
 
-    if(addButton){
-      if(!canManageCartSettings()) return;
-      const state = readState();
-      if(state.carts.length >= 3){
-        alert('Neste teste vamos trabalhar com três carrinhos apenas.');
-        return;
-      }
-      openCartDetail(null, addButton.getAttribute('data-cart-add'));
+    if(roomSettingsButton){
+      openRoomSettings(roomSettingsButton.getAttribute('data-room-settings'));
       return;
     }
 
@@ -11110,7 +11208,7 @@ if(false){(function(){
     if(!overlay) return;
 
     overlay.dataset.cartId = cart?.id || '';
-    overlay.dataset.roomId = cart?.roomId || roomId || state.rooms[0]?.id || '';
+    overlay.dataset.roomId = cart?.roomId || roomId || '';
 
     const title = document.getElementById('cartDetailTitle');
     const meta = document.getElementById('cartDetailMeta');
@@ -11119,7 +11217,7 @@ if(false){(function(){
     const saveBtn = document.getElementById('cartDetailSaveBtn');
     const canManage = canManageCartSettings();
 
-    if(title) title.textContent = cart?.name || 'Novo carrinho';
+    if(title) title.textContent = cart?.name || 'Novo dispositivo';
     if(meta){
       const readingDetail = cart ? cartReadingDetail(cart) : '';
       const readingText = readingDetail ? ` - ${readingDetail}` : '';
@@ -11147,7 +11245,7 @@ if(false){(function(){
     const overlay = document.getElementById('cartDetailOverlay');
     const state = readState();
     const cartId = overlay?.dataset.cartId;
-    const roomId = overlay?.dataset.roomId || state.rooms[0]?.id;
+    const roomId = overlay?.dataset.roomId || '';
     const name = document.getElementById('cartDetailName')?.value.trim();
     const mac = formatMac(document.getElementById('cartDetailMac')?.value);
 
@@ -11169,7 +11267,7 @@ if(false){(function(){
         name,
         mac,
         roomId,
-        locationStatus:'in_room',
+        locationStatus: roomId ? 'in_room' : 'offline',
         fillPercentage:0,
         consecutiveCriticalReadings:0,
         calibration:clone(DEFAULT_CART_CALIBRATION),
