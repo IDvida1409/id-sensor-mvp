@@ -185,9 +185,22 @@ function signedInt8(value) {
   return value > 127 ? value - 256 : value;
 }
 
+function isMokoTofRecordAt(bytes, offset) {
+  return bytes[offset] === 0x0b
+    && bytes[offset + 1] === 0x01
+    && bytes[offset + 2] === 0x00
+    && bytes[offset + 3] === 0x06;
+}
+
+function isMokoTofRecordSeparatorAt(bytes, offset) {
+  return bytes[offset] === 0x00
+    && bytes[offset + 1] === 0x00
+    && bytes[offset + 2] === 0x01
+    && isMokoTofRecordAt(bytes, offset + 3);
+}
+
 function parseMokoTofSensor(bytes, startIndex) {
-  if (bytes[startIndex] !== 0x0b || bytes[startIndex + 1] !== 0x01) return null;
-  if (bytes[startIndex + 2] !== 0x00 || bytes[startIndex + 3] !== 0x06) return null;
+  if (!isMokoTofRecordAt(bytes, startIndex)) return null;
 
   const sensor = {
     typeCode: 11,
@@ -197,13 +210,7 @@ function parseMokoTofSensor(bytes, startIndex) {
   let offset = startIndex + 10;
 
   while (offset + 3 <= bytes.length) {
-    if (
-      offset > startIndex + 10
-      && bytes[offset] === 0x0b
-      && bytes[offset + 1] === 0x01
-      && bytes[offset + 2] === 0x00
-      && bytes[offset + 3] === 0x06
-    ) {
+    if (offset > startIndex + 10 && (isMokoTofRecordAt(bytes, offset) || isMokoTofRecordSeparatorAt(bytes, offset))) {
       break;
     }
 
