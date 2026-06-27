@@ -9432,6 +9432,9 @@ if(false){(function(){
   const OBSOLETE_CART_MACS = new Set(['AABBCC000003']);
   const RESIDUE_ROOM_ID = 'sala-residuos';
   const HYGIENE_ROOM_ID = 'sala-higienizacao';
+  const PILOT_ROOM_ID = 'sala-bloco-b1';
+  const PILOT_GATEWAY_ID = 'e6a69dbb6d2d';
+  const PILOT_CART_MACS = new Set(['DE08DBF47311', 'C4894994A485']);
   const SPECIAL_ROOM_IDS = new Set([RESIDUE_ROOM_ID, HYGIENE_ROOM_ID]);
   const DEFAULT_CART_CALIBRATION = {
     emptyDistanceMm:720,
@@ -9440,6 +9443,7 @@ if(false){(function(){
     openMarginPercent:30,
     openMarginMinMm:250,
     confirmationReadings:4,
+    lidDetectionEnabled:false,
     samples:[]
   };
   const CALIBRATION_SAMPLE_COUNT = 3;
@@ -9456,8 +9460,8 @@ if(false){(function(){
 
   const defaultState = {
     rooms: [
-      { id:'sala-bloco-b1', name:'SALA BLOCO B1', gatewayDeviceId:'8ec5' },
-      { id:'sala-bloco-a', name:'SALA BLOCO A', gatewayDeviceId:'efde' },
+      { id:'sala-bloco-b1', name:'SALA BLOCO B1', gatewayDeviceId:PILOT_GATEWAY_ID },
+      { id:'sala-bloco-a', name:'SALA BLOCO A', gatewayDeviceId:'' },
       { id:'sala-residuos', name:'SALA DE RESÍDUOS', gatewayDeviceId:'' },
       { id:'sala-higienizacao', name:'SALA DE HIGIENIZAÇÃO', gatewayDeviceId:'' }
     ],
@@ -9479,7 +9483,7 @@ if(false){(function(){
         id:'cart-c4894994a485',
         name:'C02',
         mac:'C4:89:49:94:A4:85',
-        roomId:'sala-bloco-a',
+        roomId:'sala-bloco-b1',
         locationStatus:'in_room',
         fillPercentage:0,
         consecutiveCriticalReadings:0,
@@ -9531,9 +9535,16 @@ if(false){(function(){
 
     const defaultCartNames = new Map(defaultState.carts.map(cart => [cart.id, cart.name]));
     normalized.carts.forEach(cart => {
+      const compactMac = cleanMac(cart.mac);
       const defaultName = defaultCartNames.get(cart.id);
       if(defaultName && /^Carrinho\s+0?[12]$/i.test(String(cart.name || '').trim())){
         cart.name = defaultName;
+        changed = true;
+      }
+      if(PILOT_CART_MACS.has(compactMac) && cart.roomId !== PILOT_ROOM_ID){
+        cart.roomId = PILOT_ROOM_ID;
+        cart.locationStatus = 'in_room';
+        cart.transitStep = 0;
         changed = true;
       }
       const normalizedCalibration = normalizeCartCalibration(cart.calibration);
@@ -9542,6 +9553,12 @@ if(false){(function(){
         changed = true;
       }
     });
+
+    const pilotRoom = normalized.rooms.find(room => room.id === PILOT_ROOM_ID);
+    if(pilotRoom && pilotRoom.gatewayDeviceId !== PILOT_GATEWAY_ID){
+      pilotRoom.gatewayDeviceId = PILOT_GATEWAY_ID;
+      changed = true;
+    }
 
     return { state: normalized, changed };
   }
@@ -9613,13 +9630,18 @@ if(false){(function(){
       openMarginPercent: openMarginPercent !== null ? clampNumber(openMarginPercent, 1, 200) : DEFAULT_CART_CALIBRATION.openMarginPercent,
       openMarginMinMm: openMarginMin !== null ? Math.max(1, Math.round(openMarginMin)) : DEFAULT_CART_CALIBRATION.openMarginMinMm,
       confirmationReadings: confirmationReadings !== null ? Math.max(1, Math.round(confirmationReadings)) : DEFAULT_CART_CALIBRATION.confirmationReadings,
+      lidDetectionEnabled: source.lidDetectionEnabled === true || source.lid_detection_enabled === true || source.lid_detection_enabled === 1 || source.lid_detection_enabled === '1',
       samples: Array.isArray(source.samples) ? source.samples.slice(-CALIBRATION_SAMPLE_COUNT).map(Number).filter(Number.isFinite) : [],
-      updatedAt: source.updatedAt || null
+      updatedAt: source.updatedAt || source.updated_at || null
     };
   }
 
   function cartCalibration(cart){
     return normalizeCartCalibration(cart?.calibration);
+  }
+
+  function canManageCartSettings(){
+    return window.activePanelSession?.role === 'master';
   }
 
   function distanceForFillPercentage(calibration, percentage){
@@ -9843,6 +9865,7 @@ if(false){(function(){
       const candidateFill = finiteNumberOrNull(reading.candidateFillPercentage);
       const distance = finiteNumberOrNull(reading.distanceMm);
       const battery = finiteNumberOrNull(reading.battery);
+      const batteryVoltage = finiteNumberOrNull(reading.batteryVoltageMv);
       const rssi = finiteNumberOrNull(reading.rssiBle);
       const criticalReads = finiteNumberOrNull(reading.consecutiveCriticalReadings);
       const lidOpenReads = finiteNumberOrNull(reading.consecutiveLidOpenReadings);
@@ -9893,6 +9916,10 @@ if(false){(function(){
         cart.battery = battery;
         changed = true;
       }
+      if(batteryVoltage !== null && cart.batteryVoltageMv !== batteryVoltage){
+        cart.batteryVoltageMv = batteryVoltage;
+        changed = true;
+      }
       if(rssi !== null && cart.rssi !== rssi){
         cart.rssi = rssi;
         changed = true;
@@ -9930,7 +9957,12 @@ if(false){(function(){
         changed = true;
       }
       if(reading.createdAt || reading.receivedAt){
-        const lastSeen = relativeTime(reading.createdAt || reading.receivedAt);
+        const readingAt = reading.createdAt || reading.receivedAt;
+        const lastSeen = relativeTime(readingAt);
+        if(cart.lastReadingAt !== readingAt){
+          cart.lastReadingAt = readingAt;
+          changed = true;
+        }
         if(cart.lastSeen !== lastSeen){
           cart.lastSeen = lastSeen;
           changed = true;
@@ -9999,6 +10031,9 @@ if(false){(function(){
   }
 
   function fillLabel(cart){
+    const rawStatus = String(cart?.collectorStatus || '').toLowerCase();
+    if(rawStatus === 'sensor_removed') return 'Sensor fora da posicao';
+    if(rawStatus === 'sensor_obstructed') return 'Possivel obstrucao';
     if(isLidOpen(cart)) return 'Porta aberta';
     const fill = Number(cart.fillPercentage || 0);
     if(fill >= cartRedPercent(cart)) return 'Cheio';
@@ -10013,6 +10048,9 @@ if(false){(function(){
   }
 
   function fillTone(cart){
+    const rawStatus = String(cart?.collectorStatus || '').toLowerCase();
+    if(rawStatus === 'sensor_removed') return 'near-limit';
+    if(rawStatus === 'sensor_obstructed') return 'full';
     const fill = cartVisualFill(cart);
     if(fill >= cartRedPercent(cart)) return 'full';
     if(fill >= cartNearPercent(cart)) return 'near-limit';
@@ -10033,11 +10071,71 @@ if(false){(function(){
 
   function cartReadingDetail(cart){
     const distance = finiteNumberOrNull(cart?.distanceMm);
+    const rawStatus = String(cart?.collectorStatus || '').toLowerCase();
+    if(rawStatus === 'sensor_removed'){
+      return distance !== null ? `Sensor fora da posicao - ${Math.round(distance)} mm` : 'Sensor fora da posicao';
+    }
+    if(rawStatus === 'sensor_obstructed'){
+      return distance !== null ? `Possivel obstrucao - ${Math.round(distance)} mm` : 'Possivel obstrucao';
+    }
     if(isLidOpen(cart)){
       return distance !== null ? `Porta aberta - ${Math.round(distance)} mm` : 'Porta aberta';
     }
     if(distance !== null) return `${Math.round(distance)} mm`;
     return '';
+  }
+
+  function formatReadingClock(value){
+    const date = new Date(value || '');
+    if(!Number.isFinite(date.getTime())) return '--';
+    return date.toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+  }
+
+  function isFreshCartReading(cart){
+    const timestamp = new Date(cart?.lastReadingAt || '').getTime();
+    return Number.isFinite(timestamp) && Date.now() - timestamp <= 10 * 60 * 1000;
+  }
+
+  function formatBatteryVoltage(cart){
+    const voltage = finiteNumberOrNull(cart?.batteryVoltageMv);
+    return voltage === null ? '' : ` - ${Math.round(voltage)} mV`;
+  }
+
+  function renderRoomLiveStatus(room, carts){
+    const roomCarts = carts
+      .filter(cart => cart.roomId === room.id)
+      .sort((a, b) => cartDisplayName(a).localeCompare(cartDisplayName(b)));
+    if(!roomCarts.length) return '';
+
+    const lastTimes = roomCarts
+      .map(cart => new Date(cart.lastReadingAt || '').getTime())
+      .filter(Number.isFinite);
+    const latest = lastTimes.length ? new Date(Math.max(...lastTimes)).toISOString() : null;
+    const allFresh = roomCarts.every(isFreshCartReading);
+    const liveTone = allFresh ? 'online' : 'stale';
+
+    return `
+      <div class="cart-room-live" data-tone="${liveTone}">
+        <div class="cart-room-live-head">
+          <span class="cart-live-dot ${liveTone}"></span>
+          <strong>Comunicacao</strong>
+          <small>Ultima sala: ${escapeHtml(formatReadingClock(latest))}</small>
+        </div>
+        <div class="cart-room-live-list">
+          ${roomCarts.map(cart => {
+            const detail = cartReadingDetail(cart) || 'sem leitura';
+            const rssi = finiteNumberOrNull(cart.rssi);
+            const rssiText = rssi === null ? '' : ` - RSSI ${Math.round(rssi)} dBm`;
+            return `
+              <span>
+                <b>${escapeHtml(cartDisplayName(cart))}</b>
+                <em>${escapeHtml(formatReadingClock(cart.lastReadingAt))} - ${escapeHtml(detail)}${escapeHtml(formatBatteryVoltage(cart))}${escapeHtml(rssiText)}</em>
+              </span>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `;
   }
 
   function formatMm(value){
@@ -10242,6 +10340,9 @@ if(false){(function(){
   function renderCartCalibrationPanel(cart){
     const panel = document.getElementById('cartCalibrationPanel');
     if(!panel) return;
+    const canManage = canManageCartSettings();
+    panel.hidden = !canManage;
+    if(!canManage) return;
 
     const overlay = document.getElementById('cartDetailOverlay');
     const calibration = cartCalibration(cart);
@@ -10252,6 +10353,7 @@ if(false){(function(){
     const redEl = document.getElementById('cartCalibrationRed');
     const startBtn = document.getElementById('cartCalibrationStartBtn');
     const confirmBtn = document.getElementById('cartCalibrationConfirmBtn');
+    const lidToggleBtn = document.getElementById('cartCalibrationLidToggle');
     const redDistance = distanceForFillPercentage(calibration, calibration.redPercent);
 
     if(summaryEl) summaryEl.textContent = `${formatMm(calibration.emptyDistanceMm)} · ${calibration.redPercent}%`;
@@ -10259,6 +10361,10 @@ if(false){(function(){
     if(fullEl) fullEl.textContent = formatMm(calibration.fullDistanceMm);
     if(modeEl) modeEl.textContent = 'Por porcentagem';
     if(redEl) redEl.textContent = `${calibration.redPercent}% (${formatMm(redDistance)})`;
+    if(lidToggleBtn){
+      lidToggleBtn.textContent = calibration.lidDetectionEnabled ? 'Porta aberta ligada' : 'Leitura lateral ativa';
+      lidToggleBtn.dataset.enabled = calibration.lidDetectionEnabled ? 'true' : 'false';
+    }
     renderCalibrationPercentPicker('cartCalibrationRedPercent', calibration, calibration.redPercent);
     renderCalibrationPercentPicker('cartCalibrationNewRedPercent', calibration, calibration.redPercent);
 
@@ -10396,6 +10502,36 @@ if(false){(function(){
     }
   }
 
+  async function toggleCartLidDetection(){
+    const overlay = document.getElementById('cartDetailOverlay');
+    const cartId = overlay?.dataset.cartId;
+    if(!cartId || !canManageCartSettings()) return;
+
+    const state = readState();
+    const cart = state.carts.find(item => item.id === cartId);
+    if(!cart) return;
+
+    const current = cartCalibration(cart);
+    const next = normalizeCartCalibration({
+      ...current,
+      lidDetectionEnabled: !current.lidDetectionEnabled,
+      updatedAt: new Date().toISOString()
+    });
+
+    try{
+      setCalibrationStatus('Salvando modo de leitura...', 'info');
+      cart.calibration = await saveCartCalibrationToBackend(cart, next);
+      saveState(state);
+      renderCartCalibrationPanel(cart);
+      renderRooms();
+      setCalibrationExpanded(true);
+      setCalibrationStatus(next.lidDetectionEnabled ? 'Deteccao de porta aberta ligada.' : 'Leitura lateral salva. Distancia alta vira alerta de sensor.', 'success');
+    }catch(err){
+      console.warn('Falha ao salvar modo de leitura', err);
+      setCalibrationStatus('Nao foi possivel salvar o modo de leitura.', 'error');
+    }
+  }
+
   async function confirmCartCalibration(){
     const overlay = document.getElementById('cartDetailOverlay');
     const cartId = overlay?.dataset.cartId;
@@ -10475,7 +10611,7 @@ if(false){(function(){
   }
 
   function isLostCart(cart){
-    return cart.locationStatus === 'offline' || !cart.roomId;
+    return cart.locationStatus === 'offline' || !cart.roomId || String(cart?.collectorStatus || '').toLowerCase() === 'sensor_removed';
   }
 
   function isFreeCart(cart){
@@ -10544,6 +10680,7 @@ if(false){(function(){
     const summary = document.getElementById('cartTrackingSummary');
     if(!summary) return;
     const stats = globalStats(state);
+    const pilotRoom = state.rooms.find(room => room.id === PILOT_ROOM_ID) || state.rooms.find(room => roomCartTotal(state, room.id) > 0);
     const countText = value => String(Math.max(0, Number(value || 0)));
     const totalText = value => countText(value).padStart(2, '0');
     summary.innerHTML = `
@@ -10567,15 +10704,10 @@ if(false){(function(){
           </button>
         </div>
       </article>
-      <article class="cart-overview-card cart-overview-flow">
-        <button type="button" class="cart-flow-item residue" data-cart-room-modal="residue" aria-label="Abrir sala de resíduos">
-          <img class="cart-flow-img" src="./assets/cr-icon-residue-clean.png" alt="" loading="lazy">
-          <span class="cart-flow-label">Resíduos</span>
-        </button>
-        <button type="button" class="cart-flow-item hygiene" data-cart-room-modal="hygiene" aria-label="Abrir sala de higienização">
-          <img class="cart-flow-img hygiene" src="./assets/cr-icon-hygiene-clean.png" alt="" loading="lazy">
-          <span class="cart-flow-label">Higienização</span>
-        </button>
+      <article class="cart-overview-card cart-overview-pilot">
+        <span>Sala ativa</span>
+        <strong>${escapeHtml(pilotRoom?.name || 'SALA PILOTO')}</strong>
+        <small>Gateway ${escapeHtml(pilotRoom?.gatewayDeviceId || PILOT_GATEWAY_ID)}</small>
       </article>
       <article class="cart-overview-card cart-overview-empty" aria-hidden="true"></article>
       <article class="cart-overview-card cart-overview-empty" aria-hidden="true"></article>
@@ -10679,10 +10811,11 @@ if(false){(function(){
     if(!grid) return;
 
     const query = normalizeCartSearch(cartSearchTerm);
+    const canManage = canManageCartSettings();
     const visibleRooms = state.rooms.filter(room => {
       if(activeRoomFilter && room.id !== activeRoomFilter) return false;
       if(SPECIAL_ROOM_IDS.has(room.id) && room.id !== activeRoomFilter) return false;
-      if(!query && activeCartFilter === 'all') return true;
+      if(!query && activeCartFilter === 'all') return roomCartTotal(state, room.id) > 0;
       return roomMatchesSearch(room, state.carts, query) && visibleRoomCarts(room, state.carts).length > 0;
     });
 
@@ -10697,18 +10830,17 @@ if(false){(function(){
           <header class="cart-room-header">
             <div>
               <h2>${escapeHtml(room.name)}</h2>
-              <button type="button" class="cart-room-gateway" data-gateway-room="${escapeHtml(room.id)}">
-                Gateway: ${escapeHtml(room.gatewayDeviceId || 'nao vinculado')}
-              </button>
+              ${canManage
+                ? `<button type="button" class="cart-room-gateway" data-gateway-room="${escapeHtml(room.id)}">Gateway: ${escapeHtml(room.gatewayDeviceId || 'nao vinculado')}</button>`
+                : `<span class="cart-room-gateway readonly">Gateway: ${escapeHtml(room.gatewayDeviceId || 'nao vinculado')}</span>`}
             </div>
           </header>
+          ${renderRoomLiveStatus(room, state.carts)}
           <div class="cart-items-grid">
             ${renderRoomCarts(room, state.carts)}
           </div>
           ${renderRoomTransitRows(room, state.carts)}
-          <footer class="cart-room-footer">
-            <button type="button" data-cart-add="${escapeHtml(room.id)}">Adicionar carrinho</button>
-          </footer>
+          ${canManage ? `<footer class="cart-room-footer"><button type="button" data-cart-add="${escapeHtml(room.id)}">Adicionar carrinho</button></footer>` : ''}
         </article>
       `;
     }).join('');
@@ -10793,6 +10925,7 @@ if(false){(function(){
                 <span><em>Forma de leitura</em><strong id="cartCalibrationReadMode">Por porcentagem</strong></span>
                 <span><em>Limite crítico</em><strong id="cartCalibrationRed">--</strong></span>
               </div>
+              <button type="button" class="cart-secondary-btn cart-calibration-lid-toggle" id="cartCalibrationLidToggle">Leitura lateral ativa</button>
               <p class="cart-calibration-status" id="cartCalibrationStatus"></p>
               <div class="cart-calibration-actions">
                 <button type="button" class="cart-secondary-btn" id="cartCalibrationEditBtn">Editar</button>
@@ -10896,6 +11029,7 @@ if(false){(function(){
     document.getElementById('cartCalibrationPanel')?.addEventListener('keydown', handleCalibrationSelectKeydown);
     document.getElementById('cartCalibrationEditBtn')?.addEventListener('click', openCartCalibrationEdit);
     document.getElementById('cartCalibrationNewBtn')?.addEventListener('click', openCartCalibrationNew);
+    document.getElementById('cartCalibrationLidToggle')?.addEventListener('click', toggleCartLidDetection);
     document.getElementById('cartCalibrationStartBtn')?.addEventListener('click', startCartCalibration);
     document.getElementById('cartCalibrationSaveBtn')?.addEventListener('click', saveCartCalibrationLimit);
     document.getElementById('cartCalibrationCancelBtn')?.addEventListener('click', cancelCartCalibrationDraft);
@@ -10989,6 +11123,7 @@ if(false){(function(){
     }
 
     if(addButton){
+      if(!canManageCartSettings()) return;
       const state = readState();
       if(state.carts.length >= 3){
         alert('Neste teste vamos trabalhar com três carrinhos apenas.');
@@ -10999,6 +11134,7 @@ if(false){(function(){
     }
 
     if(gatewayButton){
+      if(!canManageCartSettings()) return;
       const roomId = gatewayButton.getAttribute('data-gateway-room');
       const state = readState();
       const room = state.rooms.find(item => item.id === roomId);
@@ -11024,6 +11160,8 @@ if(false){(function(){
     const meta = document.getElementById('cartDetailMeta');
     const name = document.getElementById('cartDetailName');
     const mac = document.getElementById('cartDetailMac');
+    const saveBtn = document.getElementById('cartDetailSaveBtn');
+    const canManage = canManageCartSettings();
 
     if(title) title.textContent = cart?.name || 'Novo carrinho';
     if(meta){
@@ -11033,6 +11171,9 @@ if(false){(function(){
     }
     if(name) name.value = cart?.name || '';
     if(mac) mac.value = cart ? formatMac(cart.mac) : '';
+    if(name) name.readOnly = !canManage;
+    if(mac) mac.readOnly = !canManage;
+    if(saveBtn) saveBtn.hidden = !canManage;
     renderCartCalibrationPanel(cart);
     setCalibrationExpanded(false);
 
@@ -11046,6 +11187,7 @@ if(false){(function(){
   }
 
   function saveCartDetail(){
+    if(!canManageCartSettings()) return;
     const overlay = document.getElementById('cartDetailOverlay');
     const state = readState();
     const cartId = overlay?.dataset.cartId;

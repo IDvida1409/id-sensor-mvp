@@ -1,6 +1,7 @@
 const BLE_SENSOR_ID_KEYS = ['ble_sensor_id', 'sensor_id', 'sensorId', 'mac', 'ble_mac'];
 const DISTANCE_KEYS = ['distance_mm', 'distanceMm', 'distance', 'randingDistance', 'rangingDistance'];
 const BATTERY_PERCENT_KEYS = ['battery', 'battery_percent', 'batteryPercent'];
+const BATTERY_VOLTAGE_KEYS = ['battery_voltage_mv', 'batteryVoltageMv', 'battVoltage', 'batteryVoltage'];
 const RSSI_BLE_KEYS = ['rssi_ble', 'rssiBle', 'rssi'];
 const SENSOR_LIST_KEYS = ['sensors', 'scan_data'];
 const BLE_GATEWAY_ID_KEYS = ['gateway_id', 'gatewayId', 'gw_id', 'gwId', 'device_id', 'deviceId', 'gatewayMac', 'gateway_mac'];
@@ -163,6 +164,7 @@ function normalizeSensorFields(decodedPayload, sensorPayload) {
     bleSensorId: stringOrNull(firstDefined(source, BLE_SENSOR_ID_KEYS)),
     distanceMm: explicitDistance ?? tofDistanceFromRawData(rawData),
     battery: numberOrNull(firstDefined(source, BATTERY_PERCENT_KEYS)),
+    batteryVoltageMv: numberOrNull(firstDefined(source, BATTERY_VOLTAGE_KEYS)),
     rssiBle: numberOrNull(firstDefined(source, RSSI_BLE_KEYS))
   };
 }
@@ -181,6 +183,7 @@ function normalizeTtnCollectorPayload(payload, sensorPayload = null) {
     bleSensorId: sensorFields.bleSensorId,
     distanceMm: sensorFields.distanceMm,
     battery: sensorFields.battery,
+    batteryVoltageMv: sensorFields.batteryVoltageMv,
     rssiBle: sensorFields.rssiBle,
     fPort: common.fPort,
     rawPayload: common.rawPayload,
@@ -211,6 +214,7 @@ function normalizeBleGatewayPayload(payload, sensorPayload = null) {
     bleSensorId: sensorFields.bleSensorId,
     distanceMm: sensorFields.distanceMm,
     battery: sensorFields.battery,
+    batteryVoltageMv: sensorFields.batteryVoltageMv,
     rssiBle: sensorFields.rssiBle,
     fPort: null,
     rawPayload: rawDataFrom(sensor) || rawDataFrom(root),

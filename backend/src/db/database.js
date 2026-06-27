@@ -158,6 +158,7 @@ function initDb() {
       fill_percentage REAL,
       status TEXT NOT NULL,
       battery REAL,
+      battery_voltage_mv REAL,
       rssi_ble REAL,
       consecutive_critical_readings INTEGER NOT NULL DEFAULT 0,
       consecutive_lid_open_readings INTEGER NOT NULL DEFAULT 0,
@@ -217,6 +218,8 @@ function initDb() {
   ensureColumn(database, 'collector_readings', 'candidate_level_status', 'TEXT');
   ensureColumn(database, 'collector_readings', 'candidate_level_readings', 'INTEGER NOT NULL DEFAULT 0');
   ensureColumn(database, 'collector_readings', 'candidate_fill_percentage', 'REAL');
+  ensureColumn(database, 'collector_readings', 'battery_voltage_mv', 'REAL');
+  ensureColumn(database, 'collector_calibrations', 'lid_detection_enabled', 'INTEGER NOT NULL DEFAULT 0');
   database.exec(`
     CREATE INDEX IF NOT EXISTS idx_alert_ack_app_device
     ON alert_acknowledgements (app_device_id, alert_id);
