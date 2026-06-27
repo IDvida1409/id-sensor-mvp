@@ -10091,59 +10091,6 @@ if(false){(function(){
     return '';
   }
 
-  function formatReadingClock(value){
-    const date = new Date(value || '');
-    if(!Number.isFinite(date.getTime())) return '--';
-    return date.toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
-  }
-
-  function isFreshCartReading(cart){
-    const timestamp = new Date(cart?.lastReadingAt || '').getTime();
-    return Number.isFinite(timestamp) && Date.now() - timestamp <= 10 * 60 * 1000;
-  }
-
-  function formatBatteryVoltage(cart){
-    const voltage = finiteNumberOrNull(cart?.batteryVoltageMv);
-    return voltage === null ? '' : ` - ${Math.round(voltage)} mV`;
-  }
-
-  function renderRoomLiveStatus(room, carts){
-    const roomCarts = carts
-      .filter(cart => cart.roomId === room.id)
-      .sort((a, b) => cartDisplayName(a).localeCompare(cartDisplayName(b)));
-    if(!roomCarts.length) return '';
-
-    const lastTimes = roomCarts
-      .map(cart => new Date(cart.lastReadingAt || '').getTime())
-      .filter(Number.isFinite);
-    const latest = lastTimes.length ? new Date(Math.max(...lastTimes)).toISOString() : null;
-    const allFresh = roomCarts.every(isFreshCartReading);
-    const liveTone = allFresh ? 'online' : 'stale';
-
-    return `
-      <div class="cart-room-live" data-tone="${liveTone}">
-        <div class="cart-room-live-head">
-          <span class="cart-live-dot ${liveTone}"></span>
-          <strong>Comunicacao</strong>
-          <small>Ultima sala: ${escapeHtml(formatReadingClock(latest))}</small>
-        </div>
-        <div class="cart-room-live-list">
-          ${roomCarts.map(cart => {
-            const detail = cartReadingDetail(cart) || 'sem leitura';
-            const rssi = finiteNumberOrNull(cart.rssi);
-            const rssiText = rssi === null ? '' : ` - RSSI ${Math.round(rssi)} dBm`;
-            return `
-              <span>
-                <b>${escapeHtml(cartDisplayName(cart))}</b>
-                <em>${escapeHtml(formatReadingClock(cart.lastReadingAt))} - ${escapeHtml(detail)}${escapeHtml(formatBatteryVoltage(cart))}${escapeHtml(rssiText)}</em>
-              </span>
-            `;
-          }).join('')}
-        </div>
-      </div>
-    `;
-  }
-
   function formatMm(value){
     const number = finiteNumberOrNull(value);
     return number === null ? '--' : `${Math.round(number)} mm`;
@@ -10686,7 +10633,6 @@ if(false){(function(){
     const summary = document.getElementById('cartTrackingSummary');
     if(!summary) return;
     const stats = globalStats(state);
-    const pilotRoom = state.rooms.find(room => room.id === PILOT_ROOM_ID) || state.rooms.find(room => roomCartTotal(state, room.id) > 0);
     const countText = value => String(Math.max(0, Number(value || 0)));
     const totalText = value => countText(value).padStart(2, '0');
     summary.innerHTML = `
@@ -10710,10 +10656,15 @@ if(false){(function(){
           </button>
         </div>
       </article>
-      <article class="cart-overview-card cart-overview-pilot">
-        <span>Sala ativa</span>
-        <strong>${escapeHtml(pilotRoom?.name || 'SALA PILOTO')}</strong>
-        <small>Gateway ${escapeHtml(pilotRoom?.gatewayDeviceId || PILOT_GATEWAY_ID)}</small>
+      <article class="cart-overview-card cart-overview-flow">
+        <button type="button" class="cart-flow-item residue" data-cart-room-modal="residue" aria-label="Abrir sala de resíduos">
+          <img class="cart-flow-img" src="./assets/cr-icon-residue-clean.png" alt="" loading="lazy">
+          <span class="cart-flow-label">Resíduos</span>
+        </button>
+        <button type="button" class="cart-flow-item hygiene" data-cart-room-modal="hygiene" aria-label="Abrir sala de higienização">
+          <img class="cart-flow-img hygiene" src="./assets/cr-icon-hygiene-clean.png" alt="" loading="lazy">
+          <span class="cart-flow-label">Higienização</span>
+        </button>
       </article>
       <article class="cart-overview-card cart-overview-empty" aria-hidden="true"></article>
       <article class="cart-overview-card cart-overview-empty" aria-hidden="true"></article>
@@ -10841,7 +10792,6 @@ if(false){(function(){
                 : `<span class="cart-room-gateway readonly">Gateway: ${escapeHtml(room.gatewayDeviceId || 'nao vinculado')}</span>`}
             </div>
           </header>
-          ${renderRoomLiveStatus(room, state.carts)}
           <div class="cart-items-grid">
             ${renderRoomCarts(room, state.carts)}
           </div>
