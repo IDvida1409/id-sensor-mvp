@@ -9590,6 +9590,23 @@ if(false){(function(){
     return compact.match(/.{1,2}/g)?.join(':') || '';
   }
 
+  function normalizeGatewayId(value){
+    return String(value || '').replace(/[^0-9a-z]/gi, '').toLowerCase();
+  }
+
+  function formatGatewayShort(value){
+    const compact = normalizeGatewayId(value);
+    if(!compact) return 'nao vinculado';
+    return compact.length > 4 ? compact.slice(-4) : compact;
+  }
+
+  function gatewayMatchesRoom(roomGatewayId, readingGatewayId){
+    const roomGateway = normalizeGatewayId(roomGatewayId);
+    const readingGateway = normalizeGatewayId(readingGatewayId);
+    if(!roomGateway || !readingGateway) return false;
+    return readingGateway === roomGateway || readingGateway.endsWith(roomGateway);
+  }
+
   function cartDisplayName(cart){
     const name = String(cart?.name || '').trim();
     const compactMac = cleanMac(cart?.mac);
@@ -9850,11 +9867,6 @@ if(false){(function(){
       reading
     ]).filter(([mac]) => mac.length === 12));
 
-    const roomByGateway = new Map(state.rooms.map(room => [
-      String(room.gatewayDeviceId || '').trim().toLowerCase(),
-      room.id
-    ]).filter(([gateway]) => gateway));
-
     let changed = false;
 
     state.carts.forEach(cart => {
@@ -9871,7 +9883,7 @@ if(false){(function(){
       const lidOpenReads = finiteNumberOrNull(reading.consecutiveLidOpenReadings);
       const lidClosedReads = finiteNumberOrNull(reading.consecutiveLidClosedReadings);
       const candidateLevelReads = finiteNumberOrNull(reading.candidateLevelReadings);
-      const gatewayRoomId = roomByGateway.get(String(reading.lorawanDeviceId || '').trim().toLowerCase());
+      const gatewayRoomId = state.rooms.find(room => gatewayMatchesRoom(room.gatewayDeviceId, reading.lorawanDeviceId))?.id;
       const rawStatus = String(reading.status || '').toLowerCase();
       const confirmedLidState = String(reading.confirmedLidState || '').toLowerCase();
       const currentCalibration = cartCalibration(cart);
@@ -10790,7 +10802,7 @@ if(false){(function(){
             <div class="cart-room-title-block">
               <span class="cart-room-kicker">Sala atual</span>
               <h2>${escapeHtml(room.name)}</h2>
-              <span class="cart-room-gateway readonly">Gateway: ${escapeHtml(room.gatewayDeviceId || 'nao vinculado')}</span>
+              <span class="cart-room-gateway readonly">Gateway: ${escapeHtml(formatGatewayShort(room.gatewayDeviceId))}</span>
             </div>
             ${canManage ? `
               <button type="button" class="cart-room-info-btn" data-room-settings="${escapeHtml(room.id)}" aria-label="Configurar ${escapeHtml(room.name)}">
