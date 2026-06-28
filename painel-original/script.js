@@ -10207,6 +10207,64 @@ if(false){(function(){
     return battery === null ? '--' : `${Math.round(battery)}%`;
   }
 
+  function cartBatteryTone(cart){
+    const battery = finiteNumberOrNull(cart?.battery);
+    if(battery === null) return 'unknown';
+    if(battery < 20) return 'critical';
+    if(battery <= 35) return 'warning';
+    return 'good';
+  }
+
+  function cartLevelLabel(cart){
+    const fill = Math.round(cartVisualFill(cart));
+    const distance = finiteNumberOrNull(cart?.distanceMm);
+    return distance === null ? `${fill}%` : `${fill}% (${Math.round(distance)} mm)`;
+  }
+
+  function cartStatusTone(cart){
+    const tone = fillTone(cart);
+    if(tone === 'full') return 'critical';
+    if(tone === 'lost') return 'lost';
+    return 'free';
+  }
+
+  function cartCommunicationLabel(cart){
+    return isLostCart(cart) ? 'Sem comunicação' : 'Comunicando';
+  }
+
+  function renderCartSideMeta(cart){
+    const statusTone = cartStatusTone(cart);
+    const communicationTone = isLostCart(cart) ? 'offline' : 'online';
+    const battery = finiteNumberOrNull(cart?.battery);
+    const batteryWidth = battery === null ? 8 : Math.max(8, Math.min(100, battery));
+    return `
+      <div class="cart-side-meta" aria-label="Resumo de ${escapeHtml(cartDisplayName(cart))}">
+        <strong>${escapeHtml(cartDisplayName(cart))}</strong>
+        <span class="cart-side-row">
+          <i class="cart-side-dot ${statusTone}" aria-hidden="true"></i>
+          <b>${escapeHtml(fillLabel(cart))}</b>
+        </span>
+        <span class="cart-side-row">
+          <small>Nível</small>
+          <b>${escapeHtml(cartLevelLabel(cart))}</b>
+        </span>
+        <span class="cart-side-row">
+          <small>Última leitura</small>
+          <b>${escapeHtml(cart.lastSeen || 'sem leitura')}</b>
+        </span>
+        <span class="cart-side-row">
+          <i class="cart-battery-mini ${cartBatteryTone(cart)}" aria-hidden="true"><em style="width:${batteryWidth}%"></em></i>
+          <small>Bateria</small>
+          <b>${escapeHtml(cartBatteryLabel(cart))}</b>
+        </span>
+        <span class="cart-side-row">
+          <i class="cart-side-dot ${communicationTone}" aria-hidden="true"></i>
+          <b>${escapeHtml(cartCommunicationLabel(cart))}</b>
+        </span>
+      </div>
+    `;
+  }
+
   function roomCartsForDetails(state, room){
     return state.carts.filter(cart => cart.roomId === room.id && cart.locationStatus !== 'transit');
   }
@@ -10305,13 +10363,12 @@ if(false){(function(){
   }
 
   function roomInsightHeader(state, room, mode){
-    const carts = roomCartsForDetails(state, room);
     return `
       <header class="cart-room-insight-head">
         <div>
           <span>${escapeHtml(roomInsightTitle(mode))}</span>
           <h2>${escapeHtml(room.name)}</h2>
-          <p>Gateway ${escapeHtml(formatGatewayShort(room.gatewayDeviceId))} - última comunicação ${escapeHtml(latestRoomReadingLabel(carts))}</p>
+          <p><i class="cart-room-online-dot" aria-hidden="true"></i> Comunicando</p>
         </div>
       </header>
     `;
@@ -10326,7 +10383,7 @@ if(false){(function(){
           <div><span>Fabricante</span><strong>MOKO</strong></div>
           <div><span>Modelo</span><strong>MKGW4</strong></div>
           <div><span>Tecnologia</span><strong>BLE + 4G</strong></div>
-          <div><span>Aplicação</span><strong>Leitura de carrinhos</strong></div>
+          <div><span>Status</span><strong><i class="cart-room-online-dot" aria-hidden="true"></i> Comunicando</strong></div>
         </article>
       </section>
     `;
@@ -10399,51 +10456,46 @@ if(false){(function(){
     }));
     return `
       <section class="cart-room-telemetry-layout">
-        <details class="graph-mini-card telemetry-accordion cart-room-telemetry-accordion" open>
-          <summary>
-            <span class="telemetry-heading-row">
-              <span class="telemetry-title-icon">${getStopwatchIcon()}</span>
-              <span class="telemetry-heading-copy">
-                <strong>Telemetria operacional</strong>
-                <small>Eventos e ações registradas nesta sala.</small>
-              </span>
-              <span class="telemetry-chevron" aria-hidden="true">⌄</span>
-            </span>
-            <span class="telemetry-active-card ${activeClass}">
-              <span class="telemetry-active-icon">${getOperationalTelemetryIcon(fullCount ? 'critical' : (attentionCount ? 'attention' : 'limit'))}</span>
-              <span class="telemetry-active-copy"><small>${activeLabel}</small><strong>${activeMain}</strong><em>Canal ativo: Painel</em></span>
-            </span>
-            <span class="telemetry-status-grid">
-              <span class="telemetry-status-card limit"><span class="telemetry-status-icon">${getOperationalTelemetryIcon('limit')}</span><span><small>Livre</small><strong>${freeCount}</strong></span></span>
-              <span class="telemetry-status-card critical"><span class="telemetry-status-icon">${getOperationalTelemetryIcon('critical')}</span><span><small>Crítico</small><strong>${fullCount}</strong></span></span>
-              <span class="telemetry-status-card offline"><span class="telemetry-status-icon">${getOperationalTelemetryIcon('communication')}</span><span><small>Perdidos</small><strong>${lostCount}</strong></span></span>
-            </span>
-            <span class="telemetry-section-label">Canais de alerta</span>
-            <span class="telemetry-channel-grid single-channel">
-              <span class="telemetry-channel-card panel">
-                <span>${getOperationalTelemetryIcon('alerts')}</span>
-                <small>Painel</small>
-                <strong>${events.filter(event => event.type === 'critical').length}</strong>
-              </span>
-            </span>
-            <span class="telemetry-expand-hint">Clique para recolher ou expandir a linha do tempo</span>
-          </summary>
-          <div class="telemetry-expanded-content">
-            <div class="telemetry-timeline-head">
-              <div><strong>Linha do tempo</strong><small>Passagens, leituras e alertas vinculados à sala.</small></div>
-              <span>Últimas leituras</span>
+        <article class="cart-room-telemetry-compact">
+          <div class="telemetry-compact-head">
+            <div>
+              <strong>Telemetria operacional</strong>
+              <small>Eventos registrados nesta sala.</small>
             </div>
-            <div class="telemetry-timeline">
-              ${timelineEvents.length ? timelineEvents.map(event => `
-                <div class="telemetry-event ${telemetryToneClass(event.tone)}">
-                  <time>${escapeTelemetryText(event.time)}</time>
-                  <span class="telemetry-event-dot"></span>
-                  <div><strong>${escapeTelemetryText(event.title)}</strong><small>${escapeTelemetryText(event.detail)}</small></div>
-                </div>
-              `).join('') : '<p class="cart-room-empty">Nenhum evento registrado ainda.</p>'}
-            </div>
+            <span class="telemetry-compact-state ${activeClass}">
+              <i>${getOperationalTelemetryIcon(fullCount ? 'critical' : 'limit')}</i>
+              <b>${activeLabel}</b>
+              <em>${activeMain}</em>
+            </span>
           </div>
-        </details>
+          <div class="telemetry-compact-grid">
+            <span><small>Livres</small><strong>${freeCount}</strong></span>
+            <span><small>Críticos</small><strong>${fullCount}</strong></span>
+            <span><small>Perdidos</small><strong>${lostCount}</strong></span>
+            <span><small>Painel</small><strong>${events.filter(event => event.type === 'critical').length}</strong></span>
+          </div>
+          <details class="cart-telemetry-timeline-toggle">
+            <summary>
+              <span>Expandir linha do tempo</span>
+              <i aria-hidden="true">⌄</i>
+            </summary>
+            <div class="telemetry-expanded-content">
+              <div class="telemetry-timeline-head">
+                <div><strong>Linha do tempo</strong><small>Passagens, leituras e alertas vinculados à sala.</small></div>
+                <span>Últimas leituras</span>
+              </div>
+              <div class="telemetry-timeline">
+                ${timelineEvents.length ? timelineEvents.map(event => `
+                  <div class="telemetry-event ${telemetryToneClass(event.tone)}">
+                    <time>${escapeTelemetryText(event.time)}</time>
+                    <span class="telemetry-event-dot"></span>
+                    <div><strong>${escapeTelemetryText(event.title)}</strong><small>${escapeTelemetryText(event.detail)}</small></div>
+                  </div>
+                `).join('') : '<p class="cart-room-empty">Nenhum evento registrado ainda.</p>'}
+              </div>
+            </div>
+          </details>
+        </article>
       </section>
     `;
   }
@@ -10539,8 +10591,8 @@ if(false){(function(){
     content.innerHTML = `
       <header class="cart-transit-modal-head cart-report-modal-head">
         <span>Relatórios</span>
-        <h2>Relatórios operacionais</h2>
-        <p>Consolidado geral dos carrinhos, salas e alertas do painel.</p>
+        <h2>Relatórios</h2>
+        <p>Relatório analítico dos carrinhos.</p>
       </header>
       <details class="graph-mini-card graph-report-accordion cart-global-report-accordion" open>
         <summary>
@@ -10560,7 +10612,6 @@ if(false){(function(){
         <div class="graph-report-list">
           <button class="graph-report-btn" disabled>Exportar PDF</button>
           <button class="graph-report-btn" disabled>Exportar Excel</button>
-          <button class="graph-report-btn" disabled>Relatório Analítico</button>
         </div>
       </details>
     `;
@@ -11188,28 +11239,31 @@ if(false){(function(){
     const showStatus = cart.locationStatus !== 'in_room' && cart.locationStatus !== 'transit';
 
     return `
-      <button type="button" class="cart-item-card ${tone} ${escapeHtml(cart.locationStatus)} ${lidOpen ? 'lid-open' : 'lid-closed'}" data-cart-id="${escapeHtml(cart.id)}" style="--cart-fill:${visualFill}%;--cart-liquid:${visualFill}%">
-        ${showStatus ? `<span class="cart-card-status"><i>${locationLabel(cart)}</i></span>` : ''}
-        <span class="cart-item-body">
-          <strong>${escapeHtml(cartDisplayName(cart))}</strong>
-        </span>
-        <span class="cart-visual" aria-hidden="true">
-          <span class="cart-bin-empty-shell ${lidOpen ? 'open' : 'closed'}">
-            <img
-              class="cart-bin-empty-img"
-              src="./assets/${lidOpen ? 'cart-bin-open-empty.png' : 'cart-bin-closed-empty.png'}"
-              alt=""
-              loading="lazy"
-            />
-            <span class="cart-bin-fill-zone">
-              <span class="cart-bin-liquid"></span>
+      <div class="cart-item-unit">
+        <button type="button" class="cart-item-card ${tone} ${escapeHtml(cart.locationStatus)} ${lidOpen ? 'lid-open' : 'lid-closed'}" data-cart-id="${escapeHtml(cart.id)}" style="--cart-fill:${visualFill}%;--cart-liquid:${visualFill}%">
+          ${showStatus ? `<span class="cart-card-status"><i>${locationLabel(cart)}</i></span>` : ''}
+          <span class="cart-item-body">
+            <strong>${escapeHtml(cartDisplayName(cart))}</strong>
+          </span>
+          <span class="cart-visual" aria-hidden="true">
+            <span class="cart-bin-empty-shell ${lidOpen ? 'open' : 'closed'}">
+              <img
+                class="cart-bin-empty-img"
+                src="./assets/${lidOpen ? 'cart-bin-open-empty.png' : 'cart-bin-closed-empty.png'}"
+                alt=""
+                loading="lazy"
+              />
+              <span class="cart-bin-fill-zone">
+                <span class="cart-bin-liquid"></span>
+              </span>
             </span>
           </span>
-        </span>
-        <span class="cart-item-foot">
-          <small>${cardLabel}</small>
-        </span>
-      </button>
+          <span class="cart-item-foot">
+            <small>${cardLabel}</small>
+          </span>
+        </button>
+        ${renderCartSideMeta(cart)}
+      </div>
     `;
   }
 
@@ -11280,7 +11334,7 @@ if(false){(function(){
             <div class="cart-room-title-block">
               <span class="cart-room-kicker">Sala atual</span>
               <h2>${escapeHtml(room.name)}</h2>
-              <span class="cart-room-gateway readonly">Gateway: ${escapeHtml(formatGatewayShort(room.gatewayDeviceId))}</span>
+              <span class="cart-room-gateway readonly">Gateway: ${escapeHtml(formatGatewayShort(room.gatewayDeviceId))} <i class="cart-room-online-dot" aria-hidden="true"></i></span>
             </div>
             <div class="cart-room-header-actions">
               <button type="button" class="cart-room-action-btn" data-room-insight="${escapeHtml(room.id)}" data-room-insight-mode="chart">Gráfico</button>
