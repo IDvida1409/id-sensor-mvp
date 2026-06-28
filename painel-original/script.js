@@ -9018,7 +9018,7 @@ if(false){(function(){
   const ROOM_STATUSES = {
     in_room: 'Na sala',
     near: 'Carrinho proximo',
-    transit: 'Em transito',
+    transit: 'Em trânsito',
     offline: 'Offline'
   };
 
@@ -9100,13 +9100,13 @@ if(false){(function(){
       return { key:'offline', label:'Offline', tone:'offline' };
     }
     if(fill >= 90 && criticalReads >= 3){
-      return { key:'critical_confirmed', label:'Critico confirmado', tone:'critical' };
+      return { key:'critical_confirmed', label:'Crítico confirmado', tone:'critical' };
     }
     if(fill >= 90){
-      return { key:'critical_pending', label:`Critico ${criticalReads}/3`, tone:'warning' };
+      return { key:'critical_pending', label:`Crítico ${criticalReads}/3`, tone:'warning' };
     }
     if(fill >= 75){
-      return { key:'attention', label:'Atencao', tone:'attention' };
+      return { key:'attention', label:'Atenção', tone:'attention' };
     }
     return { key:'normal', label:'Normal', tone:'normal' };
   }
@@ -9179,7 +9179,7 @@ if(false){(function(){
             <select id="cartStatusInput">
               <option value="in_room">Na sala</option>
               <option value="near">Carrinho proximo</option>
-              <option value="transit">Em transito</option>
+              <option value="transit">Em trânsito</option>
               <option value="offline">Offline</option>
             </select>
           </label>
@@ -9384,7 +9384,7 @@ if(false){(function(){
             <span><b>${counters.inRoom}</b> Na sala</span>
             <span><b>${counters.near}</b> Proximos</span>
             <span><b>${counters.transit}</b> Transito</span>
-            <span><b>${counters.critical}</b> Criticos</span>
+            <span><b>${counters.critical}</b> Críticos</span>
           </div>
           <div class="cart-room-list">
             ${renderCartRows(room, state.carts)}
@@ -10130,21 +10130,25 @@ if(false){(function(){
     `;
   }
 
+  function transitIcon(){
+    return '<img src="./assets/cart-transit-approved.png" alt="" loading="lazy">';
+  }
+
   function locationLabel(cart){
     if(cart.locationStatus === 'near') return 'Próximo';
-    if(cart.locationStatus === 'transit') return 'Em transito';
-    if(cart.locationStatus === 'offline') return 'Perdido';
+    if(cart.locationStatus === 'transit') return 'Em trânsito';
+    if(cart.locationStatus === 'offline') return 'Sem comunicação';
     return 'Na sala';
   }
 
   function fillLabel(cart){
     const rawStatus = String(cart?.collectorStatus || '').toLowerCase();
-    if(rawStatus === 'sensor_removed') return 'Sensor fora da posicao';
-    if(rawStatus === 'sensor_obstructed') return 'Possivel obstrucao';
+    if(rawStatus === 'sensor_removed') return 'Sensor fora da posição';
+    if(rawStatus === 'sensor_obstructed') return 'Possível obstrução';
     if(isLidOpen(cart)) return 'Porta aberta';
     const fill = Number(cart.fillPercentage || 0);
-    if(fill >= cartRedPercent(cart)) return 'Cheio';
-    if(fill >= cartNearPercent(cart)) return 'Próximo do limite';
+    if(fill >= cartRedPercent(cart)) return 'Crítico';
+    if(fill >= cartNearPercent(cart)) return 'Atenção';
     return 'Livre';
   }
 
@@ -10182,10 +10186,10 @@ if(false){(function(){
     const distance = finiteNumberOrNull(cart?.distanceMm);
     const rawStatus = String(cart?.collectorStatus || '').toLowerCase();
     if(rawStatus === 'sensor_removed'){
-      return distance !== null ? `Sensor fora da posicao - ${Math.round(distance)} mm` : 'Sensor fora da posicao';
+      return distance !== null ? `Sensor fora da posição - ${Math.round(distance)} mm` : 'Sensor fora da posição';
     }
     if(rawStatus === 'sensor_obstructed'){
-      return distance !== null ? `Possivel obstrucao - ${Math.round(distance)} mm` : 'Possivel obstrucao';
+      return distance !== null ? `Possível obstrução - ${Math.round(distance)} mm` : 'Possível obstrução';
     }
     if(isLidOpen(cart)){
       return distance !== null ? `Porta aberta - ${Math.round(distance)} mm` : 'Porta aberta';
@@ -10231,7 +10235,7 @@ if(false){(function(){
       cartId:cart.id,
       cartName:cartDisplayName(cart),
       title:`${cartDisplayName(cart)} - ${fillLabel(cart)}`,
-      detail:`Ultima leitura ${cart.lastSeen || 'sem leitura'}`,
+      detail:`Última leitura ${cart.lastSeen || 'sem leitura'}`,
       fill:cartVisualFill(cart),
       distanceMm:finiteNumberOrNull(cart.distanceMm)
     }));
@@ -10281,7 +10285,7 @@ if(false){(function(){
     }).join('');
 
     return `
-      <svg class="cart-room-chart-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="Grafico de enchimento da sala">
+      <svg class="cart-room-chart-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="Gráfico de status da sala">
         <defs>
           <linearGradient id="cartRoomFillGradient" x1="0" x2="0" y1="0" y2="1">
             <stop offset="0%" stop-color="#2f80ff" stop-opacity=".28"></stop>
@@ -10298,18 +10302,10 @@ if(false){(function(){
     `;
   }
 
-  function roomInsightTabs(room, mode){
-    const tabs = [
-      ['info', 'Informacoes'],
-      ['chart', 'Grafico'],
-      ['telemetry', 'Telemetria'],
-      ['report', 'Relatorio']
-    ];
-    return tabs.map(([key, label]) => `
-      <button type="button" class="${mode === key ? 'active' : ''}" data-room-insight-mode="${key}" data-room-id="${escapeHtml(room.id)}">
-        ${label}
-      </button>
-    `).join('');
+  function roomInsightTitle(mode){
+    if(mode === 'chart') return 'Gráfico da sala';
+    if(mode === 'telemetry') return 'Telemetria da sala';
+    return 'Informações do gateway';
   }
 
   function roomInsightHeader(state, room, mode){
@@ -10317,93 +10313,69 @@ if(false){(function(){
     return `
       <header class="cart-room-insight-head">
         <div>
-          <span>Sala monitorada</span>
+          <span>${escapeHtml(roomInsightTitle(mode))}</span>
           <h2>${escapeHtml(room.name)}</h2>
-          <p>Gateway ${escapeHtml(formatGatewayShort(room.gatewayDeviceId))} - ultima comunicacao ${escapeHtml(latestRoomReadingLabel(carts))}</p>
+          <p>Gateway ${escapeHtml(formatGatewayShort(room.gatewayDeviceId))} - última comunicação ${escapeHtml(latestRoomReadingLabel(carts))}</p>
         </div>
-        <nav class="cart-room-insight-tabs">
-          ${roomInsightTabs(room, mode)}
-        </nav>
       </header>
     `;
   }
 
   function renderRoomInfoMode(state, room){
-    const carts = roomCartsForDetails(state, room);
-    const latest = latestRoomReadingLabel(carts);
     return `
-      <section class="cart-room-info-layout">
-        <article class="cart-room-info-card">
-          <h3>Sala</h3>
-          <div><span>Nome</span><strong>${escapeHtml(room.name)}</strong></div>
-          <div><span>Cliente</span><strong>Hospital Einstein</strong></div>
-          <div><span>Uso</span><strong>Carrinhos de residuo</strong></div>
-          <div><span>Ultima leitura</span><strong>${escapeHtml(latest)}</strong></div>
-        </article>
+      <section class="cart-room-info-layout gateway-only">
         <article class="cart-room-info-card">
           <h3>Gateway</h3>
-          <div><span>Identificacao</span><strong>${escapeHtml(formatGatewayShort(room.gatewayDeviceId))}</strong></div>
+          <div><span>Identificação</span><strong>${escapeHtml(formatGatewayShort(room.gatewayDeviceId))}</strong></div>
           <div><span>Fabricante</span><strong>MOKO</strong></div>
           <div><span>Modelo</span><strong>MKGW4</strong></div>
-          <div><span>Comunicacao</span><strong>BLE local + 4G</strong></div>
-          <div><span>Protocolo</span><strong>MQTT TLS</strong></div>
-        </article>
-        <article class="cart-room-info-card cart-room-info-wide">
-          <h3>Dispositivos lidos</h3>
-          <div class="cart-room-device-list">
-            ${carts.length ? carts.map(cart => `
-              <span>
-                <strong>${escapeHtml(cartDisplayName(cart))}</strong>
-                <em>${escapeHtml(fillLabel(cart))}</em>
-                <small>Bateria ${escapeHtml(cartBatteryLabel(cart))} - ${escapeHtml(cart.lastSeen || 'sem leitura')} - ${escapeHtml(formatMm(cart.distanceMm))}</small>
-              </span>
-            `).join('') : '<p>Nenhum carrinho nesta sala.</p>'}
-          </div>
+          <div><span>Tecnologia</span><strong>BLE + 4G</strong></div>
+          <div><span>Aplicação</span><strong>Leitura de carrinhos</strong></div>
         </article>
       </section>
     `;
   }
 
-  function renderRoomChartMode(state, room){
+  function renderRoomChartMode(state, room, view = 'summary'){
     const carts = roomCartsForDetails(state, room);
-    const events = roomTelemetryEvents(state, room);
+    const values = roomFillValues(state, room);
+    const current = values.length ? values[values.length - 1] : 0;
+    const max = values.length ? Math.max(...values) : 0;
+    const min = values.length ? Math.min(...values) : 0;
+    const avg = values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
     const fullCount = carts.filter(cart => fillTone(cart) === 'full').length;
+    const attentionCount = carts.filter(cart => fillTone(cart) === 'near-limit').length;
     return `
-      <section class="cart-room-chart-layout">
-        <article class="cart-room-chart-card">
-          <div class="cart-room-chart-title">
+      <section class="cart-room-chart-layout graph-only">
+        <article class="graph-main-card cart-room-graph-card">
+          <div class="graph-main-head">
             <div>
-              <span>Enchimento - ultimas leituras</span>
-              <h3>${escapeHtml(room.name)}</h3>
+              <div class="graph-eyebrow">SALA - ${escapeHtml(room.name.toUpperCase())}</div>
+              <div class="graph-h1">Últimas leituras</div>
+              <div class="graph-desc">Leitura resumida do status dos carrinhos nesta sala.</div>
             </div>
-            <em>Modo resumido</em>
+            <div class="cart-room-chart-view">
+              <button type="button" class="${view === 'summary' ? 'active' : ''}" data-room-insight-mode="chart-summary" data-room-id="${escapeHtml(room.id)}">Resumido</button>
+              <button type="button" class="${view === 'detail' ? 'active' : ''}" data-room-insight-mode="chart-detail" data-room-id="${escapeHtml(room.id)}">Detalhado</button>
+            </div>
           </div>
-          ${roomChartSvg(state, room)}
-          <div class="cart-room-chart-legend">
-            <span><i class="line"></i>Enchimento</span>
-            <span><i class="near"></i>Atencao</span>
-            <span><i class="critical"></i>Cheio</span>
+          <div class="graph-wrap">
+            <div class="graph-legend">
+              <div class="graph-legend-item"><span class="graph-band-swatch"></span> Livre</div>
+              <div class="graph-legend-item"><span class="graph-near-swatch"></span> Atenção</div>
+              <div class="graph-legend-item"><span class="graph-risk-swatch"></span> Crítico</div>
+            </div>
+            <div class="graph-box">
+              ${roomChartSvg(state, room)}
+            </div>
+          </div>
+          <div class="graph-summary cart-room-graph-summary">
+            <div class="graph-stat"><div class="graph-stat-k">Atual</div><div class="graph-stat-v">${Math.round(current)}%</div><div class="graph-stat-sub">Leitura mais recente.</div></div>
+            <div class="graph-stat"><div class="graph-stat-k">Pico</div><div class="graph-stat-v">${Math.round(max)}%</div><div class="graph-stat-sub">Maior leitura do período.</div></div>
+            <div class="graph-stat"><div class="graph-stat-k">Média</div><div class="graph-stat-v">${Math.round(avg)}%</div><div class="graph-stat-sub">Média das leituras.</div></div>
+            <div class="graph-stat"><div class="graph-stat-k">Alertas</div><div class="graph-stat-v">${fullCount + attentionCount}</div><div class="graph-stat-sub">Atenção e crítico.</div></div>
           </div>
         </article>
-        <aside class="cart-room-ops-card">
-          <h3>Telemetria operacional</h3>
-          <p>Eventos, duracao e acoes registradas para esta sala.</p>
-          <div class="cart-room-alert-active ${fullCount ? 'is-critical' : ''}">
-            <span>${fullCount ? 'ATENCAO EM ANDAMENTO' : 'OPERACAO NORMAL'}</span>
-            <strong>${fullCount ? `${fullCount} carrinho cheio` : 'Sem alerta ativo'}</strong>
-            <small>Canal ativo: Painel</small>
-          </div>
-          <div class="cart-room-ops-grid">
-            <span><small>Na sala</small><strong>${carts.length}</strong></span>
-            <span><small>Cheios</small><strong>${fullCount}</strong></span>
-            <span><small>Eventos</small><strong>${events.length}</strong></span>
-            <span><small>Ultima leitura</small><strong>${escapeHtml(latestRoomReadingLabel(carts))}</strong></span>
-          </div>
-          <div class="cart-room-channel-card">
-            <span>Painel</span>
-            <strong>${events.filter(event => event.type === 'critical').length}</strong>
-          </div>
-        </aside>
       </section>
     `;
   }
@@ -10417,49 +10389,69 @@ if(false){(function(){
   }
 
   function renderRoomTelemetryMode(state, room){
+    const carts = roomCartsForDetails(state, room);
     const events = roomTelemetryEvents(state, room).slice(0, 18);
+    const fullCount = carts.filter(cart => fillTone(cart) === 'full').length;
+    const attentionCount = carts.filter(cart => fillTone(cart) === 'near-limit').length;
+    const offlineCount = carts.filter(cart => cart.locationStatus === 'offline').length;
+    const freeCount = carts.filter(cart => fillTone(cart) === 'empty').length;
+    const activeClass = fullCount ? 'is-critical' : (attentionCount ? 'is-attention' : 'is-normal');
+    const activeLabel = fullCount ? 'CRÍTICO EM ANDAMENTO' : (attentionCount ? 'ATENÇÃO EM ANDAMENTO' : 'OPERAÇÃO NORMAL');
+    const activeMain = fullCount ? `${fullCount} crítico${fullCount === 1 ? '' : 's'}` : (attentionCount ? `${attentionCount} em atenção` : `${freeCount} livre${freeCount === 1 ? '' : 's'}`);
+    const timelineEvents = events.map(event => ({
+      time: formatDateTime(event.ts),
+      tone: event.type === 'critical' ? 'critical' : (event.type === 'status' ? 'attention' : (event.type === 'transit' ? 'alert' : 'normal')),
+      title: event.title || 'Evento',
+      detail: event.detail || ''
+    }));
     return `
       <section class="cart-room-telemetry-layout">
-        <article class="cart-room-telemetry-card">
-          <div class="cart-room-section-title">
-            <span>Linha do tempo</span>
-            <h3>Eventos da sala</h3>
-          </div>
-          <div class="cart-room-timeline">
-            ${events.length ? events.map(event => `
-              <div class="cart-room-event ${eventToneClass(event.type)}">
-                <time>${escapeHtml(formatDateTime(event.ts))}</time>
-                <span></span>
-                <div>
-                  <strong>${escapeHtml(event.title || 'Evento')}</strong>
-                  <small>${escapeHtml(event.detail || '')}${finiteNumberOrNull(event.fill) !== null ? ` - ${Math.round(event.fill)}%` : ''}</small>
+        <details class="graph-mini-card telemetry-accordion cart-room-telemetry-accordion" open>
+          <summary>
+            <span class="telemetry-heading-row">
+              <span class="telemetry-title-icon">${getStopwatchIcon()}</span>
+              <span class="telemetry-heading-copy">
+                <strong>Telemetria operacional</strong>
+                <small>Eventos e ações registradas nesta sala.</small>
+              </span>
+              <span class="telemetry-chevron" aria-hidden="true">⌄</span>
+            </span>
+            <span class="telemetry-active-card ${activeClass}">
+              <span class="telemetry-active-icon">${getOperationalTelemetryIcon(fullCount ? 'critical' : (attentionCount ? 'attention' : 'limit'))}</span>
+              <span class="telemetry-active-copy"><small>${activeLabel}</small><strong>${activeMain}</strong><em>Canal ativo: Painel</em></span>
+            </span>
+            <span class="telemetry-status-grid">
+              <span class="telemetry-status-card limit"><span class="telemetry-status-icon">${getOperationalTelemetryIcon('limit')}</span><span><small>Livre</small><strong>${freeCount}</strong></span></span>
+              <span class="telemetry-status-card attention"><span class="telemetry-status-icon">${getOperationalTelemetryIcon('attention')}</span><span><small>Atenção</small><strong>${attentionCount}</strong></span></span>
+              <span class="telemetry-status-card critical"><span class="telemetry-status-icon">${getOperationalTelemetryIcon('critical')}</span><span><small>Crítico</small><strong>${fullCount}</strong></span></span>
+              <span class="telemetry-status-card offline"><span class="telemetry-status-icon">${getOperationalTelemetryIcon('communication')}</span><span><small>Sem comunicação</small><strong>${offlineCount}</strong></span></span>
+            </span>
+            <span class="telemetry-section-label">Canais de alerta</span>
+            <span class="telemetry-channel-grid single-channel">
+              <span class="telemetry-channel-card panel">
+                <span>${getOperationalTelemetryIcon('alerts')}</span>
+                <small>Painel</small>
+                <strong>${events.filter(event => event.type === 'critical' || event.type === 'status').length}</strong>
+              </span>
+            </span>
+            <span class="telemetry-expand-hint">Clique para recolher ou expandir a linha do tempo</span>
+          </summary>
+          <div class="telemetry-expanded-content">
+            <div class="telemetry-timeline-head">
+              <div><strong>Linha do tempo</strong><small>Passagens, leituras e alertas vinculados à sala.</small></div>
+              <span>Últimas leituras</span>
+            </div>
+            <div class="telemetry-timeline">
+              ${timelineEvents.length ? timelineEvents.map(event => `
+                <div class="telemetry-event ${telemetryToneClass(event.tone)}">
+                  <time>${escapeTelemetryText(event.time)}</time>
+                  <span class="telemetry-event-dot"></span>
+                  <div><strong>${escapeTelemetryText(event.title)}</strong><small>${escapeTelemetryText(event.detail)}</small></div>
                 </div>
-              </div>
-            `).join('') : '<p class="cart-room-empty">Nenhum evento registrado ainda.</p>'}
+              `).join('') : '<p class="cart-room-empty">Nenhum evento registrado ainda.</p>'}
+            </div>
           </div>
-        </article>
-      </section>
-    `;
-  }
-
-  function renderRoomReportMode(state, room){
-    const carts = roomCartsForDetails(state, room);
-    const events = roomTelemetryEvents(state, room);
-    return `
-      <section class="cart-room-report-layout">
-        <article class="cart-room-report-card">
-          <div class="cart-room-section-title">
-            <span>Relatorio analitico</span>
-            <h3>Preparado para consolidacao</h3>
-          </div>
-          <p>O relatorio vai consolidar tempo ate retirada, picos de enchimento, trocas de carrinho e alertas do painel por periodo.</p>
-          <div class="cart-room-report-grid">
-            <span><small>Carrinhos atuais</small><strong>${carts.length}</strong></span>
-            <span><small>Eventos registrados</small><strong>${events.length}</strong></span>
-            <span><small>Canal de alerta</small><strong>Painel</strong></span>
-          </div>
-          <button type="button" class="cart-secondary-btn" disabled>Gerar relatorio em breve</button>
-        </article>
+        </details>
       </section>
     `;
   }
@@ -10470,16 +10462,17 @@ if(false){(function(){
     const content = document.getElementById('cartRoomInsightContent');
     const overlay = document.getElementById('cartRoomInsightOverlay');
     if(!room || !content || !overlay) return;
-    const body = mode === 'chart'
-      ? renderRoomChartMode(state, room)
-      : mode === 'telemetry'
+    const rawMode = String(mode || 'info');
+    const baseMode = rawMode.startsWith('chart') ? 'chart' : rawMode;
+    const chartView = rawMode === 'chart-detail' ? 'detail' : 'summary';
+    const body = baseMode === 'chart'
+      ? renderRoomChartMode(state, room, chartView)
+      : baseMode === 'telemetry'
         ? renderRoomTelemetryMode(state, room)
-        : mode === 'report'
-          ? renderRoomReportMode(state, room)
-          : renderRoomInfoMode(state, room);
+        : renderRoomInfoMode(state, room);
     overlay.dataset.roomId = room.id;
-    overlay.dataset.mode = mode;
-    content.innerHTML = `${roomInsightHeader(state, room, mode)}${body}`;
+    overlay.dataset.mode = rawMode;
+    content.innerHTML = `${roomInsightHeader(state, room, baseMode)}${body}`;
   }
 
   function openRoomInsight(roomId, mode = 'info'){
@@ -10513,20 +10506,20 @@ if(false){(function(){
     content.innerHTML = `
       <header class="cart-transit-modal-head">
         <span>Fluxo operacional</span>
-        <h2>Carrinhos em transito</h2>
+        <h2>Carrinhos em trânsito</h2>
         <p>${transitCarts.length} carrinho${transitCarts.length === 1 ? '' : 's'} em deslocamento</p>
       </header>
       <div class="cart-transit-modal-list">
         ${transitCarts.length ? transitCarts.map(cart => `
           <article class="cart-transit-card">
-            <div class="cart-transit-card-icon">${cartIcon()}</div>
+            <div class="cart-transit-card-icon approved">${transitIcon()}</div>
             <div>
               <strong>${escapeHtml(cartDisplayName(cart))}</strong>
               <small>${escapeHtml(cart.lastSeen || 'sem leitura')}</small>
               <div class="cart-transit-route">${transitStepsForCart(cart)}</div>
             </div>
           </article>
-        `).join('') : '<div class="cart-room-empty">Nenhum carrinho em transito agora.</div>'}
+        `).join('') : '<div class="cart-room-empty">Nenhum carrinho em trânsito agora.</div>'}
       </div>
     `;
   }
@@ -10540,6 +10533,55 @@ if(false){(function(){
 
   function closeTransitModal(){
     const overlay = document.getElementById('cartTransitModalOverlay');
+    if(overlay) overlay.hidden = true;
+  }
+
+  function renderCartReportModal(){
+    const state = readState();
+    const content = document.getElementById('cartReportModalContent');
+    if(!content) return;
+    const events = Array.isArray(state.telemetryEvents) ? state.telemetryEvents : [];
+    const fullCount = state.carts.filter(cart => fillTone(cart) === 'full').length;
+    const attentionCount = state.carts.filter(cart => fillTone(cart) === 'near-limit').length;
+    content.innerHTML = `
+      <header class="cart-transit-modal-head cart-report-modal-head">
+        <span>Relatórios</span>
+        <h2>Relatórios operacionais</h2>
+        <p>Consolidado geral dos carrinhos, salas e alertas do painel.</p>
+      </header>
+      <details class="graph-mini-card graph-report-accordion cart-global-report-accordion" open>
+        <summary>
+          <span class="graph-report-icon">${getReportIcon()}</span>
+          <span class="graph-report-summary-copy">
+            <strong>Relatório Analítico</strong>
+            <small>Tempo de retirada, alertas, trocas e histórico por sala</small>
+          </span>
+          <span class="graph-report-chevron" aria-hidden="true">⌄</span>
+        </summary>
+        <div class="cart-report-kpi-row">
+          <span><small>Críticos</small><strong>${fullCount}</strong></span>
+          <span><small>Atenção</small><strong>${attentionCount}</strong></span>
+          <span><small>Eventos</small><strong>${events.length}</strong></span>
+          <span><small>Canal</small><strong>Painel</strong></span>
+        </div>
+        <div class="graph-report-list">
+          <button class="graph-report-btn" disabled>Exportar PDF</button>
+          <button class="graph-report-btn" disabled>Exportar Excel</button>
+          <button class="graph-report-btn" disabled>Relatório Analítico</button>
+        </div>
+      </details>
+    `;
+  }
+
+  function openCartReportModal(){
+    const overlay = document.getElementById('cartReportModalOverlay');
+    if(!overlay) return;
+    renderCartReportModal();
+    overlay.hidden = false;
+  }
+
+  function closeCartReportModal(){
+    const overlay = document.getElementById('cartReportModalOverlay');
     if(overlay) overlay.hidden = true;
   }
 
@@ -11091,16 +11133,16 @@ if(false){(function(){
             <span class="cart-total-value"><strong>${totalText(stats.total)}</strong><small>carrinhos</small></span>
           </button>
           <button type="button" class="cart-status-item empty ${activeCartFilter === 'empty' ? 'active' : ''}" data-cart-filter="empty" aria-pressed="${activeCartFilter === 'empty' ? 'true' : 'false'}">
-            <em><i></i>Vazios</em>
+            <em><i></i>Livres</em>
             <strong>${countText(stats.empty)}</strong>
           </button>
-          <button type="button" class="cart-status-item full ${activeCartFilter === 'full' ? 'active' : ''}" data-cart-filter="full" aria-pressed="${activeCartFilter === 'full' ? 'true' : 'false'}">
-            <em><i></i>Cheios</em>
-            <strong>${countText(stats.full)}</strong>
+          <button type="button" class="cart-status-item near ${activeCartFilter === 'near' ? 'active' : ''}" data-cart-filter="near" aria-pressed="${activeCartFilter === 'near' ? 'true' : 'false'}">
+            <em><i></i>Atenção</em>
+            <strong>${countText(stats.nearLimit)}</strong>
           </button>
-          <button type="button" class="cart-status-item lost ${activeCartFilter === 'lost' ? 'active' : ''}" data-cart-filter="lost" aria-pressed="${activeCartFilter === 'lost' ? 'true' : 'false'}">
-            <em><i></i>Perdidos</em>
-            <strong>${countText(stats.lost)}</strong>
+          <button type="button" class="cart-status-item full ${activeCartFilter === 'full' ? 'active' : ''}" data-cart-filter="full" aria-pressed="${activeCartFilter === 'full' ? 'true' : 'false'}">
+            <em><i></i>Críticos</em>
+            <strong>${countText(stats.full)}</strong>
           </button>
         </div>
       </article>
@@ -11113,13 +11155,19 @@ if(false){(function(){
           <img class="cart-flow-img hygiene" src="./assets/cr-icon-hygiene-clean.png" alt="" loading="lazy">
           <span class="cart-flow-label">Higienização</span>
         </button>
-        <button type="button" class="cart-flow-item transit" data-cart-transit-modal aria-label="Carrinhos em transito">
-          <span class="cart-flow-transit-icon" aria-hidden="true">${cartIcon()}</span>
+        <button type="button" class="cart-flow-item transit" data-cart-transit-modal aria-label="Carrinhos em trânsito">
+          <span class="cart-flow-transit-icon approved" aria-hidden="true">${transitIcon()}</span>
           <b>${countText(transitTotal)}</b>
-          <span class="cart-flow-label">Em transito</span>
+          <span class="cart-flow-label">Em trânsito</span>
         </button>
       </article>
-      <article class="cart-overview-card cart-overview-empty" aria-hidden="true"></article>
+      <article class="cart-overview-card cart-overview-report">
+        <button type="button" class="cart-report-global-btn" data-cart-report-modal aria-label="Abrir relatórios">
+          <span class="graph-report-icon">${getReportIcon()}</span>
+          <strong>Relatórios</strong>
+          <small>Analítico</small>
+        </button>
+      </article>
       <article class="cart-overview-card cart-overview-empty" aria-hidden="true"></article>
     `;
   }
@@ -11135,7 +11183,7 @@ if(false){(function(){
       <div class="cart-transit-strip">
         <div>
           <strong>${escapeHtml(cartDisplayName(cart))}</strong>
-          <small>Em transito - sinal afastando</small>
+          <small>Em trânsito - sinal afastando</small>
         </div>
         <div class="cart-transit-steps">${steps}</div>
       </div>
@@ -11202,7 +11250,7 @@ if(false){(function(){
           return `
             <button type="button" class="cart-room-transit-status" data-cart-id="${escapeHtml(cart.id)}">
               <span>
-                <strong>${escapeHtml(cartDisplayName(cart))} em transito</strong>
+                <strong>${escapeHtml(cartDisplayName(cart))} em trânsito</strong>
                 <small>Sinal afastando da sala</small>
               </span>
               <span class="cart-room-transit-steps">${steps}</span>
@@ -11246,17 +11294,9 @@ if(false){(function(){
               <span class="cart-room-gateway readonly">Gateway: ${escapeHtml(formatGatewayShort(room.gatewayDeviceId))}</span>
             </div>
             <div class="cart-room-header-actions">
-              <button type="button" class="cart-room-action-btn" data-room-insight="${escapeHtml(room.id)}" data-room-insight-mode="chart">Grafico</button>
+              <button type="button" class="cart-room-action-btn" data-room-insight="${escapeHtml(room.id)}" data-room-insight-mode="chart">Gráfico</button>
               <button type="button" class="cart-room-action-btn" data-room-insight="${escapeHtml(room.id)}" data-room-insight-mode="telemetry">Telemetria</button>
-              <button type="button" class="cart-room-icon-btn" data-room-insight="${escapeHtml(room.id)}" data-room-insight-mode="report" aria-label="Relatorio analitico">
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M6 3h8l4 4v14H6z"></path>
-                  <path d="M14 3v5h5"></path>
-                  <path d="M9 14h6"></path>
-                  <path d="M9 17h4"></path>
-                </svg>
-              </button>
-              <button type="button" class="cart-room-info-btn" data-room-insight="${escapeHtml(room.id)}" data-room-insight-mode="info" aria-label="Informacoes de ${escapeHtml(room.name)}">
+              <button type="button" class="cart-room-info-btn" data-room-insight="${escapeHtml(room.id)}" data-room-insight-mode="info" aria-label="Informações de ${escapeHtml(room.name)}">
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <circle cx="12" cy="12" r="9"></circle>
                   <path d="M12 10v6"></path>
@@ -11456,6 +11496,12 @@ if(false){(function(){
           <div id="cartTransitModalContent"></div>
         </div>
       </div>
+      <div class="cart-report-modal-overlay" id="cartReportModalOverlay" hidden>
+        <div class="cart-transit-modal cart-report-modal">
+          <button type="button" class="cart-detail-close" id="cartReportModalCloseBtn">x</button>
+          <div id="cartReportModalContent"></div>
+        </div>
+      </div>
     `;
 
     const layoutNode = document.getElementById('layout');
@@ -11531,6 +11577,10 @@ if(false){(function(){
     document.getElementById('cartTransitModalOverlay')?.addEventListener('click', event => {
       if(event.target.id === 'cartTransitModalOverlay') closeTransitModal();
     });
+    document.getElementById('cartReportModalCloseBtn')?.addEventListener('click', closeCartReportModal);
+    document.getElementById('cartReportModalOverlay')?.addEventListener('click', event => {
+      if(event.target.id === 'cartReportModalOverlay') closeCartReportModal();
+    });
     document.getElementById('cartCalibrationToggle')?.addEventListener('click', toggleCartCalibrationPanel);
     document.getElementById('cartCalibrationPanel')?.addEventListener('click', handleCalibrationSelectClick);
     document.getElementById('cartCalibrationPanel')?.addEventListener('keydown', handleCalibrationSelectKeydown);
@@ -11553,6 +11603,12 @@ if(false){(function(){
   }
 
   function handleCartFilterClick(event){
+    const reportButton = event.target.closest('[data-cart-report-modal]');
+    if(reportButton){
+      openCartReportModal();
+      return;
+    }
+
     const transitButton = event.target.closest('[data-cart-transit-modal]');
     if(transitButton){
       openTransitModal();

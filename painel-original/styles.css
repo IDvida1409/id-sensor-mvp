@@ -11420,10 +11420,10 @@ body.analytic-report-open{overflow:hidden}
 }
 
 /* ===== Final cart tracking cleanup ===== */
-.cart-summary-strip span:nth-child(1)::after{content:"Total"}
-.cart-summary-strip span:nth-child(2)::after{content:"Criticos"}
-.cart-summary-strip span:nth-child(3)::after{content:"Vazios"}
-.cart-summary-strip span:nth-child(4)::after{content:"Proximo limite"}
+.cart-summary-strip span:nth-child(1)::after,
+.cart-summary-strip span:nth-child(2)::after,
+.cart-summary-strip span:nth-child(3)::after,
+.cart-summary-strip span:nth-child(4)::after{content:none}
 
 .cart-room-status-list{
   display:grid;
@@ -14655,5 +14655,240 @@ body.analytic-report-open{overflow:hidden}
 
   .cart-room-header-actions{
     justify-content:flex-start;
+  }
+}
+
+/* ===== Einstein review pass: align room views with main dashboard ===== */
+.cart-status-item.near i{background:#f59e0b !important;}
+.cart-status-item.near strong{color:#f59e0b !important;}
+
+.cart-flow-transit-icon.approved{
+  background:#fff;
+  border:1px solid #d7e1ee;
+  border-radius:8px;
+  height:52px;
+  width:58px;
+}
+
+.cart-flow-transit-icon.approved img{
+  display:block;
+  height:48px;
+  object-fit:contain;
+  width:54px;
+}
+
+.cart-transit-card-icon.approved{
+  background:#fff;
+  overflow:hidden;
+}
+
+.cart-transit-card-icon.approved img{
+  display:block;
+  height:48px;
+  object-fit:contain;
+  width:48px;
+}
+
+.cart-overview-report{
+  align-items:center;
+  display:flex;
+  justify-content:center;
+  min-height:92px !important;
+  padding:10px !important;
+}
+
+.cart-report-global-btn{
+  align-items:center;
+  appearance:none;
+  background:transparent;
+  border:0;
+  color:#17233a;
+  cursor:pointer;
+  display:grid;
+  gap:4px;
+  justify-items:center;
+  min-height:70px;
+  width:100%;
+}
+
+.cart-report-global-btn .graph-report-icon{
+  height:38px;
+  width:38px;
+}
+
+.cart-report-global-btn strong{
+  font-size:13px;
+  font-weight:950;
+  line-height:1;
+}
+
+.cart-report-global-btn small{
+  color:#64748b;
+  font-size:10px;
+  font-weight:850;
+}
+
+.cart-report-global-btn:hover{
+  color:#0753b5;
+}
+
+.cart-report-modal-overlay{
+  align-items:center;
+  background:rgba(7,19,41,.48);
+  display:flex;
+  inset:0;
+  justify-content:center;
+  padding:22px;
+  position:fixed;
+  z-index:12030;
+}
+
+.cart-report-modal-overlay[hidden]{
+  display:none !important;
+}
+
+.cart-report-modal{
+  width:min(760px,calc(100vw - 44px));
+}
+
+.cart-room-insight-head h2,
+.cart-transit-modal-head h2{
+  font-size:24px;
+  letter-spacing:0;
+}
+
+.cart-room-insight-head span,
+.cart-transit-modal-head span{
+  font-size:11px;
+}
+
+.cart-room-info-layout.gateway-only{
+  grid-template-columns:minmax(280px,520px);
+}
+
+.cart-room-info-layout.gateway-only .cart-room-info-card{
+  box-shadow:none;
+}
+
+.cart-room-chart-layout.graph-only{
+  grid-template-columns:1fr;
+}
+
+.cart-room-graph-card.graph-main-card{
+  padding:22px;
+}
+
+.cart-room-graph-card .graph-h1{
+  font-size:28px;
+  letter-spacing:0;
+}
+
+.cart-room-graph-card .graph-desc{
+  font-size:13px;
+}
+
+.cart-room-chart-view{
+  align-items:center;
+  background:#f8fbff;
+  border:1px solid #dbe6f4;
+  border-radius:999px;
+  display:flex;
+  gap:4px;
+  padding:4px;
+}
+
+.cart-room-chart-view button{
+  appearance:none;
+  background:transparent;
+  border:0;
+  border-radius:999px;
+  color:#2b3b52;
+  cursor:pointer;
+  font:inherit;
+  font-size:12px;
+  font-weight:950;
+  min-height:34px;
+  padding:0 14px;
+}
+
+.cart-room-chart-view button.active{
+  background:#2f80ff;
+  box-shadow:0 9px 18px rgba(47,128,255,.20);
+  color:#fff;
+}
+
+.cart-room-graph-card .cart-room-chart-svg{
+  background:transparent;
+  border:0;
+  min-height:300px;
+}
+
+.cart-room-graph-summary .graph-stat-sub{
+  white-space:normal;
+}
+
+.cart-room-telemetry-layout{
+  display:block;
+}
+
+.cart-room-telemetry-accordion{
+  margin:0;
+}
+
+.cart-room-telemetry-accordion .telemetry-heading-copy small,
+.cart-room-telemetry-accordion .telemetry-active-copy em,
+.cart-room-telemetry-accordion .telemetry-event small{
+  line-height:1.35;
+}
+
+.telemetry-channel-grid.single-channel{
+  grid-template-columns:minmax(160px,260px);
+}
+
+.telemetry-channel-card.panel > span:first-child{
+  background:#ebf3ff;
+  color:#2f80ff;
+}
+
+.cart-global-report-accordion{
+  margin-top:18px;
+}
+
+.cart-report-kpi-row{
+  display:grid;
+  gap:8px;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  margin:12px 0;
+}
+
+.cart-report-kpi-row span{
+  background:#f8fbff;
+  border:1px solid #dfe7f1;
+  border-radius:8px;
+  display:grid;
+  gap:4px;
+  padding:10px;
+}
+
+.cart-report-kpi-row small{
+  color:#64748b;
+  font-size:10px;
+  font-weight:900;
+}
+
+.cart-report-kpi-row strong{
+  color:#17233a;
+  font-size:20px;
+  font-weight:950;
+}
+
+@media (max-width:900px){
+  .cart-room-chart-view{
+    justify-content:flex-start;
+    width:max-content;
+  }
+
+  .cart-report-kpi-row{
+    grid-template-columns:repeat(2,minmax(0,1fr));
   }
 }
