@@ -10229,7 +10229,32 @@ if(false){(function(){
     return distance === null ? `${fill}%` : `${fill}% (${Math.round(distance)} mm)`;
   }
 
+  function isObstructedCart(cart){
+    return String(cart?.collectorStatus || '').toLowerCase() === 'sensor_obstructed';
+  }
+
+  function cartCriticalDistanceLabel(cart){
+    const calibration = cartCalibration(cart);
+    const distance = distanceForFillPercentage(calibration, cartRedPercent(cart));
+    return formatMm(distance);
+  }
+
+  function cartSideStatusLabel(cart){
+    if(isLostCart(cart)) return 'Perdido';
+    if(isObstructedCart(cart)) return 'Obstrução provável';
+    if(fillTone(cart) === 'full') return 'Crítico';
+    return 'Livre';
+  }
+
+  function cartSideStatusDetail(cart){
+    if(isObstructedCart(cart)) return 'Salto de leitura detectado.';
+    if(fillTone(cart) === 'full') return `Limite: ${cartCriticalDistanceLabel(cart)}`;
+    if(isLostCart(cart)) return 'Sem leitura recente.';
+    return '';
+  }
+
   function cartStatusTone(cart){
+    if(isObstructedCart(cart)) return 'obstruction';
     const tone = fillTone(cart);
     if(tone === 'full') return 'critical';
     if(tone === 'lost') return 'lost';
@@ -10244,20 +10269,21 @@ if(false){(function(){
     const statusTone = cartStatusTone(cart);
     const battery = cartBatteryPercent(cart);
     const batteryWidth = battery === null ? 8 : Math.max(8, Math.min(100, battery));
-    const rawStatus = String(cart?.collectorStatus || '').toLowerCase();
-    const readingDetail = cartReadingDetail(cart);
-    const statusDetail = (statusTone === 'critical' || rawStatus === 'sensor_obstructed') && readingDetail
-      ? readingDetail
-      : '';
+    const statusLabel = cartSideStatusLabel(cart);
+    const statusDetail = cartSideStatusDetail(cart);
     return `
       <div class="cart-side-meta" aria-label="Resumo de ${escapeHtml(cartDisplayName(cart))}">
         <span class="cart-side-row cart-side-status" title="${escapeHtml(cartLevelLabel(cart))}">
           <i class="cart-side-dot ${statusTone}" aria-hidden="true"></i>
-          <b>${escapeHtml(fillLabel(cart))}</b>
-          ${statusDetail ? `<em>${escapeHtml(statusDetail)}</em>` : ''}
+          <b>${escapeHtml(statusLabel)}</b>
         </span>
+        ${statusDetail ? `
+          <span class="cart-side-row cart-side-limit">
+            <small>${escapeHtml(statusDetail)}</small>
+          </span>
+        ` : ''}
         <span class="cart-side-row cart-side-reading">
-          <small>Última leitura</small>
+          <small>Última leitura:</small>
           <b>${escapeHtml(cart.lastSeen || 'sem leitura')}</b>
         </span>
         <span class="cart-side-row cart-side-battery">
@@ -11416,9 +11442,10 @@ if(false){(function(){
     return `
       <div class="cart-item-unit">
         <button type="button" class="cart-item-card ${tone} ${escapeHtml(cart.locationStatus)} ${lidOpen ? 'lid-open' : 'lid-closed'}" data-cart-id="${escapeHtml(cart.id)}" style="--cart-fill:${visualFill}%;--cart-liquid:${visualFill}%">
+          <span class="cart-card-online-dot ${isLostCart(cart) ? 'offline' : 'online'}" aria-hidden="true"></span>
           ${showStatus ? `<span class="cart-card-status"><i>${locationLabel(cart)}</i></span>` : ''}
           <span class="cart-item-body">
-            <strong>${escapeHtml(cartDisplayName(cart))}<i class="cart-card-online-dot ${isLostCart(cart) ? 'offline' : 'online'}" aria-hidden="true"></i></strong>
+            <strong>${escapeHtml(cartDisplayName(cart))}</strong>
           </span>
           <span class="cart-visual" aria-hidden="true">
             <span class="cart-bin-empty-shell ${lidOpen ? 'open' : 'closed'}">
@@ -11602,6 +11629,7 @@ if(false){(function(){
               <small id="cartDetailMeta">Sensor BLE</small>
             </div>
           </div>
+          <div class="cart-detail-device-summary" id="cartDetailDeviceSummary"></div>
           <label>
             Nome do carrinho
             <input id="cartDetailName" type="text" placeholder="Carrinho 01">
@@ -11666,10 +11694,12 @@ if(false){(function(){
       <div class="cart-settings-overlay" id="cartSettingsOverlay" hidden>
         <div class="cart-settings-modal">
           <button type="button" class="cart-detail-close" id="cartSettingsCloseBtn">x</button>
-          <h2>Configuracoes</h2>
-          <div class="cart-settings-actions">
-            <button type="button" class="cart-primary-btn" id="cartAddDeviceBtn">Adicionar dispositivo</button>
+          <div class="cart-settings-head">
+            <span>Configurações</span>
+            <h2>Ambiente C.R.</h2>
+            <p>Salas, gateways e sensores cadastrados para o monitoramento.</p>
           </div>
+          <div class="cart-settings-content" id="cartSettingsContent"></div>
         </div>
       </div>
       <div class="cart-room-settings-overlay" id="cartRoomSettingsOverlay" hidden>
@@ -11756,10 +11786,7 @@ if(false){(function(){
     document.getElementById('cartSettingsOverlay')?.addEventListener('click', event => {
       if(event.target.id === 'cartSettingsOverlay') closeCartSettings();
     });
-    document.getElementById('cartAddDeviceBtn')?.addEventListener('click', () => {
-      closeCartSettings();
-      openCartDetail(null, '');
-    });
+    document.getElementById('cartSettingsContent')?.addEventListener('click', handleCartSettingsClick);
     document.getElementById('cartRoomSettingsCloseBtn')?.addEventListener('click', closeRoomSettings);
     document.getElementById('cartRoomSettingsOverlay')?.addEventListener('click', event => {
       if(event.target.id === 'cartRoomSettingsOverlay') closeRoomSettings();
@@ -11893,9 +11920,155 @@ if(false){(function(){
     openCartRoomModal(roomId === HYGIENE_ROOM_ID ? 'hygiene' : 'residue');
   }
 
+  function cartRoomNameById(state, roomId){
+    return state.rooms.find(room => room.id === roomId)?.name || 'Sem sala';
+  }
+
+  function cartCalibrationSummaryLabel(cart){
+    const calibration = cartCalibration(cart);
+    const distance = distanceForFillPercentage(calibration, calibration.redPercent);
+    return `${calibration.redPercent}% (${formatMm(distance)})`;
+  }
+
+  function cartSettingsRoomRows(state){
+    return state.rooms.map(room => {
+      const count = state.carts.filter(cart => cart.roomId === room.id && cart.locationStatus !== 'transit').length;
+      return `
+        <div class="cart-settings-row">
+          <span>
+            <strong>${escapeHtml(room.name)}</strong>
+            <small>Gateway ${escapeHtml(formatGatewayShort(room.gatewayDeviceId))} · ${count} CR</small>
+          </span>
+          <button type="button" data-settings-room="${escapeHtml(room.id)}">Editar</button>
+        </div>
+      `;
+    }).join('');
+  }
+
+  function cartSettingsGatewayRows(state){
+    const roomsWithGateway = state.rooms.filter(room => normalizeGatewayId(room.gatewayDeviceId));
+    if(!roomsWithGateway.length){
+      return '<p class="cart-settings-empty">Nenhum gateway vinculado.</p>';
+    }
+    return roomsWithGateway.map(room => `
+      <div class="cart-settings-row">
+        <span>
+          <strong>MKGW4 · ${escapeHtml(formatGatewayShort(room.gatewayDeviceId))}</strong>
+          <small>MOKO · BLE + 4G · ${escapeHtml(room.name)}</small>
+        </span>
+        <button type="button" data-settings-room="${escapeHtml(room.id)}">Trocar</button>
+      </div>
+    `).join('');
+  }
+
+  function cartSettingsDeviceRows(state){
+    if(!state.carts.length){
+      return '<p class="cart-settings-empty">Nenhum sensor cadastrado.</p>';
+    }
+    return state.carts.map(cart => `
+      <div class="cart-settings-row device">
+        <span>
+          <strong>${escapeHtml(cartDisplayName(cart))}</strong>
+          <small>${escapeHtml(formatMac(cart.mac))} · ${escapeHtml(cartRoomNameById(state, cart.roomId))}</small>
+          <small>Calibração ${escapeHtml(cartCalibrationSummaryLabel(cart))} · Bateria ${escapeHtml(cartBatteryLabel(cart))}</small>
+        </span>
+        <span class="cart-settings-row-actions">
+          <button type="button" data-settings-device="${escapeHtml(cart.id)}">Detalhes</button>
+          <button type="button" data-settings-calibration="${escapeHtml(cart.id)}">Calibrar</button>
+        </span>
+      </div>
+    `).join('');
+  }
+
+  function renderCartSettingsContent(){
+    const content = document.getElementById('cartSettingsContent');
+    if(!content) return;
+    const state = readState();
+    content.innerHTML = `
+      <section class="cart-settings-section">
+        <div class="cart-settings-section-head">
+          <span>
+            <strong>Salas</strong>
+            <small>Criar sala e vincular gateway.</small>
+          </span>
+          <button type="button" class="cart-settings-mini-btn" data-settings-add-room>Adicionar sala</button>
+        </div>
+        <div class="cart-settings-list">${cartSettingsRoomRows(state)}</div>
+      </section>
+      <section class="cart-settings-section">
+        <div class="cart-settings-section-head">
+          <span>
+            <strong>Gateways</strong>
+            <small>Dispositivos MOKO em uso.</small>
+          </span>
+        </div>
+        <div class="cart-settings-list">${cartSettingsGatewayRows(state)}</div>
+      </section>
+      <section class="cart-settings-section">
+        <div class="cart-settings-section-head">
+          <span>
+            <strong>Dispositivos</strong>
+            <small>Sensores e calibração atual.</small>
+          </span>
+          <button type="button" class="cart-settings-mini-btn" data-settings-add-device>Adicionar dispositivo</button>
+        </div>
+        <div class="cart-settings-list">${cartSettingsDeviceRows(state)}</div>
+      </section>
+    `;
+  }
+
+  function createRoomIdFromName(state, name){
+    const base = normalizeCartSearch(name)
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'sala';
+    let candidate = base.startsWith('sala-') ? base : `sala-${base}`;
+    let index = 2;
+    while(state.rooms.some(room => room.id === candidate)){
+      candidate = `${base}-${index}`;
+      index += 1;
+    }
+    return candidate;
+  }
+
+  function handleCartSettingsClick(event){
+    const addRoom = event.target.closest('[data-settings-add-room]');
+    if(addRoom){
+      openRoomSettings('');
+      return;
+    }
+
+    const addDevice = event.target.closest('[data-settings-add-device]');
+    if(addDevice){
+      closeCartSettings();
+      openCartDetail(null, '');
+      return;
+    }
+
+    const roomButton = event.target.closest('[data-settings-room]');
+    if(roomButton){
+      openRoomSettings(roomButton.getAttribute('data-settings-room') || '');
+      return;
+    }
+
+    const deviceButton = event.target.closest('[data-settings-device]');
+    const calibrationButton = event.target.closest('[data-settings-calibration]');
+    const cartId = deviceButton?.getAttribute('data-settings-device') || calibrationButton?.getAttribute('data-settings-calibration');
+    if(cartId){
+      closeCartSettings();
+      openCartDetail(cartId, '');
+      if(calibrationButton){
+        window.setTimeout(() => {
+          setCalibrationExpanded(true);
+          setCalibrationMode('view');
+        }, 0);
+      }
+    }
+  }
+
   function openCartSettings(){
     if(!canManageCartSettings()) return;
     const overlay = document.getElementById('cartSettingsOverlay');
+    renderCartSettingsContent();
     if(overlay) overlay.hidden = false;
   }
 
@@ -11909,12 +12082,14 @@ if(false){(function(){
     const state = readState();
     const room = state.rooms.find(item => item.id === roomId);
     const overlay = document.getElementById('cartRoomSettingsOverlay');
-    if(!room || !overlay) return;
-    overlay.dataset.roomId = room.id;
+    if(!overlay) return;
+    overlay.dataset.roomId = room?.id || '';
     const name = document.getElementById('cartRoomSettingsName');
     const gateway = document.getElementById('cartRoomSettingsGateway');
-    if(name) name.value = room.name || '';
-    if(gateway) gateway.value = room.gatewayDeviceId || '';
+    const title = overlay.querySelector('h2');
+    if(title) title.textContent = room ? 'Configurar sala' : 'Adicionar sala';
+    if(name) name.value = room?.name || '';
+    if(gateway) gateway.value = room?.gatewayDeviceId || '';
     overlay.hidden = false;
     name?.focus();
   }
@@ -11929,18 +12104,27 @@ if(false){(function(){
     const overlay = document.getElementById('cartRoomSettingsOverlay');
     const roomId = overlay?.dataset.roomId;
     const state = readState();
-    const room = state.rooms.find(item => item.id === roomId);
-    if(!room) return;
+    let room = state.rooms.find(item => item.id === roomId);
     const name = document.getElementById('cartRoomSettingsName')?.value.trim();
     const gateway = document.getElementById('cartRoomSettingsGateway')?.value.trim();
     if(!name){
       alert('Informe o nome da sala.');
       return;
     }
+    if(!room){
+      room = {
+        id:createRoomIdFromName(state, name),
+        name:'',
+        gatewayDeviceId:'',
+        expectedTotal:0
+      };
+      state.rooms.push(room);
+    }
     room.name = name.toUpperCase();
     room.gatewayDeviceId = gateway || '';
     saveState(state);
     closeRoomSettings();
+    renderCartSettingsContent();
     renderRooms();
   }
 
@@ -12008,6 +12192,7 @@ if(false){(function(){
     const name = document.getElementById('cartDetailName');
     const mac = document.getElementById('cartDetailMac');
     const saveBtn = document.getElementById('cartDetailSaveBtn');
+    const summary = document.getElementById('cartDetailDeviceSummary');
     const canManage = canManageCartSettings();
 
     if(title) title.textContent = cart?.name || 'Novo dispositivo';
@@ -12021,6 +12206,19 @@ if(false){(function(){
     if(name) name.readOnly = !canManage;
     if(mac) mac.readOnly = !canManage;
     if(saveBtn) saveBtn.hidden = !canManage;
+    if(summary){
+      summary.innerHTML = cart ? `
+        <span><small>MAC</small><strong>${escapeHtml(formatMac(cart.mac))}</strong></span>
+        <span><small>Modelo</small><strong>Sensor ToF BLE</strong></span>
+        <span><small>Sala</small><strong>${escapeHtml(cartRoomNameById(state, cart.roomId))}</strong></span>
+        <span><small>Bateria</small><strong>${escapeHtml(cartBatteryLabel(cart))}</strong></span>
+        <span><small>Última leitura</small><strong>${escapeHtml(cart.lastSeen || 'sem leitura')}</strong></span>
+        <span><small>Calibração</small><strong>${escapeHtml(cartCalibrationSummaryLabel(cart))}</strong></span>
+      ` : `
+        <span><small>Tipo</small><strong>Sensor ToF BLE</strong></span>
+        <span><small>Status</small><strong>Novo cadastro</strong></span>
+      `;
+    }
     renderCartCalibrationPanel(cart);
     setCalibrationExpanded(false);
 
