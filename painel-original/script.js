@@ -10203,16 +10203,24 @@ if(false){(function(){
   }
 
   function cartBatteryLabel(cart){
-    const battery = finiteNumberOrNull(cart?.battery);
+    const battery = cartBatteryPercent(cart);
     return battery === null ? '--' : `${Math.round(battery)}%`;
   }
 
   function cartBatteryTone(cart){
-    const battery = finiteNumberOrNull(cart?.battery);
+    const battery = cartBatteryPercent(cart);
     if(battery === null) return 'unknown';
     if(battery < 20) return 'critical';
     if(battery <= 35) return 'warning';
     return 'good';
+  }
+
+  function cartBatteryPercent(cart){
+    const battery = finiteNumberOrNull(cart?.battery);
+    if(battery !== null) return clampNumber(battery, 0, 100);
+    const voltage = finiteNumberOrNull(cart?.batteryVoltageMv);
+    if(voltage === null) return null;
+    return clampNumber(((voltage - 2200) / 900) * 100, 0, 100);
   }
 
   function cartLevelLabel(cart){
@@ -10234,32 +10242,28 @@ if(false){(function(){
 
   function renderCartSideMeta(cart){
     const statusTone = cartStatusTone(cart);
-    const communicationTone = isLostCart(cart) ? 'offline' : 'online';
-    const battery = finiteNumberOrNull(cart?.battery);
+    const battery = cartBatteryPercent(cart);
     const batteryWidth = battery === null ? 8 : Math.max(8, Math.min(100, battery));
+    const rawStatus = String(cart?.collectorStatus || '').toLowerCase();
+    const readingDetail = cartReadingDetail(cart);
+    const statusDetail = (statusTone === 'critical' || rawStatus === 'sensor_obstructed') && readingDetail
+      ? readingDetail
+      : '';
     return `
       <div class="cart-side-meta" aria-label="Resumo de ${escapeHtml(cartDisplayName(cart))}">
-        <strong>${escapeHtml(cartDisplayName(cart))}</strong>
-        <span class="cart-side-row">
+        <span class="cart-side-row cart-side-status" title="${escapeHtml(cartLevelLabel(cart))}">
           <i class="cart-side-dot ${statusTone}" aria-hidden="true"></i>
           <b>${escapeHtml(fillLabel(cart))}</b>
+          ${statusDetail ? `<em>${escapeHtml(statusDetail)}</em>` : ''}
         </span>
-        <span class="cart-side-row">
-          <small>Nível</small>
-          <b>${escapeHtml(cartLevelLabel(cart))}</b>
-        </span>
-        <span class="cart-side-row">
+        <span class="cart-side-row cart-side-reading">
           <small>Última leitura</small>
           <b>${escapeHtml(cart.lastSeen || 'sem leitura')}</b>
         </span>
-        <span class="cart-side-row">
+        <span class="cart-side-row cart-side-battery">
           <i class="cart-battery-mini ${cartBatteryTone(cart)}" aria-hidden="true"><em style="width:${batteryWidth}%"></em></i>
           <small>Bateria</small>
           <b>${escapeHtml(cartBatteryLabel(cart))}</b>
-        </span>
-        <span class="cart-side-row">
-          <i class="cart-side-dot ${communicationTone}" aria-hidden="true"></i>
-          <b>${escapeHtml(cartCommunicationLabel(cart))}</b>
         </span>
       </div>
     `;
@@ -10298,6 +10302,144 @@ if(false){(function(){
     }));
   }
 
+  function roomChronologicalEvents(state, room){
+    return roomTelemetryEvents(state, room)
+      .map(event => ({ ...event, _time:new Date(event.ts || 0).getTime() }))
+      .filter(event => Number.isFinite(event._time))
+      .sort((a, b) => a._time - b._time);
+  }
+
+  function formatCartDurationFromMs(ms, fallback = 'aguardando'){
+    const value = Number(ms);
+    if(!Number.isFinite(value) || value < 0) return fallback;
+    const totalMinutes = Math.max(0, Math.round(value / 60000));
+    if(totalMinutes < 1) return '<1 min';
+    if(totalMinutes < 60) return `${totalMinutes} min`;
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    return minutes ? `${hours}h ${String(minutes).padStart(2, '0')}` : `${hours}h`;
+  }
+
+  function eventText(event){
+    return `${event?.title || ''} ${event?.detail || ''}`.toLowerCase();
+  }
+
+  function isCriticalEvent(event){
+    const text = eventText(event);
+    return event?.type === 'critical' || text.includes('crítico') || text.includes('crÃ­tico') || text.includes('critico');
+  }
+
+  function isObstructionEvent(event){
+    return eventText(event).includes('obstru');
+  }
+
+  function isRoomEntryEvent(event){
+    const text = eventText(event);
+    return event?.type === 'room' && (text.includes('entrou') || text.includes('na sala'));
+  }
+
+  function roomChartPoints(state, room, view = 'summary'){
+    const limit = view === 'detail' ? 18 : 12;
+    const events = roomChronologicalEvents(state, room)
+      .filter(event => finiteNumberOrNull(event.fill) !== null)
+      .slice(-limit);
+    if(events.length >= 2){
+      return events.map(event => ({
+        value:clampNumber(finiteNumberOrNull(event.fill), 0, 100),
+        time:event.ts,
+        label:formatClock(event.ts),
+        tone:isObstructionEvent(event) ? 'obstruction' : (isCriticalEvent(event) ? 'critical' : 'normal'),
+        distanceMm:finiteNumberOrNull(event.distanceMm)
+      }));
+    }
+    const carts = roomCartsForDetails(state, room);
+    if(carts.length){
+      const now = new Date().toISOString();
+      return carts.map(cart => ({
+        value:cartVisualFill(cart),
+        time:cart.lastReadingAt || now,
+        label:formatClock(cart.lastReadingAt || now),
+        tone:String(cart.collectorStatus || '').toLowerCase() === 'sensor_obstructed'
+          ? 'obstruction'
+          : (fillTone(cart) === 'full' ? 'critical' : 'normal'),
+        distanceMm:finiteNumberOrNull(cart.distanceMm)
+      }));
+    }
+    return [
+      { value:0, time:new Date().toISOString(), label:'--:--', tone:'normal', distanceMm:null },
+      { value:0, time:new Date().toISOString(), label:'--:--', tone:'normal', distanceMm:null }
+    ];
+  }
+
+  function roomOperationalSummary(state, room){
+    const carts = roomCartsForDetails(state, room);
+    const events = roomChronologicalEvents(state, room);
+    const now = Date.now();
+    const fullCarts = carts.filter(cart => fillTone(cart) === 'full');
+    const lostCarts = carts.filter(isLostCart);
+    const freeCarts = carts.filter(cart => fillTone(cart) === 'empty');
+    const readingEvents = events.filter(event => finiteNumberOrNull(event.fill) !== null);
+    const criticalEvents = events.filter(isCriticalEvent);
+    const obstructionCount = events.filter(isObstructionEvent).length
+      + carts.filter(cart => String(cart.collectorStatus || '').toLowerCase() === 'sensor_obstructed').length;
+    const firstReading = readingEvents[0];
+    const lastReading = readingEvents[readingEvents.length - 1];
+    const lastCritical = criticalEvents[criticalEvents.length - 1];
+    const criticalStartMs = lastCritical ? lastCritical._time : (fullCarts[0]?.lastReadingAt ? new Date(fullCarts[0].lastReadingAt).getTime() : NaN);
+    const firstReadingMs = firstReading ? firstReading._time : (lastReading ? lastReading._time : NaN);
+    const exchangeEvent = Number.isFinite(criticalStartMs)
+      ? events.find(event => event._time > criticalStartMs && isRoomEntryEvent(event))
+      : null;
+    const values = [
+      ...readingEvents.map(event => ({ value:finiteNumberOrNull(event.fill), time:event.ts, distanceMm:finiteNumberOrNull(event.distanceMm) })),
+      ...carts.map(cart => ({ value:cartVisualFill(cart), time:cart.lastReadingAt, distanceMm:finiteNumberOrNull(cart.distanceMm) }))
+    ].filter(item => finiteNumberOrNull(item.value) !== null);
+    const peak = values.reduce((best, item) => !best || item.value > best.value ? item : best, null);
+    const criticalCart = fullCarts[0] || carts.find(cart => fillTone(cart) === 'full') || carts[0] || null;
+    const calibration = criticalCart ? cartCalibration(criticalCart) : DEFAULT_CART_CALIBRATION;
+    const criticalPercent = carts.length
+      ? Math.max(...carts.map(cart => cartRedPercent(cart)))
+      : DEFAULT_CART_CALIBRATION.redPercent;
+    const criticalDistance = distanceForFillPercentage(calibration, criticalPercent);
+    const staleEvents = events.filter(event => event.type === 'reading' && event._time && now - event._time > 30 * 60000);
+    const panelAlerts = Math.max(fullCarts.length, criticalEvents.length);
+    return {
+      carts,
+      events,
+      freeCount:freeCarts.length,
+      fullCount:fullCarts.length,
+      lostCount:lostCarts.length,
+      obstructionCount,
+      panelAlerts,
+      firstReading,
+      lastReading,
+      criticalStart: Number.isFinite(criticalStartMs) ? criticalStartMs : null,
+      criticalStartLabel: Number.isFinite(criticalStartMs) ? formatClock(new Date(criticalStartMs).toISOString()) : '--:--',
+      timeToCriticalLabel: Number.isFinite(firstReadingMs) && Number.isFinite(criticalStartMs) && criticalStartMs >= firstReadingMs
+        ? formatCartDurationFromMs(criticalStartMs - firstReadingMs)
+        : 'aguardando',
+      timeInCriticalLabel: fullCarts.length && Number.isFinite(criticalStartMs)
+        ? formatCartDurationFromMs(Math.max(0, now - criticalStartMs), 'aguardando')
+        : '0 min',
+      exchangeLabel: exchangeEvent && Number.isFinite(criticalStartMs)
+        ? formatCartDurationFromMs(exchangeEvent._time - criticalStartMs)
+        : (fullCarts.length ? 'aguardando' : 'sem troca'),
+      peakLabel: peak ? `${Math.round(peak.value)}%` : '--',
+      peakAtLabel: peak?.time ? formatClock(peak.time) : '--:--',
+      peakDistanceLabel: peak?.distanceMm !== null && peak?.distanceMm !== undefined ? `${Math.round(peak.distanceMm)} mm` : '',
+      criticalCalibrationLabel: `${Math.round(criticalPercent)}% / ${formatMm(criticalDistance)}`,
+      staleReadingCount: staleEvents.length,
+      criticalCartName: criticalCart ? cartDisplayName(criticalCart) : 'Carrinho',
+      activeTitle: fullCarts.length ? 'CRÍTICO EM ANDAMENTO' : 'OPERAÇÃO NORMAL',
+      activeMain: fullCarts.length
+        ? `${cartDisplayName(fullCarts[0])} atingiu o limite`
+        : `${freeCarts.length} livre${freeCarts.length === 1 ? '' : 's'}`,
+      activeSub: fullCarts.length
+        ? `Início ${Number.isFinite(criticalStartMs) ? formatClock(new Date(criticalStartMs).toISOString()) : '--:--'}`
+        : 'Sem alerta ativo'
+    };
+  }
+
   function roomFillValues(state, room){
     const events = roomTelemetryEvents(state, room)
       .filter(event => finiteNumberOrNull(event.fill) !== null)
@@ -10314,8 +10456,8 @@ if(false){(function(){
     return [0, 0, 0, 0];
   }
 
-  function roomChartSvg(state, room){
-    const values = roomFillValues(state, room);
+  function roomChartSvg(state, room, view = 'summary'){
+    const chartPoints = roomChartPoints(state, room, view);
     const carts = roomCartsForDetails(state, room);
     const criticalPercent = carts.length
       ? Math.max(...carts.map(cart => cartRedPercent(cart)))
@@ -10323,35 +10465,50 @@ if(false){(function(){
     const width = 620;
     const height = 260;
     const padX = 44;
-    const padY = 26;
+    const padY = 24;
     const innerW = width - padX * 2;
-    const innerH = height - padY * 2;
-    const point = (value, index) => {
-      const x = padX + (values.length === 1 ? 0 : (innerW * index) / (values.length - 1));
-      const y = padY + innerH - (clampNumber(value, 0, 100) / 100) * innerH;
-      return { x, y };
+    const innerH = height - padY * 2 - 14;
+    const baseY = padY + innerH;
+    const point = (item, index) => {
+      const x = padX + (chartPoints.length === 1 ? 0 : (innerW * index) / (chartPoints.length - 1));
+      const y = padY + innerH - (clampNumber(item.value, 0, 100) / 100) * innerH;
+      return { ...item, x, y };
     };
-    const points = values.map(point);
+    const points = chartPoints.map(point);
     const polyline = points.map(item => `${item.x.toFixed(1)},${item.y.toFixed(1)}`).join(' ');
+    const areaPath = points.length
+      ? `M ${points[0].x.toFixed(1)} ${baseY.toFixed(1)} L ${points.map(item => `${item.x.toFixed(1)} ${item.y.toFixed(1)}`).join(' L ')} L ${points[points.length - 1].x.toFixed(1)} ${baseY.toFixed(1)} Z`
+      : '';
     const redY = padY + innerH - clampNumber(criticalPercent, 0, 100) / 100 * innerH;
     const grid = [0, 25, 50, 75, 100].map(value => {
       const y = padY + innerH - (value / 100) * innerH;
       return `<line x1="${padX}" y1="${y}" x2="${width - padX}" y2="${y}" class="cart-room-chart-grid"></line><text x="10" y="${y + 4}" class="cart-room-chart-axis">${value}%</text>`;
     }).join('');
+    const axisLabels = points.filter((_, index) => {
+      if(points.length <= 4) return true;
+      return index === 0 || index === points.length - 1 || index % Math.ceil(points.length / 4) === 0;
+    }).map(item => `<text x="${item.x}" y="${height - 4}" text-anchor="middle" class="cart-room-chart-axis">${escapeHtml(item.label)}</text>`).join('');
 
     return `
-      <svg class="cart-room-chart-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="Gráfico de status da sala">
+      <svg class="cart-room-chart-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="Gráfico de evolução do carrinho na sala">
         <defs>
           <linearGradient id="cartRoomFillGradient" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stop-color="#2f80ff" stop-opacity=".28"></stop>
-            <stop offset="100%" stop-color="#2f80ff" stop-opacity=".02"></stop>
+            <stop offset="0%" stop-color="#2f80ff" stop-opacity=".26"></stop>
+            <stop offset="100%" stop-color="#2f80ff" stop-opacity=".03"></stop>
           </linearGradient>
         </defs>
         ${grid}
         <rect x="${padX}" y="${padY}" width="${innerW}" height="${innerH}" rx="8" class="cart-room-chart-band"></rect>
+        <rect x="${padX}" y="${padY}" width="${innerW}" height="${Math.max(0, redY - padY)}" rx="8" class="cart-room-chart-critical-zone"></rect>
         <line x1="${padX}" y1="${redY}" x2="${width - padX}" y2="${redY}" class="cart-room-chart-critical"></line>
+        ${areaPath ? `<path d="${areaPath}" class="cart-room-chart-area"></path>` : ''}
         <polyline points="${polyline}" class="cart-room-chart-line"></polyline>
-        ${points.map((item, index) => `<circle cx="${item.x}" cy="${item.y}" r="5" class="cart-room-chart-point"><title>${Math.round(values[index])}%</title></circle>`).join('')}
+        ${points.map(item => `
+          <circle cx="${item.x}" cy="${item.y}" r="${item.tone === 'obstruction' ? 6 : 4.5}" class="cart-room-chart-point ${item.tone}">
+            <title>${Math.round(item.value)}%${item.distanceMm !== null && item.distanceMm !== undefined ? ` - ${Math.round(item.distanceMm)} mm` : ''}</title>
+          </circle>
+        `).join('')}
+        ${axisLabels}
       </svg>
     `;
   }
@@ -10390,42 +10547,51 @@ if(false){(function(){
   }
 
   function renderRoomChartMode(state, room, view = 'summary'){
-    const carts = roomCartsForDetails(state, room);
-    const values = roomFillValues(state, room);
-    const current = values.length ? values[values.length - 1] : 0;
-    const max = values.length ? Math.max(...values) : 0;
-    const min = values.length ? Math.min(...values) : 0;
-    const avg = values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
-    const fullCount = carts.filter(cart => fillTone(cart) === 'full').length;
-    const lostCount = carts.filter(isLostCart).length;
+    const summary = roomOperationalSummary(state, room);
+    const metricCards = [
+      { label:'Tempo até crítico', value:summary.timeToCriticalLabel, note:'Do início da leitura ao limite.' },
+      { label:'Em crítico', value:summary.timeInCriticalLabel, note:summary.fullCount ? 'Aguardando troca.' : 'Sem crítico ativo.' },
+      { label:'Troca após alerta', value:summary.exchangeLabel, note:'Medida a partir do crítico.' },
+      { label:'Pico do período', value:summary.peakLabel, note:`${summary.peakAtLabel}${summary.peakDistanceLabel ? ` - ${summary.peakDistanceLabel}` : ''}` },
+      { label:'Obstruções', value:String(summary.obstructionCount), note:'Saltos ou leituras incoerentes.' },
+      { label:'Perdidos', value:String(summary.lostCount), note:'Sem comunicação ativa.' }
+    ];
+    const visibleCards = view === 'detail' ? metricCards : metricCards.slice(0, 4);
     return `
       <section class="cart-room-chart-layout graph-only">
-        <article class="graph-main-card cart-room-graph-card">
+        <article class="graph-main-card cart-room-graph-card cart-room-graph-operational">
           <div class="graph-main-head">
             <div>
               <div class="graph-eyebrow">SALA - ${escapeHtml(room.name.toUpperCase())}</div>
-              <div class="graph-h1">Últimas leituras</div>
-              <div class="graph-desc">Leitura resumida do status dos carrinhos nesta sala.</div>
+              <div class="graph-h1">Evolução do carrinho</div>
+              <div class="graph-desc">${view === 'detail'
+                ? 'Leituras do nível, limite crítico, possíveis obstruções e troca operacional.'
+                : 'Resumo das leituras e dos principais eventos da sala.'}</div>
             </div>
             <div class="cart-room-chart-view">
               <button type="button" class="${view === 'summary' ? 'active' : ''}" data-room-insight-mode="chart-summary" data-room-id="${escapeHtml(room.id)}">Resumido</button>
               <button type="button" class="${view === 'detail' ? 'active' : ''}" data-room-insight-mode="chart-detail" data-room-id="${escapeHtml(room.id)}">Detalhado</button>
             </div>
           </div>
-          <div class="graph-wrap">
+          <div class="graph-wrap cart-room-operational-wrap">
             <div class="graph-legend">
+              <div class="graph-legend-item"><span class="graph-line-swatch"></span> Nível</div>
               <div class="graph-legend-item"><span class="graph-band-swatch"></span> Livre</div>
               <div class="graph-legend-item"><span class="graph-risk-swatch"></span> Crítico</div>
+              <div class="graph-legend-item"><span class="cart-obstruction-swatch"></span> Possível obstrução</div>
             </div>
             <div class="graph-box">
-              ${roomChartSvg(state, room)}
+              ${roomChartSvg(state, room, view)}
             </div>
           </div>
-          <div class="graph-summary cart-room-graph-summary">
-            <div class="graph-stat"><div class="graph-stat-k">Atual</div><div class="graph-stat-v">${Math.round(current)}%</div><div class="graph-stat-sub">Leitura mais recente.</div></div>
-            <div class="graph-stat"><div class="graph-stat-k">Pico</div><div class="graph-stat-v">${Math.round(max)}%</div><div class="graph-stat-sub">Maior leitura do período.</div></div>
-            <div class="graph-stat"><div class="graph-stat-k">Média</div><div class="graph-stat-v">${Math.round(avg)}%</div><div class="graph-stat-sub">Média das leituras.</div></div>
-            <div class="graph-stat"><div class="graph-stat-k">Críticos</div><div class="graph-stat-v">${fullCount}</div><div class="graph-stat-sub">${lostCount ? `${lostCount} perdido${lostCount === 1 ? '' : 's'}.` : 'Nenhum perdido.'}</div></div>
+          <div class="graph-summary cart-room-graph-summary operational">
+            ${visibleCards.map(card => `
+              <div class="graph-stat">
+                <div class="graph-stat-k">${escapeHtml(card.label)}</div>
+                <div class="graph-stat-v">${escapeHtml(card.value)}</div>
+                <div class="graph-stat-sub">${escapeHtml(card.note)}</div>
+              </div>
+            `).join('')}
           </div>
         </article>
       </section>
@@ -10440,39 +10606,48 @@ if(false){(function(){
   }
 
   function renderRoomTelemetryMode(state, room){
-    const carts = roomCartsForDetails(state, room);
-    const events = roomTelemetryEvents(state, room).slice(0, 18);
-    const fullCount = carts.filter(cart => fillTone(cart) === 'full').length;
-    const lostCount = carts.filter(isLostCart).length;
-    const freeCount = carts.filter(cart => fillTone(cart) === 'empty').length;
-    const activeClass = fullCount ? 'is-critical' : 'is-normal';
-    const activeLabel = fullCount ? 'CRÍTICO EM ANDAMENTO' : 'OPERAÇÃO NORMAL';
-    const activeMain = fullCount ? `${fullCount} crítico${fullCount === 1 ? '' : 's'}` : `${freeCount} livre${freeCount === 1 ? '' : 's'}`;
-    const timelineEvents = events.map(event => ({
-      time: formatDateTime(event.ts),
-      tone: event.type === 'critical' ? 'critical' : (event.type === 'transit' ? 'alert' : 'normal'),
-      title: event.title || 'Evento',
-      detail: event.detail || ''
-    }));
+    const summary = roomOperationalSummary(state, room);
+    const timelineEvents = summary.events.slice(-18).reverse().map(event => {
+      const critical = isCriticalEvent(event);
+      const obstruction = isObstructionEvent(event);
+      const roomEntry = isRoomEntryEvent(event);
+      return {
+        time:formatDateTime(event.ts),
+        tone:obstruction ? 'alert' : (critical ? 'critical' : (event.type === 'transit' ? 'offline' : (roomEntry ? 'normal' : 'limit'))),
+        title:event.title || (critical ? 'Crítico iniciado' : 'Leitura registrada'),
+        detail:event.detail || ''
+      };
+    });
     return `
       <section class="cart-room-telemetry-layout">
-        <article class="cart-room-telemetry-compact">
+        <article class="cart-room-telemetry-compact cart-room-telemetry-operational">
           <div class="telemetry-compact-head">
             <div>
               <strong>Telemetria operacional</strong>
-              <small>Eventos registrados nesta sala.</small>
+              <small>Eventos, duração e ações da sala.</small>
             </div>
-            <span class="telemetry-compact-state ${activeClass}">
-              <i>${getOperationalTelemetryIcon(fullCount ? 'critical' : 'limit')}</i>
-              <b>${activeLabel}</b>
-              <em>${activeMain}</em>
+            <span class="telemetry-compact-state ${summary.fullCount ? 'is-critical' : 'is-normal'}">
+              <i>${getOperationalTelemetryIcon(summary.fullCount ? 'critical' : 'limit')}</i>
+              <b>${escapeHtml(summary.activeTitle)}</b>
+              <em>${escapeHtml(summary.activeMain)}</em>
+              <small>${escapeHtml(summary.activeSub)}</small>
             </span>
           </div>
-          <div class="telemetry-compact-grid">
-            <span><small>Livres</small><strong>${freeCount}</strong></span>
-            <span><small>Críticos</small><strong>${fullCount}</strong></span>
-            <span><small>Perdidos</small><strong>${lostCount}</strong></span>
-            <span><small>Painel</small><strong>${events.filter(event => event.type === 'critical').length}</strong></span>
+          <div class="telemetry-compact-grid cart-room-telemetry-grid">
+            <span><small>Carrinho vazio</small><strong>${summary.freeCount}</strong></span>
+            <span><small>Tempo até crítico</small><strong>${escapeHtml(summary.timeToCriticalLabel)}</strong></span>
+            <span><small>Crítico</small><strong>${escapeHtml(summary.timeInCriticalLabel)}</strong></span>
+            <span><small>Sem comunicação</small><strong>${summary.lostCount}</strong></span>
+          </div>
+          <div class="cart-telemetry-channel">
+            <small>Canal de alerta</small>
+            <span><i>${getOperationalTelemetryIcon('alerts')}</i><b>Painel dashboard</b><strong>${summary.panelAlerts}</strong></span>
+          </div>
+          <div class="telemetry-variation-strip cart-telemetry-ops-strip">
+            <span><small>Início do crítico</small><strong>${escapeHtml(summary.criticalStartLabel)}</strong></span>
+            <span><small>Pico atingido</small><strong>${escapeHtml(summary.peakLabel)}</strong><em>${escapeHtml(summary.peakAtLabel)}</em></span>
+            <span><small>Calibração crítica</small><strong>${escapeHtml(summary.criticalCalibrationLabel)}</strong></span>
+            <span><small>Troca do carrinho</small><strong>${escapeHtml(summary.exchangeLabel)}</strong></span>
           </div>
           <details class="cart-telemetry-timeline-toggle">
             <summary>
@@ -10481,7 +10656,7 @@ if(false){(function(){
             </summary>
             <div class="telemetry-expanded-content">
               <div class="telemetry-timeline-head">
-                <div><strong>Linha do tempo</strong><small>Passagens, leituras e alertas vinculados à sala.</small></div>
+                <div><strong>Linha do tempo</strong><small>Leituras, alertas e trocas vinculados a esta sala.</small></div>
                 <span>Últimas leituras</span>
               </div>
               <div class="telemetry-timeline">
@@ -11243,7 +11418,7 @@ if(false){(function(){
         <button type="button" class="cart-item-card ${tone} ${escapeHtml(cart.locationStatus)} ${lidOpen ? 'lid-open' : 'lid-closed'}" data-cart-id="${escapeHtml(cart.id)}" style="--cart-fill:${visualFill}%;--cart-liquid:${visualFill}%">
           ${showStatus ? `<span class="cart-card-status"><i>${locationLabel(cart)}</i></span>` : ''}
           <span class="cart-item-body">
-            <strong>${escapeHtml(cartDisplayName(cart))}</strong>
+            <strong>${escapeHtml(cartDisplayName(cart))}<i class="cart-card-online-dot ${isLostCart(cart) ? 'offline' : 'online'}" aria-hidden="true"></i></strong>
           </span>
           <span class="cart-visual" aria-hidden="true">
             <span class="cart-bin-empty-shell ${lidOpen ? 'open' : 'closed'}">
