@@ -10143,12 +10143,12 @@ if(false){(function(){
 
   function fillLabel(cart){
     const rawStatus = String(cart?.collectorStatus || '').toLowerCase();
+    if(isLostCart(cart)) return 'Perdido';
     if(rawStatus === 'sensor_removed') return 'Sensor fora da posição';
     if(rawStatus === 'sensor_obstructed') return 'Possível obstrução';
     if(isLidOpen(cart)) return 'Porta aberta';
     const fill = Number(cart.fillPercentage || 0);
     if(fill >= cartRedPercent(cart)) return 'Crítico';
-    if(fill >= cartNearPercent(cart)) return 'Atenção';
     return 'Livre';
   }
 
@@ -10160,13 +10160,12 @@ if(false){(function(){
 
   function fillTone(cart){
     const rawStatus = String(cart?.collectorStatus || '').toLowerCase();
-    if(rawStatus === 'sensor_removed') return 'near-limit';
+    if(isLostCart(cart)) return 'lost';
+    if(rawStatus === 'sensor_removed') return 'empty';
     if(rawStatus === 'sensor_obstructed') return 'full';
     const fill = cartVisualFill(cart);
     if(fill >= cartRedPercent(cart)) return 'full';
-    if(fill >= cartNearPercent(cart)) return 'near-limit';
-    if(fill < cartNearPercent(cart)) return 'empty';
-    return 'normal';
+    return 'empty';
   }
 
   function isLidOpen(cart){
@@ -10263,7 +10262,6 @@ if(false){(function(){
     const criticalPercent = carts.length
       ? Math.max(...carts.map(cart => cartRedPercent(cart)))
       : DEFAULT_CART_CALIBRATION.redPercent;
-    const attentionPercent = Math.max(0, criticalPercent - 10);
     const width = 620;
     const height = 260;
     const padX = 44;
@@ -10278,7 +10276,6 @@ if(false){(function(){
     const points = values.map(point);
     const polyline = points.map(item => `${item.x.toFixed(1)},${item.y.toFixed(1)}`).join(' ');
     const redY = padY + innerH - clampNumber(criticalPercent, 0, 100) / 100 * innerH;
-    const nearY = padY + innerH - clampNumber(attentionPercent, 0, 100) / 100 * innerH;
     const grid = [0, 25, 50, 75, 100].map(value => {
       const y = padY + innerH - (value / 100) * innerH;
       return `<line x1="${padX}" y1="${y}" x2="${width - padX}" y2="${y}" class="cart-room-chart-grid"></line><text x="10" y="${y + 4}" class="cart-room-chart-axis">${value}%</text>`;
@@ -10294,7 +10291,6 @@ if(false){(function(){
         </defs>
         ${grid}
         <rect x="${padX}" y="${padY}" width="${innerW}" height="${innerH}" rx="8" class="cart-room-chart-band"></rect>
-        <line x1="${padX}" y1="${nearY}" x2="${width - padX}" y2="${nearY}" class="cart-room-chart-near"></line>
         <line x1="${padX}" y1="${redY}" x2="${width - padX}" y2="${redY}" class="cart-room-chart-critical"></line>
         <polyline points="${polyline}" class="cart-room-chart-line"></polyline>
         ${points.map((item, index) => `<circle cx="${item.x}" cy="${item.y}" r="5" class="cart-room-chart-point"><title>${Math.round(values[index])}%</title></circle>`).join('')}
@@ -10344,7 +10340,7 @@ if(false){(function(){
     const min = values.length ? Math.min(...values) : 0;
     const avg = values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
     const fullCount = carts.filter(cart => fillTone(cart) === 'full').length;
-    const attentionCount = carts.filter(cart => fillTone(cart) === 'near-limit').length;
+    const lostCount = carts.filter(isLostCart).length;
     return `
       <section class="cart-room-chart-layout graph-only">
         <article class="graph-main-card cart-room-graph-card">
@@ -10362,7 +10358,6 @@ if(false){(function(){
           <div class="graph-wrap">
             <div class="graph-legend">
               <div class="graph-legend-item"><span class="graph-band-swatch"></span> Livre</div>
-              <div class="graph-legend-item"><span class="graph-near-swatch"></span> Atenção</div>
               <div class="graph-legend-item"><span class="graph-risk-swatch"></span> Crítico</div>
             </div>
             <div class="graph-box">
@@ -10373,7 +10368,7 @@ if(false){(function(){
             <div class="graph-stat"><div class="graph-stat-k">Atual</div><div class="graph-stat-v">${Math.round(current)}%</div><div class="graph-stat-sub">Leitura mais recente.</div></div>
             <div class="graph-stat"><div class="graph-stat-k">Pico</div><div class="graph-stat-v">${Math.round(max)}%</div><div class="graph-stat-sub">Maior leitura do período.</div></div>
             <div class="graph-stat"><div class="graph-stat-k">Média</div><div class="graph-stat-v">${Math.round(avg)}%</div><div class="graph-stat-sub">Média das leituras.</div></div>
-            <div class="graph-stat"><div class="graph-stat-k">Alertas</div><div class="graph-stat-v">${fullCount + attentionCount}</div><div class="graph-stat-sub">Atenção e crítico.</div></div>
+            <div class="graph-stat"><div class="graph-stat-k">Críticos</div><div class="graph-stat-v">${fullCount}</div><div class="graph-stat-sub">${lostCount ? `${lostCount} perdido${lostCount === 1 ? '' : 's'}.` : 'Nenhum perdido.'}</div></div>
           </div>
         </article>
       </section>
@@ -10384,7 +10379,6 @@ if(false){(function(){
     if(type === 'critical') return 'critical';
     if(type === 'transit') return 'transit';
     if(type === 'room') return 'room';
-    if(type === 'status') return 'attention';
     return 'reading';
   }
 
@@ -10392,15 +10386,14 @@ if(false){(function(){
     const carts = roomCartsForDetails(state, room);
     const events = roomTelemetryEvents(state, room).slice(0, 18);
     const fullCount = carts.filter(cart => fillTone(cart) === 'full').length;
-    const attentionCount = carts.filter(cart => fillTone(cart) === 'near-limit').length;
-    const offlineCount = carts.filter(cart => cart.locationStatus === 'offline').length;
+    const lostCount = carts.filter(isLostCart).length;
     const freeCount = carts.filter(cart => fillTone(cart) === 'empty').length;
-    const activeClass = fullCount ? 'is-critical' : (attentionCount ? 'is-attention' : 'is-normal');
-    const activeLabel = fullCount ? 'CRÍTICO EM ANDAMENTO' : (attentionCount ? 'ATENÇÃO EM ANDAMENTO' : 'OPERAÇÃO NORMAL');
-    const activeMain = fullCount ? `${fullCount} crítico${fullCount === 1 ? '' : 's'}` : (attentionCount ? `${attentionCount} em atenção` : `${freeCount} livre${freeCount === 1 ? '' : 's'}`);
+    const activeClass = fullCount ? 'is-critical' : 'is-normal';
+    const activeLabel = fullCount ? 'CRÍTICO EM ANDAMENTO' : 'OPERAÇÃO NORMAL';
+    const activeMain = fullCount ? `${fullCount} crítico${fullCount === 1 ? '' : 's'}` : `${freeCount} livre${freeCount === 1 ? '' : 's'}`;
     const timelineEvents = events.map(event => ({
       time: formatDateTime(event.ts),
-      tone: event.type === 'critical' ? 'critical' : (event.type === 'status' ? 'attention' : (event.type === 'transit' ? 'alert' : 'normal')),
+      tone: event.type === 'critical' ? 'critical' : (event.type === 'transit' ? 'alert' : 'normal'),
       title: event.title || 'Evento',
       detail: event.detail || ''
     }));
@@ -10422,16 +10415,15 @@ if(false){(function(){
             </span>
             <span class="telemetry-status-grid">
               <span class="telemetry-status-card limit"><span class="telemetry-status-icon">${getOperationalTelemetryIcon('limit')}</span><span><small>Livre</small><strong>${freeCount}</strong></span></span>
-              <span class="telemetry-status-card attention"><span class="telemetry-status-icon">${getOperationalTelemetryIcon('attention')}</span><span><small>Atenção</small><strong>${attentionCount}</strong></span></span>
               <span class="telemetry-status-card critical"><span class="telemetry-status-icon">${getOperationalTelemetryIcon('critical')}</span><span><small>Crítico</small><strong>${fullCount}</strong></span></span>
-              <span class="telemetry-status-card offline"><span class="telemetry-status-icon">${getOperationalTelemetryIcon('communication')}</span><span><small>Sem comunicação</small><strong>${offlineCount}</strong></span></span>
+              <span class="telemetry-status-card offline"><span class="telemetry-status-icon">${getOperationalTelemetryIcon('communication')}</span><span><small>Perdidos</small><strong>${lostCount}</strong></span></span>
             </span>
             <span class="telemetry-section-label">Canais de alerta</span>
             <span class="telemetry-channel-grid single-channel">
               <span class="telemetry-channel-card panel">
                 <span>${getOperationalTelemetryIcon('alerts')}</span>
                 <small>Painel</small>
-                <strong>${events.filter(event => event.type === 'critical' || event.type === 'status').length}</strong>
+                <strong>${events.filter(event => event.type === 'critical').length}</strong>
               </span>
             </span>
             <span class="telemetry-expand-hint">Clique para recolher ou expandir a linha do tempo</span>
@@ -10542,7 +10534,8 @@ if(false){(function(){
     if(!content) return;
     const events = Array.isArray(state.telemetryEvents) ? state.telemetryEvents : [];
     const fullCount = state.carts.filter(cart => fillTone(cart) === 'full').length;
-    const attentionCount = state.carts.filter(cart => fillTone(cart) === 'near-limit').length;
+    const lostCount = state.carts.filter(isLostCart).length;
+    const freeCount = state.carts.filter(cart => fillTone(cart) === 'empty').length;
     content.innerHTML = `
       <header class="cart-transit-modal-head cart-report-modal-head">
         <span>Relatórios</span>
@@ -10559,10 +10552,10 @@ if(false){(function(){
           <span class="graph-report-chevron" aria-hidden="true">⌄</span>
         </summary>
         <div class="cart-report-kpi-row">
+          <span><small>Livres</small><strong>${freeCount}</strong></span>
           <span><small>Críticos</small><strong>${fullCount}</strong></span>
-          <span><small>Atenção</small><strong>${attentionCount}</strong></span>
+          <span><small>Perdidos</small><strong>${lostCount}</strong></span>
           <span><small>Eventos</small><strong>${events.length}</strong></span>
-          <span><small>Canal</small><strong>Painel</strong></span>
         </div>
         <div class="graph-report-list">
           <button class="graph-report-btn" disabled>Exportar PDF</button>
@@ -11053,18 +11046,17 @@ if(false){(function(){
   }
 
   function isLostCart(cart){
-    return cart.locationStatus === 'offline' || !cart.roomId || String(cart?.collectorStatus || '').toLowerCase() === 'sensor_removed';
+    return cart.locationStatus === 'offline';
   }
 
   function isFreeCart(cart){
-    return !isLostCart(cart) && Number(cart.fillPercentage || 0) < 40;
+    return !isLostCart(cart) && fillTone(cart) !== 'full';
   }
 
   function cartMatchesFilter(cart, filter = activeCartFilter){
     if(!filter || filter === 'all') return true;
     if(filter === 'empty') return isFreeCart(cart);
     if(filter === 'full') return fillTone(cart) === 'full';
-    if(filter === 'near') return fillTone(cart) === 'near-limit';
     if(filter === 'lost') return isLostCart(cart);
     return true;
   }
@@ -11102,16 +11094,15 @@ if(false){(function(){
       total: roomCarts.length,
       full: roomCarts.filter(cart => cartMatchesFilter(cart, 'full')).length,
       empty: roomCarts.filter(cart => cartMatchesFilter(cart, 'empty')).length,
-      nearLimit: roomCarts.filter(cart => fillTone(cart) === 'near-limit').length
+      lost: roomCarts.filter(cart => cartMatchesFilter(cart, 'lost')).length
     };
   }
 
   function globalStats(state){
     const empty = state.carts.filter(cart => cartMatchesFilter(cart, 'empty')).length;
-    const nearLimit = state.carts.filter(cart => cartMatchesFilter(cart, 'near')).length;
     const full = state.carts.filter(cart => cartMatchesFilter(cart, 'full')).length;
     const lost = state.carts.filter(cart => cartMatchesFilter(cart, 'lost')).length;
-    return { total: state.carts.length, empty, nearLimit, full, lost };
+    return { total: state.carts.length, empty, full, lost };
   }
 
   function roomCartTotal(state, roomId){
@@ -11136,13 +11127,13 @@ if(false){(function(){
             <em><i></i>Livres</em>
             <strong>${countText(stats.empty)}</strong>
           </button>
-          <button type="button" class="cart-status-item near ${activeCartFilter === 'near' ? 'active' : ''}" data-cart-filter="near" aria-pressed="${activeCartFilter === 'near' ? 'true' : 'false'}">
-            <em><i></i>Atenção</em>
-            <strong>${countText(stats.nearLimit)}</strong>
-          </button>
           <button type="button" class="cart-status-item full ${activeCartFilter === 'full' ? 'active' : ''}" data-cart-filter="full" aria-pressed="${activeCartFilter === 'full' ? 'true' : 'false'}">
             <em><i></i>Críticos</em>
             <strong>${countText(stats.full)}</strong>
+          </button>
+          <button type="button" class="cart-status-item lost ${activeCartFilter === 'lost' ? 'active' : ''}" data-cart-filter="lost" aria-pressed="${activeCartFilter === 'lost' ? 'true' : 'false'}">
+            <em><i></i>Perdidos</em>
+            <strong>${countText(stats.lost)}</strong>
           </button>
         </div>
       </article>
@@ -11162,10 +11153,8 @@ if(false){(function(){
         </button>
       </article>
       <article class="cart-overview-card cart-overview-report">
-        <button type="button" class="cart-report-global-btn" data-cart-report-modal aria-label="Abrir relatórios">
+        <button type="button" class="cart-report-global-btn" data-cart-report-modal aria-label="Relatório analítico" title="Relatório analítico">
           <span class="graph-report-icon">${getReportIcon()}</span>
-          <strong>Relatórios</strong>
-          <small>Analítico</small>
         </button>
       </article>
       <article class="cart-overview-card cart-overview-empty" aria-hidden="true"></article>

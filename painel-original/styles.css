@@ -14659,9 +14659,6 @@ body.analytic-report-open{overflow:hidden}
 }
 
 /* ===== Einstein review pass: align room views with main dashboard ===== */
-.cart-status-item.near i{background:#f59e0b !important;}
-.cart-status-item.near strong{color:#f59e0b !important;}
-
 .cart-flow-transit-icon.approved{
   background:#fff;
   border:1px solid #d7e1ee;
@@ -14694,7 +14691,7 @@ body.analytic-report-open{overflow:hidden}
   display:flex;
   justify-content:center;
   min-height:92px !important;
-  padding:10px !important;
+  padding:8px !important;
 }
 
 .cart-report-global-btn{
@@ -14702,30 +14699,22 @@ body.analytic-report-open{overflow:hidden}
   appearance:none;
   background:transparent;
   border:0;
-  color:#17233a;
+  color:#0753b5;
   cursor:pointer;
   display:grid;
-  gap:4px;
+  height:58px;
   justify-items:center;
-  min-height:70px;
-  width:100%;
+  min-height:0;
+  place-items:center;
+  width:58px;
 }
 
 .cart-report-global-btn .graph-report-icon{
-  height:38px;
-  width:38px;
-}
-
-.cart-report-global-btn strong{
-  font-size:13px;
-  font-weight:950;
-  line-height:1;
-}
-
-.cart-report-global-btn small{
-  color:#64748b;
-  font-size:10px;
-  font-weight:850;
+  background:#eef6ff;
+  border-color:#cfe2ff;
+  color:#0753b5;
+  height:44px;
+  width:44px;
 }
 
 .cart-report-global-btn:hover{
@@ -14753,7 +14742,7 @@ body.analytic-report-open{overflow:hidden}
 
 .cart-room-insight-head h2,
 .cart-transit-modal-head h2{
-  font-size:24px;
+  font-size:20px;
   letter-spacing:0;
 }
 
@@ -14775,16 +14764,20 @@ body.analytic-report-open{overflow:hidden}
 }
 
 .cart-room-graph-card.graph-main-card{
-  padding:22px;
+  padding:16px;
 }
 
 .cart-room-graph-card .graph-h1{
-  font-size:28px;
+  font-size:22px;
   letter-spacing:0;
 }
 
 .cart-room-graph-card .graph-desc{
-  font-size:13px;
+  font-size:12px;
+}
+
+.cart-room-graph-card .graph-eyebrow{
+  font-size:10px;
 }
 
 .cart-room-chart-view{
@@ -14820,7 +14813,25 @@ body.analytic-report-open{overflow:hidden}
 .cart-room-graph-card .cart-room-chart-svg{
   background:transparent;
   border:0;
-  min-height:300px;
+  min-height:236px;
+}
+
+.cart-room-graph-card .graph-box{
+  padding:8px 10px 6px;
+}
+
+.cart-room-graph-card .graph-summary{
+  gap:8px;
+  margin-top:10px;
+}
+
+.cart-room-graph-card .graph-stat{
+  min-height:72px;
+  padding:10px;
+}
+
+.cart-room-graph-card .graph-stat-v{
+  font-size:22px;
 }
 
 .cart-room-graph-summary .graph-stat-sub{
@@ -14891,4 +14902,86 @@ body.analytic-report-open{overflow:hidden}
   .cart-report-kpi-row{
     grid-template-columns:repeat(2,minmax(0,1fr));
   }
+}
+
+.cart-tracking-v2 .cart-items-grid{
+  gap:6px !important;
+}
+
+.cart-tracking-v2 .cart-item-card,
+.cart-tracking-v2 .cart-item-card.transit{
+  gap:2px !important;
+  min-height:132px !important;
+  padding:8px !important;
+}
+
+.cart-tracking-v2 .cart-item-body{
+  min-height:16px !important;
+}
+
+.cart-tracking-v2 .cart-item-body strong{
+  font-size:15px !important;
+}
+
+.cart-tracking-v2 .cart-visual{
+  flex:0 0 82px !important;
+  margin:-4px 0 -6px !important;
+  min-height:82px !important;
+}
+
+.cart-tracking-v2 .cart-bin-empty-shell.closed,
+.cart-tracking-v2 .cart-bin-empty-shell.open{
+  height:82px !important;
+  width:94px !important;
+}
+
+.cart-tracking-v2 .cart-item-foot small{
+  font-size:12px !important;
+}
+
+.cart-tracking-v2 .cart-room-header h2{
+  font-size:15px !important;
+  line-height:1.08 !important;
+}
+
+.cart-room-kicker{
+  font-size:9px !important;
+}
+
+.cart-room-insight-head h2,
+.cart-transit-modal-head h2{
+  font-size:18px !important;
+}
+
+.cart-room-graph-card .graph-h1{
+  font-size:20px !important;
+}
+
+.cart-room-graph-card .graph-stat-v{
+  font-size:20px !important;
+}
+
+.cart-tracking-v2 .cart-item-card,
+.cart-tracking-v2 .cart-item-card.transit{
+  min-height:124px !important;
+  padding:7px !important;
+}
+
+.cart-tracking-v2 .cart-visual{
+  flex-basis:72px !important;
+  min-height:72px !important;
+}
+
+.cart-tracking-v2 .cart-bin-empty-shell.closed,
+.cart-tracking-v2 .cart-bin-empty-shell.open{
+  height:76px !important;
+  width:88px !important;
+}
+
+.cart-tracking-v2 .cart-item-foot{
+  min-height:12px !important;
+}
+
+.cart-tracking-v2 .cart-item-foot small{
+  font-size:11px !important;
 }
