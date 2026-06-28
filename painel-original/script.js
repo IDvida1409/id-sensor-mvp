@@ -9492,7 +9492,8 @@ if(false){(function(){
         lastSeen:'sem leitura',
         transitStep:0
       }
-    ]
+    ],
+    telemetryEvents:[]
   };
 
   let previousSubtitle = '';
@@ -9509,7 +9510,8 @@ if(false){(function(){
     let changed = false;
     const normalized = {
       rooms: Array.isArray(state?.rooms) ? state.rooms : [],
-      carts: Array.isArray(state?.carts) ? state.carts : []
+      carts: Array.isArray(state?.carts) ? state.carts : [],
+      telemetryEvents: Array.isArray(state?.telemetryEvents) ? state.telemetryEvents : []
     };
 
     const activeCarts = normalized.carts.filter(cart => {
@@ -9782,6 +9784,48 @@ if(false){(function(){
     return `${hours} h atras`;
   }
 
+  function formatClock(value){
+    const date = new Date(value || '');
+    if(Number.isNaN(date.getTime())) return '--:--';
+    return date.toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' });
+  }
+
+  function formatDateTime(value){
+    const date = new Date(value || '');
+    if(Number.isNaN(date.getTime())) return '--';
+    return date.toLocaleString('pt-BR', {
+      day:'2-digit',
+      month:'2-digit',
+      hour:'2-digit',
+      minute:'2-digit'
+    });
+  }
+
+  function appendTelemetryEvent(state, event){
+    if(!state || !event) return false;
+    const list = Array.isArray(state.telemetryEvents) ? state.telemetryEvents : [];
+    const ts = event.ts || new Date().toISOString();
+    const key = event.key || [event.type, event.roomId, event.cartId, ts].join('|');
+    if(list.some(item => item.key === key)) return false;
+    list.push({
+      id:`evt-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+      key,
+      ts,
+      type:event.type || 'reading',
+      roomId:event.roomId || '',
+      cartId:event.cartId || '',
+      cartName:event.cartName || '',
+      title:event.title || 'Leitura registrada',
+      detail:event.detail || '',
+      fill:finiteNumberOrNull(event.fill),
+      distanceMm:finiteNumberOrNull(event.distanceMm)
+    });
+    state.telemetryEvents = list
+      .sort((a, b) => new Date(a.ts || 0) - new Date(b.ts || 0))
+      .slice(-160);
+    return true;
+  }
+
   function readingIdentity(reading){
     return [
       reading?.id || '',
@@ -9873,6 +9917,12 @@ if(false){(function(){
       const reading = readingsByMac.get(cleanMac(cart.mac));
       if(!reading) return;
 
+      const previous = {
+        roomId:cart.roomId || '',
+        locationStatus:cart.locationStatus || '',
+        fillTone:fillTone(cart),
+        lastReadingAt:cart.lastReadingAt || ''
+      };
       const fill = finiteNumberOrNull(reading.fillPercentage);
       const candidateFill = finiteNumberOrNull(reading.candidateFillPercentage);
       const distance = finiteNumberOrNull(reading.distanceMm);
@@ -9972,8 +10022,9 @@ if(false){(function(){
         cart.collectorStatus = reading.status;
         changed = true;
       }
+      let readingAt = '';
       if(reading.createdAt || reading.receivedAt){
-        const readingAt = reading.createdAt || reading.receivedAt;
+        readingAt = reading.createdAt || reading.receivedAt;
         const lastSeen = relativeTime(readingAt);
         if(cart.lastReadingAt !== readingAt){
           cart.lastReadingAt = readingAt;
@@ -9985,6 +10036,46 @@ if(false){(function(){
         }
       }
       if(applyGatewayRoomToCart(cart, gatewayRoomId, rssi, reading)) changed = true;
+
+      const eventRoomId = cart.roomId || gatewayRoomId || previous.roomId || '';
+      const nextTone = fillTone(cart);
+      const eventBase = {
+        roomId:eventRoomId,
+        cartId:cart.id,
+        cartName:cartDisplayName(cart),
+        ts:readingAt || new Date().toISOString(),
+        fill:cartVisualFill(cart),
+        distanceMm:cart.distanceMm
+      };
+      if(readingAt && readingAt !== previous.lastReadingAt){
+        if(appendTelemetryEvent(state, {
+          ...eventBase,
+          key:`reading|${cart.id}|${readingAt}`,
+          type:'reading',
+          title:`${cartDisplayName(cart)} comunicou`,
+          detail:`${fillLabel(cart)} - ${Math.round(cartVisualFill(cart))}%`
+        })) changed = true;
+      }
+      if(previous.fillTone !== nextTone){
+        if(appendTelemetryEvent(state, {
+          ...eventBase,
+          key:`status|${cart.id}|${nextTone}|${eventBase.ts}`,
+          type:nextTone === 'full' ? 'critical' : 'status',
+          title:`${cartDisplayName(cart)}: ${fillLabel(cart)}`,
+          detail:`Estado mudou para ${fillLabel(cart)}`
+        })) changed = true;
+      }
+      if(previous.locationStatus !== cart.locationStatus || previous.roomId !== cart.roomId){
+        if(appendTelemetryEvent(state, {
+          ...eventBase,
+          key:`location|${cart.id}|${cart.roomId || ''}|${cart.locationStatus || ''}|${eventBase.ts}`,
+          type:cart.locationStatus === 'transit' ? 'transit' : 'room',
+          title:cart.locationStatus === 'transit'
+            ? `${cartDisplayName(cart)} saiu da sala`
+            : `${cartDisplayName(cart)} entrou na sala`,
+          detail:locationLabel(cart)
+        })) changed = true;
+      }
     });
 
     return changed;
@@ -10106,6 +10197,350 @@ if(false){(function(){
   function formatMm(value){
     const number = finiteNumberOrNull(value);
     return number === null ? '--' : `${Math.round(number)} mm`;
+  }
+
+  function cartBatteryLabel(cart){
+    const battery = finiteNumberOrNull(cart?.battery);
+    return battery === null ? '--' : `${Math.round(battery)}%`;
+  }
+
+  function roomCartsForDetails(state, room){
+    return state.carts.filter(cart => cart.roomId === room.id && cart.locationStatus !== 'transit');
+  }
+
+  function latestRoomReadingLabel(carts){
+    const timestamps = carts
+      .map(cart => new Date(cart.lastReadingAt || '').getTime())
+      .filter(Number.isFinite);
+    if(!timestamps.length) return 'sem leitura';
+    return relativeTime(new Date(Math.max(...timestamps)).toISOString());
+  }
+
+  function roomTelemetryEvents(state, room){
+    const roomCartIds = new Set(state.carts.filter(cart => cart.roomId === room.id).map(cart => cart.id));
+    const storedEvents = (state.telemetryEvents || [])
+      .filter(event => event.roomId === room.id || roomCartIds.has(event.cartId))
+      .sort((a, b) => new Date(b.ts || 0) - new Date(a.ts || 0));
+    if(storedEvents.length) return storedEvents;
+
+    return roomCartsForDetails(state, room).map(cart => ({
+      id:`fallback-${cart.id}`,
+      ts:cart.lastReadingAt || new Date().toISOString(),
+      type:fillTone(cart) === 'full' ? 'critical' : 'reading',
+      roomId:room.id,
+      cartId:cart.id,
+      cartName:cartDisplayName(cart),
+      title:`${cartDisplayName(cart)} - ${fillLabel(cart)}`,
+      detail:`Ultima leitura ${cart.lastSeen || 'sem leitura'}`,
+      fill:cartVisualFill(cart),
+      distanceMm:finiteNumberOrNull(cart.distanceMm)
+    }));
+  }
+
+  function roomFillValues(state, room){
+    const events = roomTelemetryEvents(state, room)
+      .filter(event => finiteNumberOrNull(event.fill) !== null)
+      .slice()
+      .reverse()
+      .slice(-12);
+    const values = events.map(event => finiteNumberOrNull(event.fill));
+    if(values.length >= 2) return values;
+    const carts = roomCartsForDetails(state, room);
+    if(carts.length){
+      const current = Math.max(...carts.map(cart => cartVisualFill(cart)));
+      return [current, current, current, current];
+    }
+    return [0, 0, 0, 0];
+  }
+
+  function roomChartSvg(state, room){
+    const values = roomFillValues(state, room);
+    const carts = roomCartsForDetails(state, room);
+    const criticalPercent = carts.length
+      ? Math.max(...carts.map(cart => cartRedPercent(cart)))
+      : DEFAULT_CART_CALIBRATION.redPercent;
+    const attentionPercent = Math.max(0, criticalPercent - 10);
+    const width = 620;
+    const height = 260;
+    const padX = 44;
+    const padY = 26;
+    const innerW = width - padX * 2;
+    const innerH = height - padY * 2;
+    const point = (value, index) => {
+      const x = padX + (values.length === 1 ? 0 : (innerW * index) / (values.length - 1));
+      const y = padY + innerH - (clampNumber(value, 0, 100) / 100) * innerH;
+      return { x, y };
+    };
+    const points = values.map(point);
+    const polyline = points.map(item => `${item.x.toFixed(1)},${item.y.toFixed(1)}`).join(' ');
+    const redY = padY + innerH - clampNumber(criticalPercent, 0, 100) / 100 * innerH;
+    const nearY = padY + innerH - clampNumber(attentionPercent, 0, 100) / 100 * innerH;
+    const grid = [0, 25, 50, 75, 100].map(value => {
+      const y = padY + innerH - (value / 100) * innerH;
+      return `<line x1="${padX}" y1="${y}" x2="${width - padX}" y2="${y}" class="cart-room-chart-grid"></line><text x="10" y="${y + 4}" class="cart-room-chart-axis">${value}%</text>`;
+    }).join('');
+
+    return `
+      <svg class="cart-room-chart-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="Grafico de enchimento da sala">
+        <defs>
+          <linearGradient id="cartRoomFillGradient" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stop-color="#2f80ff" stop-opacity=".28"></stop>
+            <stop offset="100%" stop-color="#2f80ff" stop-opacity=".02"></stop>
+          </linearGradient>
+        </defs>
+        ${grid}
+        <rect x="${padX}" y="${padY}" width="${innerW}" height="${innerH}" rx="8" class="cart-room-chart-band"></rect>
+        <line x1="${padX}" y1="${nearY}" x2="${width - padX}" y2="${nearY}" class="cart-room-chart-near"></line>
+        <line x1="${padX}" y1="${redY}" x2="${width - padX}" y2="${redY}" class="cart-room-chart-critical"></line>
+        <polyline points="${polyline}" class="cart-room-chart-line"></polyline>
+        ${points.map((item, index) => `<circle cx="${item.x}" cy="${item.y}" r="5" class="cart-room-chart-point"><title>${Math.round(values[index])}%</title></circle>`).join('')}
+      </svg>
+    `;
+  }
+
+  function roomInsightTabs(room, mode){
+    const tabs = [
+      ['info', 'Informacoes'],
+      ['chart', 'Grafico'],
+      ['telemetry', 'Telemetria'],
+      ['report', 'Relatorio']
+    ];
+    return tabs.map(([key, label]) => `
+      <button type="button" class="${mode === key ? 'active' : ''}" data-room-insight-mode="${key}" data-room-id="${escapeHtml(room.id)}">
+        ${label}
+      </button>
+    `).join('');
+  }
+
+  function roomInsightHeader(state, room, mode){
+    const carts = roomCartsForDetails(state, room);
+    return `
+      <header class="cart-room-insight-head">
+        <div>
+          <span>Sala monitorada</span>
+          <h2>${escapeHtml(room.name)}</h2>
+          <p>Gateway ${escapeHtml(formatGatewayShort(room.gatewayDeviceId))} - ultima comunicacao ${escapeHtml(latestRoomReadingLabel(carts))}</p>
+        </div>
+        <nav class="cart-room-insight-tabs">
+          ${roomInsightTabs(room, mode)}
+        </nav>
+      </header>
+    `;
+  }
+
+  function renderRoomInfoMode(state, room){
+    const carts = roomCartsForDetails(state, room);
+    const latest = latestRoomReadingLabel(carts);
+    return `
+      <section class="cart-room-info-layout">
+        <article class="cart-room-info-card">
+          <h3>Sala</h3>
+          <div><span>Nome</span><strong>${escapeHtml(room.name)}</strong></div>
+          <div><span>Cliente</span><strong>Hospital Einstein</strong></div>
+          <div><span>Uso</span><strong>Carrinhos de residuo</strong></div>
+          <div><span>Ultima leitura</span><strong>${escapeHtml(latest)}</strong></div>
+        </article>
+        <article class="cart-room-info-card">
+          <h3>Gateway</h3>
+          <div><span>Identificacao</span><strong>${escapeHtml(formatGatewayShort(room.gatewayDeviceId))}</strong></div>
+          <div><span>Fabricante</span><strong>MOKO</strong></div>
+          <div><span>Modelo</span><strong>MKGW4</strong></div>
+          <div><span>Comunicacao</span><strong>BLE local + 4G</strong></div>
+          <div><span>Protocolo</span><strong>MQTT TLS</strong></div>
+        </article>
+        <article class="cart-room-info-card cart-room-info-wide">
+          <h3>Dispositivos lidos</h3>
+          <div class="cart-room-device-list">
+            ${carts.length ? carts.map(cart => `
+              <span>
+                <strong>${escapeHtml(cartDisplayName(cart))}</strong>
+                <em>${escapeHtml(fillLabel(cart))}</em>
+                <small>Bateria ${escapeHtml(cartBatteryLabel(cart))} - ${escapeHtml(cart.lastSeen || 'sem leitura')} - ${escapeHtml(formatMm(cart.distanceMm))}</small>
+              </span>
+            `).join('') : '<p>Nenhum carrinho nesta sala.</p>'}
+          </div>
+        </article>
+      </section>
+    `;
+  }
+
+  function renderRoomChartMode(state, room){
+    const carts = roomCartsForDetails(state, room);
+    const events = roomTelemetryEvents(state, room);
+    const fullCount = carts.filter(cart => fillTone(cart) === 'full').length;
+    return `
+      <section class="cart-room-chart-layout">
+        <article class="cart-room-chart-card">
+          <div class="cart-room-chart-title">
+            <div>
+              <span>Enchimento - ultimas leituras</span>
+              <h3>${escapeHtml(room.name)}</h3>
+            </div>
+            <em>Modo resumido</em>
+          </div>
+          ${roomChartSvg(state, room)}
+          <div class="cart-room-chart-legend">
+            <span><i class="line"></i>Enchimento</span>
+            <span><i class="near"></i>Atencao</span>
+            <span><i class="critical"></i>Cheio</span>
+          </div>
+        </article>
+        <aside class="cart-room-ops-card">
+          <h3>Telemetria operacional</h3>
+          <p>Eventos, duracao e acoes registradas para esta sala.</p>
+          <div class="cart-room-alert-active ${fullCount ? 'is-critical' : ''}">
+            <span>${fullCount ? 'ATENCAO EM ANDAMENTO' : 'OPERACAO NORMAL'}</span>
+            <strong>${fullCount ? `${fullCount} carrinho cheio` : 'Sem alerta ativo'}</strong>
+            <small>Canal ativo: Painel</small>
+          </div>
+          <div class="cart-room-ops-grid">
+            <span><small>Na sala</small><strong>${carts.length}</strong></span>
+            <span><small>Cheios</small><strong>${fullCount}</strong></span>
+            <span><small>Eventos</small><strong>${events.length}</strong></span>
+            <span><small>Ultima leitura</small><strong>${escapeHtml(latestRoomReadingLabel(carts))}</strong></span>
+          </div>
+          <div class="cart-room-channel-card">
+            <span>Painel</span>
+            <strong>${events.filter(event => event.type === 'critical').length}</strong>
+          </div>
+        </aside>
+      </section>
+    `;
+  }
+
+  function eventToneClass(type){
+    if(type === 'critical') return 'critical';
+    if(type === 'transit') return 'transit';
+    if(type === 'room') return 'room';
+    if(type === 'status') return 'attention';
+    return 'reading';
+  }
+
+  function renderRoomTelemetryMode(state, room){
+    const events = roomTelemetryEvents(state, room).slice(0, 18);
+    return `
+      <section class="cart-room-telemetry-layout">
+        <article class="cart-room-telemetry-card">
+          <div class="cart-room-section-title">
+            <span>Linha do tempo</span>
+            <h3>Eventos da sala</h3>
+          </div>
+          <div class="cart-room-timeline">
+            ${events.length ? events.map(event => `
+              <div class="cart-room-event ${eventToneClass(event.type)}">
+                <time>${escapeHtml(formatDateTime(event.ts))}</time>
+                <span></span>
+                <div>
+                  <strong>${escapeHtml(event.title || 'Evento')}</strong>
+                  <small>${escapeHtml(event.detail || '')}${finiteNumberOrNull(event.fill) !== null ? ` - ${Math.round(event.fill)}%` : ''}</small>
+                </div>
+              </div>
+            `).join('') : '<p class="cart-room-empty">Nenhum evento registrado ainda.</p>'}
+          </div>
+        </article>
+      </section>
+    `;
+  }
+
+  function renderRoomReportMode(state, room){
+    const carts = roomCartsForDetails(state, room);
+    const events = roomTelemetryEvents(state, room);
+    return `
+      <section class="cart-room-report-layout">
+        <article class="cart-room-report-card">
+          <div class="cart-room-section-title">
+            <span>Relatorio analitico</span>
+            <h3>Preparado para consolidacao</h3>
+          </div>
+          <p>O relatorio vai consolidar tempo ate retirada, picos de enchimento, trocas de carrinho e alertas do painel por periodo.</p>
+          <div class="cart-room-report-grid">
+            <span><small>Carrinhos atuais</small><strong>${carts.length}</strong></span>
+            <span><small>Eventos registrados</small><strong>${events.length}</strong></span>
+            <span><small>Canal de alerta</small><strong>Painel</strong></span>
+          </div>
+          <button type="button" class="cart-secondary-btn" disabled>Gerar relatorio em breve</button>
+        </article>
+      </section>
+    `;
+  }
+
+  function renderRoomInsight(roomId, mode = 'info'){
+    const state = readState();
+    const room = state.rooms.find(item => item.id === roomId);
+    const content = document.getElementById('cartRoomInsightContent');
+    const overlay = document.getElementById('cartRoomInsightOverlay');
+    if(!room || !content || !overlay) return;
+    const body = mode === 'chart'
+      ? renderRoomChartMode(state, room)
+      : mode === 'telemetry'
+        ? renderRoomTelemetryMode(state, room)
+        : mode === 'report'
+          ? renderRoomReportMode(state, room)
+          : renderRoomInfoMode(state, room);
+    overlay.dataset.roomId = room.id;
+    overlay.dataset.mode = mode;
+    content.innerHTML = `${roomInsightHeader(state, room, mode)}${body}`;
+  }
+
+  function openRoomInsight(roomId, mode = 'info'){
+    const overlay = document.getElementById('cartRoomInsightOverlay');
+    if(!overlay) return;
+    renderRoomInsight(roomId, mode);
+    overlay.hidden = false;
+  }
+
+  function closeRoomInsight(){
+    const overlay = document.getElementById('cartRoomInsightOverlay');
+    if(overlay) overlay.hidden = true;
+  }
+
+  function transitStepsForCart(cart){
+    const step = Math.max(1, Math.min(4, Number(cart.transitStep || 1)));
+    const labels = ['Saiu da sala', 'Residuos', 'Higienizacao', 'Nova sala'];
+    return labels.map((label, index) => `
+      <span class="${index + 1 <= step ? 'done' : ''}">
+        <i>${index + 1 <= step ? '&#10003;' : index + 1}</i>
+        <em>${label}</em>
+      </span>
+    `).join('');
+  }
+
+  function renderTransitModal(){
+    const state = readState();
+    const content = document.getElementById('cartTransitModalContent');
+    if(!content) return;
+    const transitCarts = state.carts.filter(cart => cart.locationStatus === 'transit');
+    content.innerHTML = `
+      <header class="cart-transit-modal-head">
+        <span>Fluxo operacional</span>
+        <h2>Carrinhos em transito</h2>
+        <p>${transitCarts.length} carrinho${transitCarts.length === 1 ? '' : 's'} em deslocamento</p>
+      </header>
+      <div class="cart-transit-modal-list">
+        ${transitCarts.length ? transitCarts.map(cart => `
+          <article class="cart-transit-card">
+            <div class="cart-transit-card-icon">${cartIcon()}</div>
+            <div>
+              <strong>${escapeHtml(cartDisplayName(cart))}</strong>
+              <small>${escapeHtml(cart.lastSeen || 'sem leitura')}</small>
+              <div class="cart-transit-route">${transitStepsForCart(cart)}</div>
+            </div>
+          </article>
+        `).join('') : '<div class="cart-room-empty">Nenhum carrinho em transito agora.</div>'}
+      </div>
+    `;
+  }
+
+  function openTransitModal(){
+    const overlay = document.getElementById('cartTransitModalOverlay');
+    if(!overlay) return;
+    renderTransitModal();
+    overlay.hidden = false;
+  }
+
+  function closeTransitModal(){
+    const overlay = document.getElementById('cartTransitModalOverlay');
+    if(overlay) overlay.hidden = true;
   }
 
   function currentDetailCart(){
@@ -10645,6 +11080,7 @@ if(false){(function(){
     const summary = document.getElementById('cartTrackingSummary');
     if(!summary) return;
     const stats = globalStats(state);
+    const transitTotal = state.carts.filter(cart => cart.locationStatus === 'transit').length;
     const countText = value => String(Math.max(0, Number(value || 0)));
     const totalText = value => countText(value).padStart(2, '0');
     summary.innerHTML = `
@@ -10676,6 +11112,11 @@ if(false){(function(){
         <button type="button" class="cart-flow-item hygiene" data-cart-room-modal="hygiene" aria-label="Abrir sala de higienização">
           <img class="cart-flow-img hygiene" src="./assets/cr-icon-hygiene-clean.png" alt="" loading="lazy">
           <span class="cart-flow-label">Higienização</span>
+        </button>
+        <button type="button" class="cart-flow-item transit" data-cart-transit-modal aria-label="Carrinhos em transito">
+          <span class="cart-flow-transit-icon" aria-hidden="true">${cartIcon()}</span>
+          <b>${countText(transitTotal)}</b>
+          <span class="cart-flow-label">Em transito</span>
         </button>
       </article>
       <article class="cart-overview-card cart-overview-empty" aria-hidden="true"></article>
@@ -10797,22 +11238,40 @@ if(false){(function(){
 
     grid.innerHTML = visibleRooms.map(room => {
       return `
-        <article class="cart-room-card">
+        <article class="cart-room-card" data-room-open="${escapeHtml(room.id)}">
           <header class="cart-room-header">
             <div class="cart-room-title-block">
               <span class="cart-room-kicker">Sala atual</span>
               <h2>${escapeHtml(room.name)}</h2>
               <span class="cart-room-gateway readonly">Gateway: ${escapeHtml(formatGatewayShort(room.gatewayDeviceId))}</span>
             </div>
-            ${canManage ? `
-              <button type="button" class="cart-room-info-btn" data-room-settings="${escapeHtml(room.id)}" aria-label="Configurar ${escapeHtml(room.name)}">
+            <div class="cart-room-header-actions">
+              <button type="button" class="cart-room-action-btn" data-room-insight="${escapeHtml(room.id)}" data-room-insight-mode="chart">Grafico</button>
+              <button type="button" class="cart-room-action-btn" data-room-insight="${escapeHtml(room.id)}" data-room-insight-mode="telemetry">Telemetria</button>
+              <button type="button" class="cart-room-icon-btn" data-room-insight="${escapeHtml(room.id)}" data-room-insight-mode="report" aria-label="Relatorio analitico">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M6 3h8l4 4v14H6z"></path>
+                  <path d="M14 3v5h5"></path>
+                  <path d="M9 14h6"></path>
+                  <path d="M9 17h4"></path>
+                </svg>
+              </button>
+              <button type="button" class="cart-room-info-btn" data-room-insight="${escapeHtml(room.id)}" data-room-insight-mode="info" aria-label="Informacoes de ${escapeHtml(room.name)}">
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <circle cx="12" cy="12" r="9"></circle>
                   <path d="M12 10v6"></path>
                   <path d="M12 7h.01"></path>
                 </svg>
               </button>
-            ` : ''}
+              ${canManage ? `
+                <button type="button" class="cart-room-icon-btn" data-room-settings="${escapeHtml(room.id)}" aria-label="Configurar ${escapeHtml(room.name)}">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <circle cx="12" cy="12" r="3"></circle>
+                    <path d="M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.5-2.4 1a7 7 0 0 0-2-1.2L14 3h-4l-.5 2.6a7 7 0 0 0-2 1.2l-2.4-1-2 3.5 2 1.5A7 7 0 0 0 5 12a7 7 0 0 0 .1 1.2l-2 1.5 2 3.5 2.4-1a7 7 0 0 0 2 1.2L10 21h4l.5-2.6a7 7 0 0 0 2-1.2l2.4 1 2-3.5-2-1.5A7 7 0 0 0 19 12z"></path>
+                  </svg>
+                </button>
+              ` : ''}
+            </div>
           </header>
           <div class="cart-items-grid">
             ${renderRoomCarts(room, state.carts)}
@@ -10985,6 +11444,18 @@ if(false){(function(){
           </div>
         </div>
       </div>
+      <div class="cart-room-insight-overlay" id="cartRoomInsightOverlay" hidden>
+        <div class="cart-room-insight-modal">
+          <button type="button" class="cart-detail-close" id="cartRoomInsightCloseBtn">x</button>
+          <div id="cartRoomInsightContent"></div>
+        </div>
+      </div>
+      <div class="cart-transit-modal-overlay" id="cartTransitModalOverlay" hidden>
+        <div class="cart-transit-modal">
+          <button type="button" class="cart-detail-close" id="cartTransitModalCloseBtn">x</button>
+          <div id="cartTransitModalContent"></div>
+        </div>
+      </div>
     `;
 
     const layoutNode = document.getElementById('layout');
@@ -11045,6 +11516,21 @@ if(false){(function(){
       if(event.target.id === 'cartRoomModalOverlay') closeCartRoomModal();
     });
     document.getElementById('cartRoomModalGatewayBtn')?.addEventListener('click', saveCartRoomModalGateway);
+    document.getElementById('cartRoomInsightCloseBtn')?.addEventListener('click', closeRoomInsight);
+    document.getElementById('cartRoomInsightOverlay')?.addEventListener('click', event => {
+      if(event.target.id === 'cartRoomInsightOverlay') closeRoomInsight();
+      const modeButton = event.target.closest('[data-room-insight-mode]');
+      if(modeButton){
+        renderRoomInsight(
+          modeButton.getAttribute('data-room-id') || document.getElementById('cartRoomInsightOverlay')?.dataset.roomId,
+          modeButton.getAttribute('data-room-insight-mode') || 'info'
+        );
+      }
+    });
+    document.getElementById('cartTransitModalCloseBtn')?.addEventListener('click', closeTransitModal);
+    document.getElementById('cartTransitModalOverlay')?.addEventListener('click', event => {
+      if(event.target.id === 'cartTransitModalOverlay') closeTransitModal();
+    });
     document.getElementById('cartCalibrationToggle')?.addEventListener('click', toggleCartCalibrationPanel);
     document.getElementById('cartCalibrationPanel')?.addEventListener('click', handleCalibrationSelectClick);
     document.getElementById('cartCalibrationPanel')?.addEventListener('keydown', handleCalibrationSelectKeydown);
@@ -11067,6 +11553,12 @@ if(false){(function(){
   }
 
   function handleCartFilterClick(event){
+    const transitButton = event.target.closest('[data-cart-transit-modal]');
+    if(transitButton){
+      openTransitModal();
+      return;
+    }
+
     const roomModalButton = event.target.closest('[data-cart-room-modal]');
     if(roomModalButton){
       openCartRoomModal(roomModalButton.getAttribute('data-cart-room-modal'));
@@ -11181,8 +11673,10 @@ if(false){(function(){
   function handleRoomClick(event){
     const filterButton = event.target.closest('[data-cart-filter]');
     const cartButton = event.target.closest('[data-cart-id]');
+    const roomInsightButton = event.target.closest('[data-room-insight]');
     const roomSettingsButton = event.target.closest('[data-room-settings]');
     const gatewayButton = event.target.closest('[data-gateway-room]');
+    const roomCard = event.target.closest('[data-room-open]');
 
     if(filterButton){
       setCartFilter(filterButton.getAttribute('data-cart-filter'));
@@ -11191,6 +11685,14 @@ if(false){(function(){
 
     if(cartButton){
       openCartDetail(cartButton.getAttribute('data-cart-id'));
+      return;
+    }
+
+    if(roomInsightButton){
+      openRoomInsight(
+        roomInsightButton.getAttribute('data-room-insight'),
+        roomInsightButton.getAttribute('data-room-insight-mode') || 'info'
+      );
       return;
     }
 
@@ -11210,6 +11712,11 @@ if(false){(function(){
       room.gatewayDeviceId = nextGateway.trim();
       saveState(state);
       renderRooms();
+      return;
+    }
+
+    if(roomCard){
+      openRoomInsight(roomCard.getAttribute('data-room-open'), 'info');
     }
   }
 
