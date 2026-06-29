@@ -874,11 +874,11 @@ function getReportIcon(){
 }
 
 function getAlertMailboxIcon(){
-  return `<svg viewBox="0 0 64 64" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
-    <path d="M23 15h28a5 5 0 0 1 5 5v25a5 5 0 0 1-5 5H23" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="m24 19 16 13 15-13M38 34 55 48" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M20 30a10 10 0 0 0-10 10v7c0 2-.6 3.8-1.8 5.4L7 54h27l-1.2-1.6A9 9 0 0 1 31 47v-7a10 10 0 0 0-11-10Z" fill="#eaf3ff" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/>
-    <path d="M16 58a5 5 0 0 0 8 0M12 60c4 3 12 3 16 0" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
+  return `<svg viewBox="0 0 96 96" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+    <path d="M34 22h45c4.4 0 8 3.6 8 8v37c0 4.4-3.6 8-8 8H37" stroke="#2f80ff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M36 27 60 48 84 27M61 49 85 73" stroke="#2f80ff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M31 41c-9 0-16 7.1-16 16v10.5c0 3-.9 5.8-2.7 8.2L10 79h45l-2.2-3.3a14.9 14.9 0 0 1-2.8-8.2V57c0-8.9-7.1-16-16-16h-3Z" fill="#eaf3ff" stroke="#2f80ff" stroke-width="6" stroke-linejoin="round"/>
+    <path d="M25 85c3.2 5 10.8 5 14 0M18 91c7 5 21 5 28 0" stroke="#2f80ff" stroke-width="6" stroke-linecap="round"/>
   </svg>`;
 }
 
@@ -12501,6 +12501,16 @@ if(false){(function(){
     return candidate;
   }
 
+  function defaultNewCartRoomId(state){
+    if(activeRoomFilter && state.rooms.some(room => room.id === activeRoomFilter)){
+      return activeRoomFilter;
+    }
+    if(state.rooms.some(room => room.id === PILOT_ROOM_ID)){
+      return PILOT_ROOM_ID;
+    }
+    return state.rooms.find(room => !SPECIAL_ROOM_IDS.has(room.id))?.id || state.rooms[0]?.id || '';
+  }
+
   function handleCartSettingsClick(event){
     const backButton = event.target.closest('[data-settings-back]');
     if(backButton){
@@ -12524,8 +12534,9 @@ if(false){(function(){
 
     const addDevice = event.target.closest('[data-settings-add-device]');
     if(addDevice){
+      const state = readState();
       closeCartSettings();
-      openCartDetail(null, '');
+      openCartDetail(null, defaultNewCartRoomId(state));
       return;
     }
 
@@ -12787,7 +12798,7 @@ if(false){(function(){
     const overlay = document.getElementById('cartDetailOverlay');
     const state = readState();
     const cartId = overlay?.dataset.cartId;
-    const roomId = overlay?.dataset.roomId || '';
+    const roomId = overlay?.dataset.roomId || defaultNewCartRoomId(state);
     const name = document.getElementById('cartDetailName')?.value.trim();
     const mac = formatMac(document.getElementById('cartDetailMac')?.value);
 

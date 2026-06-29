@@ -16516,7 +16516,7 @@ body.analytic-report-open{overflow:hidden}
   background:transparent !important;
   border:0 !important;
   box-shadow:none !important;
-  color:#2f80ff;
+  color:#2f80ff !important;
   cursor:pointer;
   display:grid;
   height:58px;
@@ -16532,17 +16532,27 @@ body.analytic-report-open{overflow:hidden}
   border:0 !important;
   border-radius:0 !important;
   box-shadow:none !important;
-  color:#2f80ff;
+  color:#2f80ff !important;
   display:flex;
   height:58px;
   justify-content:center;
+  overflow:visible !important;
   width:58px;
 }
 
 .cart-alert-mail-icon svg{
   display:block;
-  height:52px;
-  width:52px;
+  height:54px !important;
+  overflow:visible !important;
+  width:54px !important;
+}
+
+.cart-alert-mail-icon svg path{
+  stroke:#2f80ff !important;
+}
+
+.cart-alert-mail-icon svg path[fill="#eaf3ff"]{
+  fill:#eaf3ff !important;
 }
 
 .cart-alert-global-btn b{
