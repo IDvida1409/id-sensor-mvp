@@ -15560,6 +15560,216 @@ body.analytic-report-open{overflow:hidden}
   fill:url(#cartRoomFillGradient);
 }
 
+.cart-demand-chart{
+  align-content:center;
+  display:grid;
+  gap:8px;
+  min-height:226px;
+  overflow-x:auto;
+  padding:2px;
+}
+
+.cart-demand-head{
+  align-items:center;
+  display:flex;
+  justify-content:space-between;
+  min-width:620px;
+}
+
+.cart-demand-head span{
+  color:#475569;
+  font-size:10px;
+  font-weight:900;
+  letter-spacing:.02em;
+  text-transform:uppercase;
+}
+
+.cart-demand-head strong{
+  color:#061329;
+  font-size:13px;
+  font-weight:950;
+  line-height:1;
+}
+
+.cart-demand-axis,
+.cart-demand-row{
+  display:grid;
+  gap:6px;
+  grid-template-columns:86px repeat(8,minmax(48px,1fr));
+  min-width:620px;
+}
+
+.cart-demand-axis span{
+  color:#64748b;
+  font-size:10px;
+  font-weight:900;
+  text-align:center;
+}
+
+.cart-demand-row > strong{
+  align-self:center;
+  color:#20344f;
+  font-size:11px;
+  font-weight:950;
+  line-height:1.05;
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+
+.cart-demand-cells{
+  display:contents;
+}
+
+.cart-demand-cell{
+  align-items:center;
+  border:1px solid #dce7f6;
+  border-radius:8px;
+  display:flex;
+  height:58px;
+  justify-content:center;
+  min-width:0;
+  overflow:hidden;
+  position:relative;
+}
+
+.cart-demand-cell b{
+  color:#1f355a;
+  font-size:12px;
+  font-weight:950;
+  line-height:1;
+}
+
+.cart-demand-cell em{
+  align-items:center;
+  background:#ffffff;
+  border:1px solid rgba(47,128,255,.22);
+  border-radius:999px;
+  bottom:5px;
+  color:#2f80ff;
+  display:flex;
+  font-size:8px;
+  font-style:normal;
+  font-weight:950;
+  height:15px;
+  justify-content:center;
+  position:absolute;
+  right:5px;
+  width:15px;
+}
+
+.cart-demand-cell em.warn{
+  border-color:rgba(245,158,11,.36);
+  color:#f59e0b;
+}
+
+.cart-demand-cell.level-0{background:#f8fbff}
+.cart-demand-cell.level-1{background:#edf6ff;border-color:#cfe3ff}
+.cart-demand-cell.level-2{background:#dbeafe;border-color:#a9caff}
+.cart-demand-cell.level-3{background:#fff7ed;border-color:#fed7aa}
+.cart-demand-cell.level-4{background:#ffe7eb;border-color:#ff9baa}
+
+.cart-demand-legend{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px 12px;
+  min-width:620px;
+}
+
+.cart-demand-legend span{
+  align-items:center;
+  color:#475569;
+  display:flex;
+  font-size:10px;
+  font-weight:850;
+  gap:5px;
+  line-height:1;
+}
+
+.cart-demand-legend i,
+.cart-demand-swatch{
+  border:1px solid #d2deee;
+  border-radius:4px;
+  display:inline-block;
+  height:10px;
+  width:16px;
+}
+
+.cart-demand-legend .level-1,
+.cart-demand-swatch.level-1{background:#edf6ff;border-color:#cfe3ff}
+.cart-demand-legend .level-2,
+.cart-demand-swatch.level-2{background:#dbeafe;border-color:#a9caff}
+.cart-demand-legend .level-3,
+.cart-demand-swatch.level-3{background:#fff7ed;border-color:#fed7aa}
+.cart-demand-legend .level-4,
+.cart-demand-swatch.level-4{background:#ffe7eb;border-color:#ff9baa}
+
+.cart-room-step-line{
+  fill:none;
+  stroke:#2f80ff;
+  stroke-linecap:round;
+  stroke-linejoin:round;
+  stroke-width:5;
+}
+
+.cart-cycle-chart{
+  display:grid;
+  gap:8px;
+}
+
+.cart-cycle-list{
+  display:grid;
+  gap:7px;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+}
+
+.cart-cycle-row{
+  background:#f8fbff;
+  border:1px solid #dfe8f4;
+  border-radius:8px;
+  display:grid;
+  gap:3px;
+  min-width:0;
+  padding:7px 8px;
+}
+
+.cart-cycle-row b,
+.cart-cycle-row small,
+.cart-cycle-row em{
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+
+.cart-cycle-row b{
+  color:#20344f;
+  font-size:10px;
+  font-weight:950;
+}
+
+.cart-cycle-row small{
+  color:#5d7089;
+  font-size:9px;
+  font-weight:850;
+}
+
+.cart-cycle-row em{
+  color:#2f80ff;
+  font-size:9px;
+  font-style:normal;
+  font-weight:950;
+}
+
+.cart-cycle-row.open{
+  border-color:#cfe0ff;
+}
+
+.cart-cycle-row.closed{
+  border-color:#d7eadf;
+}
+
 .cart-room-chart-point.normal{
   fill:#2f80ff;
 }
@@ -15712,6 +15922,12 @@ body.analytic-report-open{overflow:hidden}
   .cart-room-graph-summary.operational,
   .cart-telemetry-ops-strip{
     grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+  .cart-cycle-list{
+    grid-template-columns:1fr;
+  }
+  .cart-demand-chart{
+    min-height:210px;
   }
 }
 

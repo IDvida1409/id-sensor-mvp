@@ -10776,6 +10776,27 @@ if(false){(function(){
     return event?.type === 'room' && (text.includes('entrou') || text.includes('na sala'));
   }
 
+  function isExchangeEvent(event){
+    const text = eventText(event);
+    return event?.type === 'exchange' || text.includes('troca');
+  }
+
+  function sameLocalDay(a, b){
+    const first = new Date(a || '');
+    const second = new Date(b || '');
+    if(Number.isNaN(first.getTime()) || Number.isNaN(second.getTime())) return false;
+    return first.getFullYear() === second.getFullYear()
+      && first.getMonth() === second.getMonth()
+      && first.getDate() === second.getDate();
+  }
+
+  function roomBlockLabel(room){
+    return String(room?.name || 'Bloco')
+      .replace(/^sala\s*-\s*/i, '')
+      .replace(/^sala\s+/i, '')
+      .trim() || 'Bloco';
+  }
+
   function roomChartPoints(state, room, view = 'summary'){
     const limit = view === 'detail' ? 18 : 12;
     const events = roomChronologicalEvents(state, room)
@@ -10807,6 +10828,104 @@ if(false){(function(){
       { value:0, time:new Date().toISOString(), label:'--:--', tone:'normal', distanceMm:null },
       { value:0, time:new Date().toISOString(), label:'--:--', tone:'normal', distanceMm:null }
     ];
+  }
+
+  function demandScoreForFill(fill, criticalPercent){
+    const value = finiteNumberOrNull(fill);
+    if(value === null) return 0;
+    if(value >= criticalPercent) return 4;
+    if(value >= Math.max(0, criticalPercent - 15)) return 3;
+    if(value >= 50) return 2;
+    if(value > 0) return 1;
+    return 0;
+  }
+
+  function demandScoreLabel(score){
+    if(score >= 4) return 'Gargalo';
+    if(score >= 3) return 'Alta';
+    if(score >= 2) return 'Media';
+    if(score >= 1) return 'Baixa';
+    return 'Sem dado';
+  }
+
+  function roomDemandSlots(state, room){
+    const hours = [6, 8, 10, 12, 14, 16, 18, 20];
+    const carts = roomCartsForDetails(state, room);
+    const criticalPercent = carts.length
+      ? Math.max(...carts.map(cart => cartRedPercent(cart)))
+      : DEFAULT_CART_CALIBRATION.redPercent;
+    const slots = hours.map(hour => ({
+      hour,
+      label:`${String(hour).padStart(2, '0')}h`,
+      score:0,
+      fill:null,
+      events:0,
+      critical:0,
+      obstruction:0,
+      exchange:0
+    }));
+    const now = new Date();
+    const todayEvents = roomChronologicalEvents(state, room).filter(event => sameLocalDay(event.ts, now));
+    const findSlot = (value) => {
+      const date = new Date(value || '');
+      if(Number.isNaN(date.getTime())) return null;
+      const hour = date.getHours();
+      const target = Math.max(hours[0], Math.min(hours[hours.length - 1], Math.floor(hour / 2) * 2));
+      return slots.find(slot => slot.hour === target) || slots[0];
+    };
+    const applySlot = (slot, score, fill = null, type = '') => {
+      if(!slot) return;
+      slot.score = Math.max(slot.score, score);
+      if(fill !== null && fill !== undefined){
+        const current = finiteNumberOrNull(slot.fill);
+        const next = clampNumber(fill, 0, 100);
+        slot.fill = current === null ? next : Math.max(current, next);
+      }
+      slot.events += 1;
+      if(type === 'critical') slot.critical += 1;
+      if(type === 'obstruction') slot.obstruction += 1;
+      if(type === 'exchange') slot.exchange += 1;
+    };
+
+    todayEvents.forEach(event => {
+      const slot = findSlot(event.ts);
+      const fill = finiteNumberOrNull(event.fill);
+      if(fill !== null) applySlot(slot, demandScoreForFill(fill, criticalPercent), fill, 'reading');
+      if(isCriticalEvent(event)) applySlot(slot, 4, fill, 'critical');
+      if(isObstructionEvent(event)) applySlot(slot, 3, fill, 'obstruction');
+      if(isExchangeEvent(event) || isRoomEntryEvent(event)) applySlot(slot, 2, fill, 'exchange');
+    });
+
+    if(!slots.some(slot => slot.events) && carts.length){
+      const slot = findSlot(carts[0].lastReadingAt || new Date().toISOString());
+      const peakFill = Math.max(...carts.map(cart => cartVisualFill(cart)));
+      const hasObstruction = carts.some(isObstructedCart);
+      const hasCritical = carts.some(cart => fillTone(cart) === 'full');
+      applySlot(slot, hasObstruction ? 3 : (hasCritical ? 4 : demandScoreForFill(peakFill, criticalPercent)), peakFill, hasObstruction ? 'obstruction' : 'reading');
+    }
+
+    return slots;
+  }
+
+  function roomDemandSummary(state, room){
+    const slots = roomDemandSlots(state, room);
+    const events = roomChronologicalEvents(state, room).filter(event => sameLocalDay(event.ts, new Date()));
+    const peak = slots.reduce((best, slot) => {
+      if(!best) return slot;
+      if(slot.score > best.score) return slot;
+      const slotFill = finiteNumberOrNull(slot.fill) || 0;
+      const bestFill = finiteNumberOrNull(best.fill) || 0;
+      return slot.score === best.score && slotFill > bestFill ? slot : best;
+    }, null);
+    const currentHour = new Date().getHours();
+    const current = slots.find(slot => slot.hour === Math.max(6, Math.min(20, Math.floor(currentHour / 2) * 2))) || peak;
+    return {
+      slots,
+      peak,
+      current,
+      exchangeTotal: events.filter(event => isExchangeEvent(event) || isRoomEntryEvent(event)).length,
+      obstructionTotal: events.filter(isObstructionEvent).length
+    };
   }
 
   function roomOperationalSummary(state, room){
@@ -10895,7 +11014,170 @@ if(false){(function(){
     return [0, 0, 0, 0];
   }
 
+  function roomDemandHeatmapHtml(state, room){
+    const demand = roomDemandSummary(state, room);
+    const blockLabel = roomBlockLabel(room);
+    const peak = demand.peak;
+    return `
+      <div class="cart-demand-chart" role="img" aria-label="Demanda por horario do ${escapeHtml(blockLabel)}">
+        <div class="cart-demand-head">
+          <span>Demanda por horario</span>
+          <strong>${escapeHtml(peak ? `${peak.label} - ${demandScoreLabel(peak.score)}` : '--')}</strong>
+        </div>
+        <div class="cart-demand-axis">
+          <i></i>
+          ${demand.slots.map(slot => `<span>${escapeHtml(slot.label)}</span>`).join('')}
+        </div>
+        <div class="cart-demand-row">
+          <strong title="${escapeHtml(blockLabel)}">${escapeHtml(blockLabel)}</strong>
+          <div class="cart-demand-cells">
+            ${demand.slots.map(slot => {
+              const fill = finiteNumberOrNull(slot.fill);
+              const title = `${slot.label}: ${demandScoreLabel(slot.score)}${fill !== null ? ` - pico ${Math.round(fill)}%` : ''}`;
+              return `
+                <span class="cart-demand-cell level-${Math.max(0, Math.min(4, slot.score))}" title="${escapeHtml(title)}">
+                  <b>${fill !== null ? `${Math.round(fill)}%` : ''}</b>
+                  ${slot.exchange ? '<em>T</em>' : ''}
+                  ${slot.obstruction ? '<em class="warn">!</em>' : ''}
+                </span>
+              `;
+            }).join('')}
+          </div>
+        </div>
+        <div class="cart-demand-legend">
+          <span><i class="level-1"></i>Baixa</span>
+          <span><i class="level-2"></i>Media</span>
+          <span><i class="level-3"></i>Alta</span>
+          <span><i class="level-4"></i>Gargalo</span>
+        </div>
+      </div>
+    `;
+  }
+
+  function roomStepChartSvg(state, room){
+    const chartPoints = roomChartPoints(state, room, 'detail');
+    const carts = roomCartsForDetails(state, room);
+    const criticalPercent = carts.length
+      ? Math.max(...carts.map(cart => cartRedPercent(cart)))
+      : DEFAULT_CART_CALIBRATION.redPercent;
+    const width = 620;
+    const height = 218;
+    const padX = 44;
+    const padY = 20;
+    const innerW = width - padX * 2;
+    const innerH = height - padY * 2 - 16;
+    const point = (item, index) => {
+      const x = padX + (chartPoints.length === 1 ? 0 : (innerW * index) / (chartPoints.length - 1));
+      const y = padY + innerH - (clampNumber(item.value, 0, 100) / 100) * innerH;
+      return { ...item, x, y };
+    };
+    const points = chartPoints.map(point);
+    const stepPath = points.length
+      ? points.slice(1).reduce((path, item) => `${path} H ${item.x.toFixed(1)} V ${item.y.toFixed(1)}`, `M ${points[0].x.toFixed(1)} ${points[0].y.toFixed(1)}`)
+      : '';
+    const redY = padY + innerH - clampNumber(criticalPercent, 0, 100) / 100 * innerH;
+    const grid = [0, 50, 100].map(value => {
+      const y = padY + innerH - (value / 100) * innerH;
+      return `<line x1="${padX}" y1="${y}" x2="${width - padX}" y2="${y}" class="cart-room-chart-grid"></line><text x="10" y="${y + 4}" class="cart-room-chart-axis">${value}%</text>`;
+    }).join('');
+    const axisLabels = points.filter((_, index) => {
+      if(points.length <= 4) return true;
+      return index === 0 || index === points.length - 1 || index % Math.ceil(points.length / 4) === 0;
+    }).map(item => `<text x="${item.x}" y="${height - 4}" text-anchor="middle" class="cart-room-chart-axis">${escapeHtml(item.label)}</text>`).join('');
+
+    return `
+      <svg class="cart-room-chart-svg cart-room-step-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="Nivel oficial do carrinho em degraus">
+        ${grid}
+        <rect x="${padX}" y="${padY}" width="${innerW}" height="${innerH}" rx="8" class="cart-room-chart-band"></rect>
+        <rect x="${padX}" y="${padY}" width="${innerW}" height="${Math.max(0, redY - padY)}" rx="8" class="cart-room-chart-critical-zone"></rect>
+        <line x1="${padX}" y1="${redY}" x2="${width - padX}" y2="${redY}" class="cart-room-chart-critical"></line>
+        ${stepPath ? `<path d="${stepPath}" class="cart-room-step-line"></path>` : ''}
+        ${points.map(item => `
+          <circle cx="${item.x}" cy="${item.y}" r="${item.tone === 'obstruction' ? 6 : 4.5}" class="cart-room-chart-point ${item.tone}">
+            <title>${Math.round(item.value)}%${item.distanceMm !== null && item.distanceMm !== undefined ? ` - ${Math.round(item.distanceMm)} mm` : ''}</title>
+          </circle>
+        `).join('')}
+        ${axisLabels}
+      </svg>
+    `;
+  }
+
+  function roomCycleRows(state, room){
+    const events = roomChronologicalEvents(state, room);
+    const readings = events.filter(event => finiteNumberOrNull(event.fill) !== null);
+    const criticals = events.filter(isCriticalEvent);
+    const now = Date.now();
+    const rows = criticals.slice(-3).map((event, index) => {
+      const previousReading = readings.filter(item => item._time <= event._time).slice(-2)[0] || readings[0] || null;
+      const exchange = events.find(item => item._time > event._time && (isExchangeEvent(item) || isRoomEntryEvent(item)));
+      const fillTime = previousReading && previousReading._time < event._time
+        ? formatCartDurationFromMs(event._time - previousReading._time, '--')
+        : '--';
+      const fullTime = exchange
+        ? formatCartDurationFromMs(exchange._time - event._time, '--')
+        : formatCartDurationFromMs(Math.max(0, now - event._time), 'em aberto');
+      return {
+        label:`Ciclo ${Math.max(1, criticals.length - 2 + index)}`,
+        fillTime,
+        fullTime,
+        at:formatClock(event.ts),
+        tone:exchange ? 'closed' : 'open'
+      };
+    });
+    if(rows.length) return rows;
+    const carts = roomCartsForDetails(state, room);
+    return [{
+      label:'Ciclo atual',
+      fillTime:'sem critico',
+      fullTime:carts.length ? `${Math.round(Math.max(...carts.map(cart => cartVisualFill(cart))))}%` : '--',
+      at:carts[0]?.lastReadingAt ? formatClock(carts[0].lastReadingAt) : '--:--',
+      tone:'open'
+    }];
+  }
+
+  function roomCycleDetailHtml(state, room){
+    const rows = roomCycleRows(state, room);
+    return `
+      <div class="cart-cycle-chart">
+        ${roomStepChartSvg(state, room)}
+        <div class="cart-cycle-list">
+          ${rows.map(row => `
+            <span class="cart-cycle-row ${escapeHtml(row.tone)}">
+              <b>${escapeHtml(row.label)}</b>
+              <small>Encher ${escapeHtml(row.fillTime)}</small>
+              <small>Cheio ${escapeHtml(row.fullTime)}</small>
+              <em>${escapeHtml(row.at)}</em>
+            </span>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  }
+
+  function roomChartGraphicHtml(state, room, view = 'summary'){
+    return view === 'detail'
+      ? roomCycleDetailHtml(state, room)
+      : roomDemandHeatmapHtml(state, room);
+  }
+
+  function roomChartLegendHtml(view){
+    if(view === 'detail'){
+      return `
+        <div class="graph-legend-item"><span class="graph-line-swatch"></span> Nivel oficial</div>
+        <div class="graph-legend-item"><span class="graph-risk-swatch"></span> Limite critico</div>
+        <div class="graph-legend-item"><span class="cart-obstruction-swatch"></span> Falha tecnica</div>
+      `;
+    }
+    return `
+      <div class="graph-legend-item"><span class="cart-demand-swatch level-1"></span> Baixa</div>
+      <div class="graph-legend-item"><span class="cart-demand-swatch level-2"></span> Media</div>
+      <div class="graph-legend-item"><span class="cart-demand-swatch level-3"></span> Alta</div>
+      <div class="graph-legend-item"><span class="cart-demand-swatch level-4"></span> Gargalo</div>
+    `;
+  }
+
   function roomChartSvg(state, room, view = 'summary'){
+    return roomChartGraphicHtml(state, room, view);
     const chartPoints = roomChartPoints(state, room, view);
     const carts = roomCartsForDetails(state, room);
     const criticalPercent = carts.length
@@ -10987,6 +11269,12 @@ if(false){(function(){
 
   function renderRoomChartMode(state, room, view = 'summary'){
     const summary = roomOperationalSummary(state, room);
+    const demand = roomDemandSummary(state, room);
+    const graphEyebrow = `BLOCO - ${roomBlockLabel(room).toUpperCase()}`;
+    const graphTitle = view === 'detail' ? 'Ciclos do carrinho' : 'Demanda do bloco';
+    const graphDesc = view === 'detail'
+      ? 'Nivel oficial por ciclo, limite critico e tempo cheio.'
+      : 'Horarios de maior pressao para orientar a equipe.';
     const metricCards = [
       { label:'Tempo até crítico', value:summary.timeToCriticalLabel, note:'Do início da leitura ao limite.' },
       { label:'Em crítico', value:summary.timeInCriticalLabel, note:summary.fullCount ? 'Aguardando troca.' : 'Sem crítico ativo.' },
@@ -10995,17 +11283,28 @@ if(false){(function(){
       { label:'Obstruções', value:String(summary.obstructionCount), note:'Saltos ou leituras incoerentes.' },
       { label:'Perdidos', value:String(summary.lostCount), note:'Sem comunicação ativa.' }
     ];
-    const visibleCards = view === 'detail' ? metricCards : metricCards.slice(0, 4);
+    const chartCards = view === 'detail'
+      ? [
+        { label:'Tempo ate critico', value:summary.timeToCriticalLabel, note:'Ciclo atual.' },
+        { label:'Cheio', value:summary.timeInCriticalLabel, note:summary.fullCount ? 'Em andamento.' : 'Sem critico.' },
+        { label:'Troca', value:summary.exchangeLabel, note:'Depois do alerta.' },
+        { label:'Obstrucoes', value:String(summary.obstructionCount), note:'Falhas tecnicas.' }
+      ]
+      : [
+        { label:'Pico do bloco', value:demand.peak?.label || '--', note:demand.peak ? demandScoreLabel(demand.peak.score) : 'Sem dados.' },
+        { label:'Pressao atual', value:demand.current ? demandScoreLabel(demand.current.score) : '--', note:demand.current?.fill !== null && demand.current?.fill !== undefined ? `${Math.round(demand.current.fill)}% no horario.` : 'Sem leitura.' },
+        { label:'Trocas hoje', value:String(demand.exchangeTotal), note:'Entradas/trocas.' },
+        { label:'Falhas hoje', value:String(demand.obstructionTotal), note:'Obstrucao ou sensor.' }
+      ];
+    const visibleCards = chartCards;
     return `
       <section class="cart-room-chart-layout graph-only">
         <article class="graph-main-card cart-room-graph-card cart-room-graph-operational">
           <div class="graph-main-head">
             <div>
-              <div class="graph-eyebrow">SALA - ${escapeHtml(room.name.toUpperCase())}</div>
-              <div class="graph-h1">Evolução do carrinho</div>
-              <div class="graph-desc">${view === 'detail'
-                ? 'Leituras do nível, limite crítico, possíveis obstruções e troca operacional.'
-                : 'Resumo das leituras e dos principais eventos da sala.'}</div>
+              <div class="graph-eyebrow">${escapeHtml(graphEyebrow)}</div>
+              <div class="graph-h1">${escapeHtml(graphTitle)}</div>
+              <div class="graph-desc">${escapeHtml(graphDesc)}</div>
             </div>
             <div class="cart-room-chart-view">
               <button type="button" class="${view === 'summary' ? 'active' : ''}" data-room-insight-mode="chart-summary" data-room-id="${escapeHtml(room.id)}">Resumido</button>
@@ -11014,10 +11313,7 @@ if(false){(function(){
           </div>
           <div class="graph-wrap cart-room-operational-wrap">
             <div class="graph-legend">
-              <div class="graph-legend-item"><span class="graph-line-swatch"></span> Nível</div>
-              <div class="graph-legend-item"><span class="graph-band-swatch"></span> Livre</div>
-              <div class="graph-legend-item"><span class="graph-risk-swatch"></span> Crítico</div>
-              <div class="graph-legend-item"><span class="cart-obstruction-swatch"></span> Possível obstrução</div>
+              ${roomChartLegendHtml(view)}
             </div>
             <div class="graph-box">
               ${roomChartSvg(state, room, view)}
