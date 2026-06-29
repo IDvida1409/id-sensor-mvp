@@ -16342,3 +16342,96 @@ body.analytic-report-open{overflow:hidden}
     grid-template-columns:minmax(130px,176px) minmax(92px,1fr) !important;
   }
 }
+
+/* ===== Einstein strict compact cart size correction ===== */
+.cart-tracking-v2 .cart-items-grid{
+  align-items:start !important;
+  gap:12px 20px !important;
+  grid-template-columns:repeat(2,minmax(310px,1fr)) !important;
+}
+
+.cart-tracking-v2 .cart-item-unit{
+  align-items:start !important;
+  display:grid !important;
+  gap:10px !important;
+  grid-template-columns:152px minmax(138px,1fr) !important;
+  max-width:330px !important;
+  min-width:0 !important;
+  width:330px !important;
+}
+
+.cart-tracking-v2 .cart-card-stack{
+  max-width:152px !important;
+  min-width:152px !important;
+  width:152px !important;
+}
+
+.cart-tracking-v2 .cart-card-stack .cart-item-card,
+.cart-tracking-v2 .cart-card-stack .cart-item-card.transit{
+  height:132px !important;
+  min-height:132px !important;
+  max-height:132px !important;
+  width:152px !important;
+  max-width:152px !important;
+  min-width:152px !important;
+}
+
+.cart-tracking-v2 .cart-card-stack .cart-visual{
+  flex-basis:70px !important;
+  min-height:70px !important;
+}
+
+.cart-tracking-v2 .cart-card-stack .cart-bin-empty-shell.closed{
+  height:66px !important;
+  top:0 !important;
+  transform:translateX(-50%) scale(.74) !important;
+  width:76px !important;
+}
+
+.cart-tracking-v2 .cart-card-stack .cart-bin-empty-shell.open{
+  height:76px !important;
+  top:-3px !important;
+  transform:translateX(-50%) scale(.74) !important;
+  width:76px !important;
+}
+
+.cart-tracking-v2 .cart-card-stack .cart-item-body strong{
+  font-size:14px !important;
+}
+
+.cart-tracking-v2 .cart-side-meta{
+  min-width:0 !important;
+  overflow:visible !important;
+  padding-top:9px !important;
+}
+
+.cart-tracking-v2 .cart-side-row{
+  min-width:0 !important;
+  overflow:visible !important;
+}
+
+.cart-tracking-v2 .cart-side-status b{
+  white-space:normal !important;
+}
+
+.cart-tracking-v2 .cart-side-limit small{
+  display:block !important;
+  max-width:138px !important;
+  overflow:visible !important;
+  white-space:normal !important;
+}
+
+.cart-tracking-v2 .cart-under-row{
+  overflow:visible !important;
+  white-space:nowrap !important;
+}
+
+@media (max-width:760px){
+  .cart-tracking-v2 .cart-items-grid{
+    grid-template-columns:1fr !important;
+  }
+
+  .cart-tracking-v2 .cart-item-unit{
+    width:min(330px,100%) !important;
+  }
+}
