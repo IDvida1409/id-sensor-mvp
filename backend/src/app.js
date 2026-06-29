@@ -140,9 +140,181 @@ const PANEL_AUTH_USERS = {
   }
 };
 
+const PANEL_CLIENT_FALLBACKS = [
+  {
+    id: 'cliente_einstein',
+    nome: 'Hospital Einstein',
+    organization: 'Hospital Einstein',
+    logo: './assets/einstein-logo.png',
+    avatar: './assets/einstein-symbol.png',
+    role: 'cart',
+    slug: 'einstein'
+  }
+];
+
 function sanitizePanelUser(user) {
-  const { password, ...safeUser } = user;
+  const { password, password_hash, password_salt, ...safeUser } = user;
   return safeUser;
+}
+
+function panelPasswordHash(password, salt = crypto.randomBytes(16).toString('hex')) {
+  return {
+    salt,
+    hash: crypto.scryptSync(String(password || ''), salt, 32).toString('hex')
+  };
+}
+
+function verifyPanelPassword(user, password) {
+  if (user?.password) return user.password === password;
+  if (!user?.password_hash || !user?.password_salt) return false;
+  const hashed = panelPasswordHash(password, user.password_salt).hash;
+  const received = Buffer.from(user.password_hash, 'hex');
+  const expected = Buffer.from(hashed, 'hex');
+  return received.length === expected.length && crypto.timingSafeEqual(expected, received);
+}
+
+function normalizePanelSlug(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '.')
+    .replace(/^\.+|\.+$/g, '') || 'usuario';
+}
+
+function panelClientDefaults(client) {
+  const name = client?.nome || client?.cliente_nome || client?.organization || 'Cliente';
+  const fallback = PANEL_CLIENT_FALLBACKS.find((item) => item.id === client?.id)
+    || PANEL_CLIENT_FALLBACKS.find((item) => normalizePanelSlug(name).includes(item.slug));
+  return {
+    id: client?.id || fallback?.id || normalizePanelSlug(name).replace(/\./g, '_'),
+    nome: name,
+    organization: fallback?.organization || name,
+    logo: fallback?.logo || './assets/idsensor-symbol.png',
+    avatar: fallback?.avatar || './assets/idsensor-symbol.png',
+    role: fallback?.role || 'cart',
+    slug: fallback?.slug || normalizePanelSlug(name).split('.').slice(-1)[0] || 'cliente'
+  };
+}
+
+function panelUsernameFor(name, client) {
+  const userSlug = normalizePanelSlug(name);
+  const clientSlug = panelClientDefaults(client).slug || normalizePanelSlug(client?.nome);
+  return `${userSlug}.${clientSlug}`.toLowerCase();
+}
+
+function listPanelClients(db = getDb()) {
+  const rows = db.prepare('SELECT id, nome FROM clientes ORDER BY nome ASC').all();
+  const clients = [...rows];
+  PANEL_CLIENT_FALLBACKS.forEach((fallback) => {
+    if (!clients.some((client) => client.id === fallback.id || normalizePanelSlug(client.nome).includes(fallback.slug))) {
+      clients.push({ id: fallback.id, nome: fallback.nome });
+    }
+  });
+  return clients.map(panelClientDefaults);
+}
+
+function getPanelClient(db, clientId) {
+  return listPanelClients(db).find((client) => client.id === clientId) || null;
+}
+
+function panelUserFromRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    username: row.username,
+    role: row.role,
+    displayName: row.display_name,
+    organization: row.organization,
+    clienteId: row.cliente_id,
+    clienteNome: row.cliente_nome,
+    logo: row.logo,
+    avatar: row.avatar,
+    ativo: Boolean(row.ativo),
+    permissions: row.role === 'cart' ? { cartOnly: true } : {}
+  };
+}
+
+function ensureDefaultPanelUsers(db = getDb()) {
+  const createdAt = nowIso();
+  const einstein = panelClientDefaults({ id: 'cliente_einstein', nome: 'Hospital Einstein' });
+  const existing = db.prepare('SELECT id FROM panel_users WHERE username = ?').get('idvida.einstein');
+  if (existing) return;
+  const password = process.env.PANEL_EINSTEIN_PASSWORD || 'einstein123456';
+  const hashed = panelPasswordHash(password);
+  db.prepare(`
+    INSERT INTO panel_users (
+      id, username, password_hash, password_salt, role, display_name, organization,
+      cliente_id, cliente_nome, logo, avatar, ativo, criado_em, atualizado_em
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+  `).run(
+    'panel-user-einstein-default',
+    'idvida.einstein',
+    hashed.hash,
+    hashed.salt,
+    'cart',
+    'Hospital Einstein',
+    einstein.organization,
+    einstein.id,
+    einstein.nome,
+    einstein.logo,
+    einstein.avatar,
+    createdAt,
+    createdAt
+  );
+}
+
+function getPanelUserByUsername(username) {
+  const staticUser = PANEL_AUTH_USERS[username];
+  if (staticUser?.role === 'master') return staticUser;
+  const db = getDb();
+  ensureDefaultPanelUsers(db);
+  const row = db.prepare('SELECT * FROM panel_users WHERE username = ? AND ativo = 1').get(username);
+  return row ? { ...row, ...panelUserFromRow(row) } : null;
+}
+
+function createPanelSessionToken(user) {
+  const payload = {
+    v: 1,
+    type: 'panel',
+    username: user.username,
+    role: user.role,
+    iat: Date.now(),
+    exp: Date.now() + (12 * 60 * 60 * 1000)
+  };
+  const encodedPayload = encodeTokenPayload(payload);
+  return `${encodedPayload}.${signTokenPayload(encodedPayload)}`;
+}
+
+function verifyPanelSessionToken(req) {
+  const header = String(req?.headers?.authorization || '');
+  const token = header.toLowerCase().startsWith('bearer ') ? header.slice(7).trim() : '';
+  const [encodedPayload, signature] = token.split('.');
+  if (!encodedPayload || !signature) return null;
+  const expected = signTokenPayload(encodedPayload);
+  const expectedBuffer = Buffer.from(expected);
+  const receivedBuffer = Buffer.from(signature);
+  if (expectedBuffer.length !== receivedBuffer.length) return null;
+  if (!crypto.timingSafeEqual(expectedBuffer, receivedBuffer)) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(encodedPayload, 'base64url').toString('utf8'));
+    if (payload?.v !== 1 || payload?.type !== 'panel' || !payload?.username || !payload?.role) return null;
+    if (Number(payload.exp || 0) <= Date.now()) return null;
+    const user = getPanelUserByUsername(String(payload.username).toLowerCase());
+    if (!user || user.role !== payload.role) return null;
+    return { ...payload, user };
+  } catch {
+    return null;
+  }
+}
+
+function requirePanelMaster(req, res) {
+  const session = verifyPanelSessionToken(req);
+  if (!session || session.role !== 'master') {
+    fail(res, 403, 'Acesso restrito ao usuario master.');
+    return null;
+  }
+  return session;
 }
 
 function activationExpiresAt(createdAt = Date.now()) {
@@ -1764,13 +1936,131 @@ addRoute('GET', '/api/db/status', async ({ res }) => {
 addRoute('POST', '/api/auth/login', async ({ body, res }) => {
   const username = String(body?.username || '').trim().toLowerCase();
   const password = String(body?.password || '');
-  const user = PANEL_AUTH_USERS[username];
+  const user = getPanelUserByUsername(username);
 
-  if (!user || user.password !== password) {
+  if (!user || !verifyPanelPassword(user, password)) {
     return fail(res, 401, 'Usuário ou senha inválidos.');
   }
 
-  ok(res, sanitizePanelUser(user));
+  ok(res, { ...sanitizePanelUser(user), token: createPanelSessionToken(user) });
+});
+
+addRoute('GET', '/api/panel/clients', async ({ req, res }) => {
+  if (!requirePanelMaster(req, res)) return;
+  const db = getDb();
+  ensureDefaultPanelUsers(db);
+  const clients = listPanelClients(db).map((client) => {
+    const userCount = db.prepare('SELECT COUNT(*) AS total FROM panel_users WHERE cliente_id = ? AND ativo = 1').get(client.id)?.total || 0;
+    return { ...client, userCount };
+  });
+  ok(res, { clients });
+});
+
+addRoute('GET', '/api/panel/users', async ({ req, res }) => {
+  if (!requirePanelMaster(req, res)) return;
+  const url = new URL(req.url, 'http://local');
+  const clientId = String(url.searchParams.get('client_id') || '').trim();
+  const db = getDb();
+  ensureDefaultPanelUsers(db);
+  const rows = clientId
+    ? db.prepare('SELECT * FROM panel_users WHERE cliente_id = ? AND ativo = 1 ORDER BY display_name ASC, username ASC').all(clientId)
+    : db.prepare('SELECT * FROM panel_users WHERE ativo = 1 ORDER BY cliente_nome ASC, display_name ASC, username ASC').all();
+  ok(res, { users: rows.map(panelUserFromRow) });
+});
+
+addRoute('POST', '/api/panel/users', async ({ body, req, res }) => {
+  if (!requirePanelMaster(req, res)) return;
+  const db = getDb();
+  ensureDefaultPanelUsers(db);
+  const clientId = String(body?.clientId || body?.cliente_id || '').trim();
+  const client = getPanelClient(db, clientId);
+  if (!client) return fail(res, 400, 'Cliente nao encontrado.');
+
+  const displayName = String(body?.displayName || body?.name || '').trim();
+  const password = String(body?.password || '');
+  if (!displayName) return fail(res, 400, 'Informe o nome do usuario.');
+  if (password.length < 6) return fail(res, 400, 'A senha precisa ter pelo menos 6 caracteres.');
+
+  const defaults = panelClientDefaults(client);
+  const username = panelUsernameFor(displayName, defaults);
+  const existing = db.prepare('SELECT id, ativo FROM panel_users WHERE username = ?').get(username);
+  const hashed = panelPasswordHash(password);
+  const timestamp = nowIso();
+
+  if (existing?.ativo) {
+    return fail(res, 409, 'Ja existe um usuario ativo com esse nome para este cliente.');
+  }
+
+  if (existing) {
+    db.prepare(`
+      UPDATE panel_users
+      SET password_hash = ?, password_salt = ?, role = ?, display_name = ?, organization = ?,
+          cliente_id = ?, cliente_nome = ?, logo = ?, avatar = ?, ativo = 1, atualizado_em = ?
+      WHERE id = ?
+    `).run(
+      hashed.hash,
+      hashed.salt,
+      defaults.role,
+      displayName,
+      defaults.organization,
+      defaults.id,
+      defaults.nome,
+      defaults.logo,
+      defaults.avatar,
+      timestamp,
+      existing.id
+    );
+    const row = db.prepare('SELECT * FROM panel_users WHERE id = ?').get(existing.id);
+    return ok(res, panelUserFromRow(row));
+  }
+
+  const userId = id('panel_user');
+  db.prepare(`
+    INSERT INTO panel_users (
+      id, username, password_hash, password_salt, role, display_name, organization,
+      cliente_id, cliente_nome, logo, avatar, ativo, criado_em, atualizado_em
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+  `).run(
+    userId,
+    username,
+    hashed.hash,
+    hashed.salt,
+    defaults.role,
+    displayName,
+    defaults.organization,
+    defaults.id,
+    defaults.nome,
+    defaults.logo,
+    defaults.avatar,
+    timestamp,
+    timestamp
+  );
+  const row = db.prepare('SELECT * FROM panel_users WHERE id = ?').get(userId);
+  ok(res, panelUserFromRow(row), 201);
+});
+
+addRoute('POST', '/api/panel/users/:id/reset-password', async ({ params, body, req, res }) => {
+  if (!requirePanelMaster(req, res)) return;
+  const password = String(body?.password || '');
+  if (password.length < 6) return fail(res, 400, 'A senha precisa ter pelo menos 6 caracteres.');
+  const db = getDb();
+  ensureDefaultPanelUsers(db);
+  const row = db.prepare('SELECT * FROM panel_users WHERE id = ? AND ativo = 1').get(params.id);
+  if (!row) return fail(res, 404, 'Usuario nao encontrado.');
+  const hashed = panelPasswordHash(password);
+  db.prepare('UPDATE panel_users SET password_hash = ?, password_salt = ?, atualizado_em = ? WHERE id = ?')
+    .run(hashed.hash, hashed.salt, nowIso(), params.id);
+  ok(res, panelUserFromRow(db.prepare('SELECT * FROM panel_users WHERE id = ?').get(params.id)));
+});
+
+addRoute('POST', '/api/panel/users/:id/delete', async ({ params, req, res }) => {
+  if (!requirePanelMaster(req, res)) return;
+  const db = getDb();
+  ensureDefaultPanelUsers(db);
+  const row = db.prepare('SELECT * FROM panel_users WHERE id = ? AND ativo = 1').get(params.id);
+  if (!row) return fail(res, 404, 'Usuario nao encontrado.');
+  db.prepare('UPDATE panel_users SET ativo = 0, atualizado_em = ? WHERE id = ?').run(nowIso(), params.id);
+  ok(res, { id: params.id, deleted: true });
 });
 
 addRoute('POST', '/seed', async ({ res }) => {

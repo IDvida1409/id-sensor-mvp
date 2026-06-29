@@ -5629,8 +5629,23 @@ document.getElementById('infoMacOverlay')?.addEventListener('click', ()=> openIn
     });
   }
 
+  function currentSessionProfile(role){
+    const fallback = profileChrome[role] || profileChrome.master;
+    const session = window.activePanelSession || null;
+    if(!session || session.role !== role) return fallback;
+    return {
+      ...fallback,
+      displayName:session.displayName || session.display_name || fallback.displayName,
+      organization:session.organization || session.clienteNome || fallback.organization,
+      logo:session.logo || fallback.logo,
+      avatar:session.avatar || fallback.avatar,
+      wideLogo:role === 'cart' || fallback.wideLogo,
+      logoHalo:role === 'cart' || fallback.logoHalo
+    };
+  }
+
   function syncPanelRoleChrome(role){
-    const profile = profileChrome[role] || profileChrome.master;
+    const profile = currentSessionProfile(role);
     if(currentUserLabel) currentUserLabel.textContent = profile.displayName;
     setAvatar(profile.avatar, profile.organization);
     syncProtectedUi(role);
@@ -5648,6 +5663,7 @@ document.getElementById('infoMacOverlay')?.addEventListener('click', ()=> openIn
 
   function applySession(session){
     if(!session || !session.role) return showLogin();
+    if(session.role === 'master' && !session.token) return showLogin();
     window.activePanelSession = session;
     try {
       localStorage.setItem(SESSION_KEY, JSON.stringify(session));
@@ -5679,6 +5695,7 @@ document.getElementById('infoMacOverlay')?.addEventListener('click', ()=> openIn
     return payload.data;
   }
 
+  window.getPanelApiBaseUrl = getAuthApiBaseUrl;
   window.syncPanelRoleChrome = syncPanelRoleChrome;
 
   if(usernameInput){
@@ -9462,6 +9479,25 @@ if(false){(function(){
   const CART_READING_POLL_MS = 5000;
   const CART_ALERT_RECURRENCE_MS = 30 * 60 * 1000;
   const CART_ALERT_LIMIT = 80;
+  const DEFAULT_CART_ALERT_SETTINGS = {
+    popupEnabled:true,
+    soundEnabled:true,
+    recurrenceMinutes:30,
+    enabledTypes:{
+      critical:true,
+      recurrence:true,
+      obstruction:true,
+      sensor:true,
+      exchange:true
+    }
+  };
+  const CART_ALERT_TYPE_OPTIONS = [
+    { id:'critical', label:'Crítico', detail:'Carrinho atingiu o limite crítico.' },
+    { id:'recurrence', label:'Recorrência crítica', detail:'Carrinho segue crítico após o intervalo.' },
+    { id:'obstruction', label:'Obstrução provável', detail:'Salto de leitura no sensor.' },
+    { id:'sensor', label:'Sensor fora da calibração', detail:'Sensor removido ou fora da faixa esperada.' },
+    { id:'exchange', label:'Troca registrada', detail:'Carrinho voltou para livre.' }
+  ];
   const OBSOLETE_ROOM_IDS = new Set(['sala-bloco-a']);
 
   const defaultState = {
@@ -9499,7 +9535,8 @@ if(false){(function(){
       }
     ],
     telemetryEvents:[],
-    alerts:[]
+    alerts:[],
+    alertSettings:clone(DEFAULT_CART_ALERT_SETTINGS)
   };
 
   let previousSubtitle = '';
@@ -9508,16 +9545,58 @@ if(false){(function(){
   let activeRoomFilter = '';
   let cartSearchTerm = '';
   let cartSettingsView = 'home';
+  let cartPanelClients = [];
+  let cartPanelUsers = [];
+  let cartPanelClientsLoaded = false;
+  let cartPanelUsersClientId = '';
+  let cartPanelSettingsLoading = false;
+  let cartAlertModalView = 'list';
   let lastGeneratedCartAlertId = '';
   const CART_SETTINGS_PARENT_VIEW = {
     rooms:'home',
     devices:'home',
     gateways:'devices',
-    sensors:'devices'
+    sensors:'devices',
+    users:'home',
+    clientUsers:'users'
   };
 
   function clone(value){
     return JSON.parse(JSON.stringify(value));
+  }
+
+  function normalizeCartAlertSettings(settings){
+    const source = settings && typeof settings === 'object' ? settings : {};
+    const sourceTypes = source.enabledTypes && typeof source.enabledTypes === 'object' ? source.enabledTypes : {};
+    const normalizedTypes = {};
+    CART_ALERT_TYPE_OPTIONS.forEach(option => {
+      normalizedTypes[option.id] = sourceTypes[option.id] !== false;
+    });
+    const recurrence = Number(source.recurrenceMinutes);
+    return {
+      popupEnabled:source.popupEnabled !== false,
+      soundEnabled:source.soundEnabled !== false,
+      recurrenceMinutes:Number.isFinite(recurrence) && recurrence >= 0 ? recurrence : DEFAULT_CART_ALERT_SETTINGS.recurrenceMinutes,
+      enabledTypes:normalizedTypes
+    };
+  }
+
+  function cartAlertRecurrenceMs(state){
+    const minutes = normalizeCartAlertSettings(state?.alertSettings).recurrenceMinutes;
+    return minutes > 0 ? minutes * 60 * 1000 : Number.POSITIVE_INFINITY;
+  }
+
+  function cartAlertTypeEnabled(state, type){
+    const settings = normalizeCartAlertSettings(state?.alertSettings);
+    return settings.enabledTypes[type || 'critical'] !== false;
+  }
+
+  function shouldOpenCartAlertPopup(state){
+    return normalizeCartAlertSettings(state?.alertSettings).popupEnabled;
+  }
+
+  function shouldPlayCartAlertSound(state){
+    return normalizeCartAlertSettings(state?.alertSettings).soundEnabled;
   }
 
   function ensureSeedData(state){
@@ -9526,7 +9605,8 @@ if(false){(function(){
       rooms: Array.isArray(state?.rooms) ? state.rooms : [],
       carts: Array.isArray(state?.carts) ? state.carts : [],
       telemetryEvents: Array.isArray(state?.telemetryEvents) ? state.telemetryEvents : [],
-      alerts: Array.isArray(state?.alerts) ? state.alerts : []
+      alerts: Array.isArray(state?.alerts) ? state.alerts : [],
+      alertSettings: normalizeCartAlertSettings(state?.alertSettings)
     };
 
     const activeRooms = normalized.rooms.filter(room => {
@@ -9870,6 +9950,7 @@ if(false){(function(){
 
   function appendCartAlert(state, alert){
     if(!state || !alert) return false;
+    if(!cartAlertTypeEnabled(state, alert.type || 'critical')) return false;
     const list = Array.isArray(state.alerts) ? state.alerts : [];
     const ts = alert.ts || new Date().toISOString();
     const key = alert.key || [alert.type, alert.roomId, alert.cartId, ts].join('|');
@@ -9926,6 +10007,7 @@ if(false){(function(){
     const roomName = roomNameForAlert(state, eventBase.roomId);
     const cartName = cartDisplayName(cart);
     const nextTone = fillTone(cart);
+    const recurrenceMs = cartAlertRecurrenceMs(state);
     let changed = false;
 
     if(nextTone === 'full'){
@@ -9936,12 +10018,12 @@ if(false){(function(){
       }
       const lastMs = new Date(alertState.lastCriticalAlertAt || 0).getTime();
       const shouldSendInitial = !alertState.lastCriticalAlertAt;
-      const shouldSendRecurrence = !shouldSendInitial && Number.isFinite(nowMs) && Number.isFinite(lastMs) && nowMs - lastMs >= CART_ALERT_RECURRENCE_MS;
+      const shouldSendRecurrence = !shouldSendInitial && Number.isFinite(nowMs) && Number.isFinite(lastMs) && nowMs - lastMs >= recurrenceMs;
       if(shouldSendInitial || shouldSendRecurrence){
         const type = shouldSendInitial ? 'critical' : 'recurrence';
         const elapsed = alertAgeLabel(alertState.criticalStartedAt, ts);
         if(appendCartAlert(state, {
-          key:`${type}|${cart.id}|${alertState.criticalStartedAt}|${shouldSendInitial ? 'initial' : Math.floor(nowMs / CART_ALERT_RECURRENCE_MS)}`,
+          key:`${type}|${cart.id}|${alertState.criticalStartedAt}|${shouldSendInitial ? 'initial' : Math.floor(nowMs / recurrenceMs)}`,
           type,
           roomId:eventBase.roomId,
           roomName,
@@ -9977,9 +10059,9 @@ if(false){(function(){
 
     if(rawStatus === 'sensor_obstructed'){
       const lastObstructionMs = new Date(alertState.lastObstructionAlertAt || 0).getTime();
-      if(!alertState.lastObstructionAlertAt || (Number.isFinite(nowMs) && Number.isFinite(lastObstructionMs) && nowMs - lastObstructionMs >= CART_ALERT_RECURRENCE_MS)){
+      if(!alertState.lastObstructionAlertAt || (Number.isFinite(nowMs) && Number.isFinite(lastObstructionMs) && nowMs - lastObstructionMs >= recurrenceMs)){
         if(appendCartAlert(state, {
-          key:`obstruction|${cart.id}|${Math.floor(nowMs / CART_ALERT_RECURRENCE_MS)}`,
+          key:`obstruction|${cart.id}|${Math.floor(nowMs / recurrenceMs)}`,
           type:'obstruction',
           roomId:eventBase.roomId,
           roomName,
@@ -10000,9 +10082,9 @@ if(false){(function(){
 
     if(rawStatus === 'sensor_removed'){
       const lastSensorMs = new Date(alertState.lastSensorAlertAt || 0).getTime();
-      if(!alertState.lastSensorAlertAt || (Number.isFinite(nowMs) && Number.isFinite(lastSensorMs) && nowMs - lastSensorMs >= CART_ALERT_RECURRENCE_MS)){
+      if(!alertState.lastSensorAlertAt || (Number.isFinite(nowMs) && Number.isFinite(lastSensorMs) && nowMs - lastSensorMs >= recurrenceMs)){
         if(appendCartAlert(state, {
-          key:`sensor|${cart.id}|${Math.floor(nowMs / CART_ALERT_RECURRENCE_MS)}`,
+          key:`sensor|${cart.id}|${Math.floor(nowMs / recurrenceMs)}`,
           type:'sensor',
           roomId:eventBase.roomId,
           roomName,
@@ -10297,7 +10379,9 @@ if(false){(function(){
         if(lastGeneratedCartAlertId){
           const alertId = lastGeneratedCartAlertId;
           lastGeneratedCartAlertId = '';
-          openCartAlertModal(alertId, { playSound:true });
+          if(shouldOpenCartAlertPopup(state)){
+            openCartAlertModal(alertId, { playSound:true });
+          }
         }
       }
     }catch(err){
@@ -11123,6 +11207,24 @@ if(false){(function(){
     `;
   }
 
+  function renderCartAlertNav(active = 'list'){
+    const state = readState();
+    const unread = unreadCartAlertCount(state);
+    const settings = normalizeCartAlertSettings(state.alertSettings);
+    return `
+      <div class="cart-alert-drill-actions">
+        <button type="button" class="${active === 'list' ? 'active' : ''}" data-cart-alert-view="list">
+          <span>Caixa de alertas</span>
+          <b>${unread}</b>
+        </button>
+        <button type="button" class="${active === 'settings' ? 'active' : ''}" data-cart-alert-view="settings">
+          <span>Configurações</span>
+          <small>${settings.popupEnabled ? 'Popup ativo' : 'Popup silenciado'}</small>
+        </button>
+      </div>
+    `;
+  }
+
   function renderCartAlertHistory(){
     const state = readState();
     const alerts = sortedCartAlerts(state).slice(0, 12);
@@ -11133,6 +11235,7 @@ if(false){(function(){
           <h2>Caixa de alertas</h2>
           <p>Nenhum alerta registrado no painel.</p>
         </header>
+        ${renderCartAlertNav('list')}
         <div class="cart-alert-empty">
           <span class="cart-alert-mail-icon">${getAlertMailboxIcon()}</span>
           <strong>Sem alertas por enquanto.</strong>
@@ -11146,6 +11249,7 @@ if(false){(function(){
         <h2>Caixa de alertas</h2>
         <p>${alerts.length} alerta${alerts.length === 1 ? '' : 's'} recente${alerts.length === 1 ? '' : 's'} do painel.</p>
       </header>
+      ${renderCartAlertNav('list')}
       <div class="cart-alert-history-list">
         ${alerts.map(alert => `
           <article class="cart-alert-history-item ${alertTypeClass(alert.type)} ${alert.acknowledgedAt ? 'read' : 'new'}">
@@ -11161,6 +11265,101 @@ if(false){(function(){
     `;
   }
 
+  function renderCartAlertSettings(){
+    const state = readState();
+    const settings = normalizeCartAlertSettings(state.alertSettings);
+    const recurrenceOptions = [0, 10, 20, 30, 45, 60];
+    return `
+      <header class="cart-alert-history-head">
+        <span>Alertas</span>
+        <h2>Configurações de alertas</h2>
+        <p>Escolha quais avisos aparecem no painel e quando eles voltam a alertar.</p>
+      </header>
+      ${renderCartAlertNav('settings')}
+      <div class="cart-alert-settings-panel">
+        <label class="cart-alert-toggle-row">
+          <span>
+            <strong>Popup na tela</strong>
+            <small>Abre a janela quando um alerta novo chega.</small>
+          </span>
+          <input type="checkbox" name="cart-alert-popup" ${settings.popupEnabled ? 'checked' : ''}>
+        </label>
+        <label class="cart-alert-toggle-row">
+          <span>
+            <strong>Som do alerta</strong>
+            <small>Toca apenas quando a janela abre.</small>
+          </span>
+          <input type="checkbox" name="cart-alert-sound" ${settings.soundEnabled ? 'checked' : ''}>
+        </label>
+        <label class="cart-alert-setting-row">
+          <span>
+            <strong>Recorrência</strong>
+            <small>Depois que o carrinho fica crítico, repetir o aviso em:</small>
+          </span>
+          <select name="cart-alert-recurrence">
+            ${recurrenceOptions.map(minutes => `
+              <option value="${minutes}" ${Number(settings.recurrenceMinutes) === minutes ? 'selected' : ''}>
+                ${minutes === 0 ? 'Sem recorrência' : `${minutes} min`}
+              </option>
+            `).join('')}
+          </select>
+        </label>
+        <div class="cart-alert-check-list">
+          ${CART_ALERT_TYPE_OPTIONS.map(option => `
+            <label>
+              <input type="checkbox" data-cart-alert-type="${escapeHtml(option.id)}" ${settings.enabledTypes[option.id] !== false ? 'checked' : ''}>
+              <span>
+                <strong>${escapeHtml(option.label)}</strong>
+                <small>${escapeHtml(option.detail)}</small>
+              </span>
+            </label>
+          `).join('')}
+        </div>
+        <button type="button" class="cart-alert-save-btn" data-cart-alert-save-settings>Salvar configurações</button>
+      </div>
+    `;
+  }
+
+  function renderCartAlertModalContent(){
+    const content = document.getElementById('cartAlertModalContent');
+    if(!content) return;
+    content.innerHTML = cartAlertModalView === 'settings'
+      ? renderCartAlertSettings()
+      : renderCartAlertHistory();
+  }
+
+  function saveCartAlertSettingsFromModal(){
+    const content = document.getElementById('cartAlertModalContent');
+    if(!content) return;
+    const state = readState();
+    const current = normalizeCartAlertSettings(state.alertSettings);
+    const nextTypes = {};
+    CART_ALERT_TYPE_OPTIONS.forEach(option => {
+      const input = content.querySelector(`[data-cart-alert-type="${option.id}"]`);
+      nextTypes[option.id] = input ? input.checked : current.enabledTypes[option.id] !== false;
+    });
+    state.alertSettings = normalizeCartAlertSettings({
+      popupEnabled:content.querySelector('[name="cart-alert-popup"]')?.checked !== false,
+      soundEnabled:content.querySelector('[name="cart-alert-sound"]')?.checked !== false,
+      recurrenceMinutes:Number(content.querySelector('[name="cart-alert-recurrence"]')?.value || current.recurrenceMinutes),
+      enabledTypes:nextTypes
+    });
+    saveState(state);
+    renderCartAlertModalContent();
+  }
+
+  function handleCartAlertModalClick(event){
+    const viewButton = event.target.closest('[data-cart-alert-view]');
+    if(viewButton){
+      cartAlertModalView = viewButton.getAttribute('data-cart-alert-view') || 'list';
+      renderCartAlertModalContent();
+      return;
+    }
+    if(event.target.closest('[data-cart-alert-save-settings]')){
+      saveCartAlertSettingsFromModal();
+    }
+  }
+
   function openCartAlertModal(alertId = '', options = {}){
     const overlay = document.getElementById('cartAlertModalOverlay');
     const content = document.getElementById('cartAlertModalContent');
@@ -11170,13 +11369,14 @@ if(false){(function(){
     overlay.dataset.alertId = alertId || '';
     overlay.dataset.mode = options.history ? 'history' : 'popup';
     if(options.history){
+      cartAlertModalView = 'list';
       acknowledgeCartAlert('', true);
-      content.innerHTML = renderCartAlertHistory();
+      renderCartAlertModalContent();
     }else{
       const alert = (state.alerts || []).find(item => item.id === alertId) || sortedCartAlerts(state).find(item => !item.acknowledgedAt) || null;
       overlay.dataset.alertId = alert?.id || '';
       content.innerHTML = renderCartAlertPopup(alert);
-      if(options.playSound && !wasVisible) playCartAlertSound();
+      if(options.playSound && !wasVisible && shouldPlayCartAlertSound(state)) playCartAlertSound();
     }
     overlay.hidden = false;
   }
@@ -12207,6 +12407,7 @@ if(false){(function(){
       if(event.target.id === 'cartReportModalOverlay') closeCartReportModal();
     });
     document.getElementById('cartAlertModalCloseBtn')?.addEventListener('click', closeCartAlertModal);
+    document.getElementById('cartAlertModalContent')?.addEventListener('click', handleCartAlertModalClick);
     document.getElementById('cartCalibrationToggle')?.addEventListener('click', toggleCartCalibrationPanel);
     document.getElementById('cartCalibrationPanel')?.addEventListener('click', handleCalibrationSelectClick);
     document.getElementById('cartCalibrationPanel')?.addEventListener('keydown', handleCalibrationSelectKeydown);
@@ -12329,6 +12530,142 @@ if(false){(function(){
       .filter((item, index, list) => list.findIndex(other => other.id === item.id) === index);
   }
 
+  function panelApiBaseUrl(){
+    if(typeof window.getPanelApiBaseUrl === 'function'){
+      return window.getPanelApiBaseUrl();
+    }
+    return String(window.location.origin || '').replace(/\/+$/, '') || 'http://localhost:4000';
+  }
+
+  async function panelApi(path, options = {}){
+    const response = await fetch(`${panelApiBaseUrl()}${path}`, {
+      ...options,
+      headers:{
+        'Content-Type':'application/json',
+        ...(window.activePanelSession?.token ? { Authorization:`Bearer ${window.activePanelSession.token}` } : {}),
+        ...(options.headers || {})
+      }
+    });
+    const payload = await response.json().catch(() => null);
+    if(!response.ok || !payload?.ok){
+      throw new Error(payload?.message || 'Nao foi possivel concluir a operacao.');
+    }
+    return payload.data;
+  }
+
+  async function loadPanelClientsForSettings(){
+    if(cartPanelSettingsLoading) return;
+    cartPanelSettingsLoading = true;
+    renderCartSettingsContent();
+    try{
+      const data = await panelApi('/api/panel/clients');
+      cartPanelClients = data?.clients || [];
+      cartPanelClientsLoaded = true;
+    }catch(err){
+      alert(err.message || 'Nao foi possivel carregar os clientes.');
+    }finally{
+      cartPanelSettingsLoading = false;
+      renderCartSettingsContent();
+    }
+  }
+
+  async function loadPanelUsersForSettings(clientId){
+    if(cartPanelSettingsLoading) return;
+    cartPanelSettingsLoading = true;
+    cartPanelUsersClientId = clientId || '';
+    renderCartSettingsContent();
+    try{
+      const data = await panelApi(`/api/panel/users?client_id=${encodeURIComponent(clientId || '')}`);
+      cartPanelUsers = data?.users || [];
+    }catch(err){
+      alert(err.message || 'Nao foi possivel carregar os usuarios.');
+    }finally{
+      cartPanelSettingsLoading = false;
+      renderCartSettingsContent();
+    }
+  }
+
+  async function refreshPanelUsersAndClients(clientId){
+    cartPanelSettingsLoading = true;
+    renderCartSettingsContent();
+    try{
+      const [clientsData, usersData] = await Promise.all([
+        panelApi('/api/panel/clients'),
+        panelApi(`/api/panel/users?client_id=${encodeURIComponent(clientId || '')}`)
+      ]);
+      cartPanelClients = clientsData?.clients || [];
+      cartPanelClientsLoaded = true;
+      cartPanelUsers = usersData?.users || [];
+      cartPanelUsersClientId = clientId || '';
+    }catch(err){
+      alert(err.message || 'Nao foi possivel atualizar os usuarios.');
+    }finally{
+      cartPanelSettingsLoading = false;
+      renderCartSettingsContent();
+    }
+  }
+
+  async function createPanelUser(clientId){
+    const displayName = document.getElementById('panelUserNameInput')?.value.trim() || '';
+    const password = document.getElementById('panelUserPasswordInput')?.value || '';
+    if(!clientId){
+      alert('Selecione um cliente.');
+      return;
+    }
+    if(!displayName){
+      alert('Informe o nome do usuário.');
+      return;
+    }
+    if(password.length < 6){
+      alert('A senha precisa ter pelo menos 6 caracteres.');
+      return;
+    }
+    try{
+      cartPanelSettingsLoading = true;
+      renderCartSettingsContent();
+      await panelApi('/api/panel/users', {
+        method:'POST',
+        body:JSON.stringify({ clientId, displayName, password })
+      });
+      await refreshPanelUsersAndClients(clientId);
+    }catch(err){
+      cartPanelSettingsLoading = false;
+      renderCartSettingsContent();
+      alert(err.message || 'Nao foi possivel cadastrar o usuário.');
+    }
+  }
+
+  async function resetPanelUserPassword(userId){
+    if(!userId) return;
+    const password = window.prompt('Nova senha do usuário:');
+    if(password === null) return;
+    if(String(password).length < 6){
+      alert('A senha precisa ter pelo menos 6 caracteres.');
+      return;
+    }
+    try{
+      await panelApi(`/api/panel/users/${encodeURIComponent(userId)}/reset-password`, {
+        method:'POST',
+        body:JSON.stringify({ password })
+      });
+      await refreshPanelUsersAndClients(cartPanelUsersClientId);
+    }catch(err){
+      alert(err.message || 'Nao foi possivel redefinir a senha.');
+    }
+  }
+
+  async function deletePanelUser(userId){
+    if(!userId) return;
+    const user = cartPanelUsers.find(item => item.id === userId);
+    if(!window.confirm(`Excluir o usuário ${user?.username || ''}?`)) return;
+    try{
+      await panelApi(`/api/panel/users/${encodeURIComponent(userId)}/delete`, { method:'POST' });
+      await refreshPanelUsersAndClients(cartPanelUsersClientId);
+    }catch(err){
+      alert(err.message || 'Nao foi possivel excluir o usuário.');
+    }
+  }
+
   function settingsPanelHeader(title, subtitle){
     return `
       <div class="cart-settings-drill-head">
@@ -12350,6 +12687,67 @@ if(false){(function(){
         </span>
         <b>${escapeHtml(String(count))}</b>
       </button>
+    `;
+  }
+
+  function cartSettingsClientRows(){
+    if(cartPanelSettingsLoading && !cartPanelClientsLoaded){
+      return '<p class="cart-settings-empty">Carregando clientes...</p>';
+    }
+    if(!cartPanelClients.length){
+      return '<p class="cart-settings-empty">Nenhum cliente ativo encontrado.</p>';
+    }
+    return cartPanelClients.map(client => `
+      <button type="button" class="cart-settings-row cart-settings-row-button" data-settings-user-client="${escapeHtml(client.id)}">
+        <span>
+          <strong>${escapeHtml(client.nome || client.organization || 'Cliente')}</strong>
+          <small>${Number(client.userCount || 0)} usuário${Number(client.userCount || 0) === 1 ? '' : 's'} ativo${Number(client.userCount || 0) === 1 ? '' : 's'}</small>
+        </span>
+        <b>Ver</b>
+      </button>
+    `).join('');
+  }
+
+  function selectedPanelClient(){
+    return cartPanelClients.find(client => client.id === cartPanelUsersClientId) || null;
+  }
+
+  function cartSettingsUserRows(){
+    if(cartPanelSettingsLoading){
+      return '<p class="cart-settings-empty">Carregando usuários...</p>';
+    }
+    if(!cartPanelUsers.length){
+      return '<p class="cart-settings-empty">Nenhum usuário cadastrado para este cliente.</p>';
+    }
+    return cartPanelUsers.map(user => `
+      <div class="cart-settings-row device">
+        <span>
+          <strong>${escapeHtml(user.displayName || user.username)}</strong>
+          <small>${escapeHtml(user.username)} · usuário básico</small>
+          <small>${escapeHtml(user.clienteNome || user.organization || '')}</small>
+        </span>
+        <span class="cart-settings-row-actions">
+          <button type="button" data-settings-reset-panel-user="${escapeHtml(user.id)}">Redefinir senha</button>
+          <button type="button" data-settings-delete-panel-user="${escapeHtml(user.id)}">Excluir</button>
+        </span>
+      </div>
+    `).join('');
+  }
+
+  function renderPanelUserCreateForm(client){
+    return `
+      <div class="cart-settings-inline-form">
+        <label>
+          Nome do usuário
+          <input id="panelUserNameInput" type="text" placeholder="David">
+        </label>
+        <label>
+          Senha
+          <input id="panelUserPasswordInput" type="password" placeholder="Mínimo 6 caracteres">
+        </label>
+        <button type="button" class="cart-settings-mini-btn" data-settings-create-panel-user="${escapeHtml(client?.id || '')}">Cadastrar usuário</button>
+        <small>O acesso será criado como nome.${escapeHtml(client?.slug || 'cliente')}.</small>
+      </div>
     `;
   }
 
@@ -12416,6 +12814,41 @@ if(false){(function(){
     if(!content) return;
     const state = readState();
     const gatewayCount = gatewaySettingsItems(state).length;
+
+    if(cartSettingsView === 'users'){
+      content.innerHTML = `
+        ${settingsPanelHeader('Usuários do painel', 'Escolha o cliente para ver ou criar acessos.')}
+        <section class="cart-settings-section">
+          <div class="cart-settings-section-head">
+            <span>
+              <strong>Clientes ativos</strong>
+              <small>Usuários básicos herdam o logo e o acesso do cliente.</small>
+            </span>
+          </div>
+          <div class="cart-settings-list drill-list">${cartSettingsClientRows()}</div>
+        </section>
+      `;
+      if(!cartPanelClientsLoaded && !cartPanelSettingsLoading) loadPanelClientsForSettings();
+      return;
+    }
+
+    if(cartSettingsView === 'clientUsers'){
+      const client = selectedPanelClient();
+      content.innerHTML = `
+        ${settingsPanelHeader(client?.nome || 'Cliente', 'Cadastre, redefina senha ou exclua usuários.')}
+        <section class="cart-settings-section">
+          <div class="cart-settings-section-head">
+            <span>
+              <strong>Usuários cadastrados</strong>
+              <small>${escapeHtml(client?.nome || '')}</small>
+            </span>
+          </div>
+          ${renderPanelUserCreateForm(client)}
+          <div class="cart-settings-list drill-list">${cartSettingsUserRows()}</div>
+        </section>
+      `;
+      return;
+    }
 
     if(cartSettingsView === 'rooms'){
       content.innerHTML = `
@@ -12484,6 +12917,7 @@ if(false){(function(){
       <div class="cart-settings-home">
         ${settingsHomeCard('rooms', 'Salas cadastradas', 'Sala Bloco B1, resíduos e higiene.', state.rooms.length)}
         ${settingsHomeCard('devices', 'Dispositivos', 'Gateway e sensores cadastrados.', gatewayCount + state.carts.length)}
+        ${settingsHomeCard('users', 'Usuários', 'Cadastrar acessos por cliente.', cartPanelClients.reduce((total, client) => total + Number(client.userCount || 0), 0))}
       </div>
     `;
   }
@@ -12523,6 +12957,35 @@ if(false){(function(){
     if(viewButton){
       cartSettingsView = viewButton.getAttribute('data-settings-view') || 'home';
       renderCartSettingsContent();
+      return;
+    }
+
+    const clientButton = event.target.closest('[data-settings-user-client]');
+    if(clientButton){
+      const clientId = clientButton.getAttribute('data-settings-user-client') || '';
+      cartSettingsView = 'clientUsers';
+      cartPanelUsersClientId = clientId;
+      cartPanelUsers = [];
+      renderCartSettingsContent();
+      loadPanelUsersForSettings(clientId);
+      return;
+    }
+
+    const createPanelUserButton = event.target.closest('[data-settings-create-panel-user]');
+    if(createPanelUserButton){
+      createPanelUser(createPanelUserButton.getAttribute('data-settings-create-panel-user') || cartPanelUsersClientId);
+      return;
+    }
+
+    const resetPanelUserButton = event.target.closest('[data-settings-reset-panel-user]');
+    if(resetPanelUserButton){
+      resetPanelUserPassword(resetPanelUserButton.getAttribute('data-settings-reset-panel-user') || '');
+      return;
+    }
+
+    const deletePanelUserButton = event.target.closest('[data-settings-delete-panel-user]');
+    if(deletePanelUserButton){
+      deletePanelUser(deletePanelUserButton.getAttribute('data-settings-delete-panel-user') || '');
       return;
     }
 

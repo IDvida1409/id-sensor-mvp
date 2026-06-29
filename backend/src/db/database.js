@@ -149,6 +149,23 @@ function initDb() {
       FOREIGN KEY (dispositivo_id) REFERENCES dispositivos(id)
     );
 
+    CREATE TABLE IF NOT EXISTS panel_users (
+      id TEXT PRIMARY KEY,
+      username TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      password_salt TEXT NOT NULL,
+      role TEXT NOT NULL,
+      display_name TEXT NOT NULL,
+      organization TEXT NOT NULL,
+      cliente_id TEXT,
+      cliente_nome TEXT,
+      logo TEXT,
+      avatar TEXT,
+      ativo INTEGER NOT NULL DEFAULT 1,
+      criado_em TEXT NOT NULL,
+      atualizado_em TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS collector_readings (
       id TEXT PRIMARY KEY,
       ble_sensor_id TEXT,
@@ -220,6 +237,10 @@ function initDb() {
   ensureColumn(database, 'collector_readings', 'candidate_fill_percentage', 'REAL');
   ensureColumn(database, 'collector_readings', 'battery_voltage_mv', 'REAL');
   ensureColumn(database, 'collector_calibrations', 'lid_detection_enabled', 'INTEGER NOT NULL DEFAULT 0');
+  ensureColumn(database, 'panel_users', 'cliente_nome', 'TEXT');
+  ensureColumn(database, 'panel_users', 'logo', 'TEXT');
+  ensureColumn(database, 'panel_users', 'avatar', 'TEXT');
+  ensureColumn(database, 'panel_users', 'ativo', 'INTEGER NOT NULL DEFAULT 1');
   database.exec(`
     CREATE INDEX IF NOT EXISTS idx_alert_ack_app_device
     ON alert_acknowledgements (app_device_id, alert_id);
@@ -229,6 +250,9 @@ function initDb() {
 
     CREATE INDEX IF NOT EXISTS idx_collector_readings_sensor_time
     ON collector_readings (ble_sensor_id, created_at DESC);
+
+    CREATE INDEX IF NOT EXISTS idx_panel_users_cliente
+    ON panel_users (cliente_id, ativo);
   `);
 }
 

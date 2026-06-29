@@ -16184,6 +16184,55 @@ body.analytic-report-open{overflow:hidden}
   padding:8px 9px !important;
 }
 
+.cart-settings-row-button{
+  color:inherit;
+  font:inherit;
+  width:100%;
+}
+
+.cart-settings-row-button b{
+  color:#2454a6;
+  font-size:11px;
+  font-weight:950;
+}
+
+.cart-settings-inline-form{
+  background:#f8fbff;
+  border:1px solid #dfe7f1;
+  border-radius:8px;
+  display:grid;
+  gap:8px;
+  grid-template-columns:1fr 1fr auto;
+  padding:9px;
+}
+
+.cart-settings-inline-form label{
+  color:#64748b;
+  display:grid;
+  font-size:10px;
+  font-weight:900;
+  gap:4px;
+  line-height:1.2;
+}
+
+.cart-settings-inline-form input{
+  background:#fff;
+  border:1px solid #d4e0ef;
+  border-radius:7px;
+  color:#0b1730;
+  font-size:12px;
+  font-weight:850;
+  height:34px;
+  padding:0 9px;
+}
+
+.cart-settings-inline-form > small{
+  color:#64748b;
+  font-size:10px;
+  font-weight:850;
+  grid-column:1 / -1;
+}
+
 @media (max-width:980px){
   .cart-tracking-v2 .cart-room-grid{
     grid-template-columns:1fr !important;
@@ -16551,6 +16600,15 @@ body.analytic-report-open{overflow:hidden}
   stroke:#2f80ff !important;
 }
 
+.cart-alert-global-btn .cart-alert-mail-icon,
+.cart-alert-global-btn .cart-alert-mail-icon svg{
+  color:#2f80ff !important;
+}
+
+.cart-alert-global-btn .cart-alert-mail-icon svg *{
+  stroke:#2f80ff !important;
+}
+
 .cart-alert-mail-icon svg path[fill="#eaf3ff"]{
   fill:#eaf3ff !important;
 }
@@ -16691,6 +16749,144 @@ body.analytic-report-open{overflow:hidden}
 .cart-alert-history-list{
   display:grid;
   gap:10px;
+}
+
+.cart-alert-drill-actions{
+  display:grid;
+  gap:8px;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  margin:0 0 12px;
+}
+
+.cart-alert-drill-actions button{
+  align-items:center;
+  appearance:none;
+  background:#fff;
+  border:1px solid #dbe6f4;
+  border-radius:8px;
+  color:#142036;
+  cursor:pointer;
+  display:grid;
+  gap:4px;
+  grid-template-columns:minmax(0,1fr) auto;
+  min-height:46px;
+  padding:8px 10px;
+  text-align:left;
+}
+
+.cart-alert-drill-actions button.active{
+  background:#eef6ff;
+  border-color:#b9d5ff;
+}
+
+.cart-alert-drill-actions span{
+  font-size:12px;
+  font-weight:950;
+}
+
+.cart-alert-drill-actions small{
+  color:#63718a;
+  font-size:10px;
+  font-weight:850;
+}
+
+.cart-alert-drill-actions b{
+  align-items:center;
+  background:#2f80ff;
+  border-radius:999px;
+  color:#fff;
+  display:flex;
+  font-size:11px;
+  font-weight:950;
+  height:23px;
+  justify-content:center;
+  min-width:23px;
+  padding:0 7px;
+}
+
+.cart-alert-settings-panel{
+  display:grid;
+  gap:10px;
+}
+
+.cart-alert-toggle-row,
+.cart-alert-setting-row,
+.cart-alert-check-list label{
+  align-items:center;
+  background:#fff;
+  border:1px solid #dbe6f4;
+  border-radius:8px;
+  display:grid;
+  gap:12px;
+  grid-template-columns:minmax(0,1fr) auto;
+  min-height:56px;
+  padding:10px 12px;
+}
+
+.cart-alert-toggle-row span,
+.cart-alert-setting-row span,
+.cart-alert-check-list label span{
+  display:grid;
+  gap:3px;
+  min-width:0;
+}
+
+.cart-alert-toggle-row strong,
+.cart-alert-setting-row strong,
+.cart-alert-check-list strong{
+  color:#142036;
+  font-size:12px;
+  font-weight:950;
+  line-height:1.15;
+}
+
+.cart-alert-toggle-row small,
+.cart-alert-setting-row small,
+.cart-alert-check-list small{
+  color:#63718a;
+  font-size:10.5px;
+  font-weight:850;
+  line-height:1.25;
+}
+
+.cart-alert-toggle-row input,
+.cart-alert-check-list input{
+  accent-color:#2f80ff;
+  height:18px;
+  width:18px;
+}
+
+.cart-alert-setting-row select{
+  background:#f8fbff;
+  border:1px solid #d4e0ef;
+  border-radius:7px;
+  color:#0b1730;
+  font-size:12px;
+  font-weight:850;
+  height:34px;
+  padding:0 8px;
+}
+
+.cart-alert-check-list{
+  display:grid;
+  gap:8px;
+}
+
+.cart-alert-check-list label{
+  grid-template-columns:auto minmax(0,1fr);
+  min-height:52px;
+}
+
+.cart-alert-save-btn{
+  appearance:none;
+  background:#2f80ff;
+  border:0;
+  border-radius:8px;
+  color:#fff;
+  cursor:pointer;
+  font-size:12px;
+  font-weight:950;
+  height:40px;
 }
 
 .cart-alert-history-item{
