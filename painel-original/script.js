@@ -10381,7 +10381,10 @@ if(false){(function(){
           const alertId = lastGeneratedCartAlertId;
           lastGeneratedCartAlertId = '';
           if(shouldOpenCartAlertPopup(state)){
-            openCartAlertModal(alertId, { playSound:true });
+            window.setTimeout(() => {
+              const openAlert = window.openStableCartAlertModal || window.openCartAlertModal;
+              if(typeof openAlert === 'function') openAlert(alertId, { playSound:true });
+            }, 0);
           }
         }
       }
@@ -11362,6 +11365,9 @@ if(false){(function(){
   }
 
   function openCartAlertModal(alertId = '', options = {}){
+    if(typeof window.openStableCartAlertModal === 'function'){
+      return window.openStableCartAlertModal(alertId, options);
+    }
     const overlay = document.getElementById('cartAlertModalOverlay');
     const content = document.getElementById('cartAlertModalContent');
     if(!overlay || !content) return;
@@ -11382,10 +11388,16 @@ if(false){(function(){
   }
 
   function openCartAlertInbox(){
-    openCartAlertModal('', { history:true });
+    if(typeof window.openStableCartAlertInbox === 'function'){
+      return window.openStableCartAlertInbox();
+    }
+    return openCartAlertModal('', { history:true });
   }
 
   function closeCartAlertModal(){
+    if(typeof window.closeStableCartAlertModal === 'function'){
+      return window.closeStableCartAlertModal();
+    }
     const overlay = document.getElementById('cartAlertModalOverlay');
     if(!overlay) return;
     const alertId = overlay.dataset.alertId || '';
@@ -11989,7 +12001,7 @@ if(false){(function(){
     summary.querySelector('[data-cart-alerts-modal]')?.addEventListener('click', event => {
       event.preventDefault();
       event.stopPropagation();
-      openCartAlertInbox();
+      if(typeof window.openCartAlertInbox === 'function') window.openCartAlertInbox();
     });
   }
 
@@ -12457,7 +12469,7 @@ if(false){(function(){
 
     const alertsButton = event.target.closest('[data-cart-alerts-modal]');
     if(alertsButton){
-      openCartAlertInbox();
+      if(typeof window.openCartAlertInbox === 'function') window.openCartAlertInbox();
       return;
     }
 
@@ -13473,7 +13485,7 @@ if(false){(function(){
     if(alertsButton){
       event.preventDefault();
       event.stopPropagation();
-      openCartAlertInbox();
+      if(typeof window.openCartAlertInbox === 'function') window.openCartAlertInbox();
     }
   });
 
@@ -14020,6 +14032,14 @@ if(false){(function(){
   }
 
   window.setInterval(maybeOpenStableNewAlert, ALERT_POLL_MS);
+  window.openStableCartAlertInbox = openStableAlertInbox;
+  window.openStableCartAlertSettings = openStableAlertSettings;
+  window.closeStableCartAlertModal = closeStableAlertModal;
+  window.openStableCartAlertModal = function(alertId = '', options = {}){
+    if(options.history) return openStableAlertInbox();
+    const alert = sortedStableAlerts().find(item => stableAlertKey(item) === alertId) || sortedStableAlerts()[0] || null;
+    return openStableAlertPopup(alert, Boolean(options.playSound));
+  };
   window.openCartAlertInbox = openStableAlertInbox;
   window.openCartAlertModal = function(alertId = '', options = {}){
     if(options.history) return openStableAlertInbox();
