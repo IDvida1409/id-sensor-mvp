@@ -16863,6 +16863,121 @@ body.analytic-report-open{overflow:hidden}
   padding:0 7px;
 }
 
+.cart-alert-group{
+  background:#fff;
+  border:1px solid #dbe6f4;
+  border-radius:8px;
+  overflow:hidden;
+}
+
+.cart-alert-group summary{
+  align-items:center;
+  cursor:pointer;
+  display:grid;
+  gap:12px;
+  grid-template-columns:minmax(0,1fr) auto;
+  list-style:none;
+  min-height:58px;
+  padding:12px 14px;
+}
+
+.cart-alert-group summary::-webkit-details-marker{
+  display:none;
+}
+
+.cart-alert-group summary strong{
+  color:#142036;
+  display:block;
+  font-size:14px;
+  font-weight:950;
+  line-height:1.15;
+}
+
+.cart-alert-group summary small{
+  color:#63718a;
+  display:block;
+  font-size:11px;
+  font-weight:850;
+  line-height:1.25;
+  margin-top:3px;
+}
+
+.cart-alert-group summary b{
+  align-items:center;
+  background:#2f80ff;
+  border-radius:999px;
+  color:#fff;
+  display:flex;
+  font-size:12px;
+  font-weight:950;
+  height:28px;
+  justify-content:center;
+  min-width:28px;
+  padding:0 8px;
+}
+
+.cart-alert-message-list{
+  border-top:1px solid #e3edf8;
+  display:grid;
+  gap:8px;
+  max-height:min(52vh,520px);
+  overflow:auto;
+  padding:10px;
+}
+
+.cart-alert-message-row{
+  align-items:start;
+  background:#fbfdff;
+  border:1px solid #e3edf8;
+  border-radius:7px;
+  display:grid;
+  gap:10px;
+  grid-template-columns:10px minmax(0,1fr);
+  padding:10px 11px;
+}
+
+.cart-alert-message-row i{
+  background:#e12638;
+  border-radius:999px;
+  height:9px;
+  margin-top:4px;
+  width:9px;
+}
+
+.cart-alert-message-row.exchange i{
+  background:#18a66f;
+}
+
+.cart-alert-message-row.obstruction i,
+.cart-alert-message-row.sensor i,
+.cart-alert-message-row.recurrence i{
+  background:#f59e0b;
+}
+
+.cart-alert-message-row strong{
+  color:#142036;
+  display:block;
+  font-size:13px;
+  font-weight:950;
+  line-height:1.18;
+}
+
+.cart-alert-message-row small,
+.cart-alert-message-row em{
+  color:#63718a;
+  display:block;
+  font-size:11px;
+  font-style:normal;
+  font-weight:850;
+  line-height:1.28;
+  margin-top:3px;
+}
+
+.cart-alert-message-row em{
+  color:#41516b;
+  font-weight:800;
+}
+
 .cart-alert-settings-panel{
   display:grid;
   gap:10px;

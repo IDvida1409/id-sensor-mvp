@@ -5654,6 +5654,9 @@ document.getElementById('infoMacOverlay')?.addEventListener('click', ()=> openIn
   function showLogin(){
     document.body.classList.add('auth-pending');
     document.body.classList.remove('auth-ready');
+    delete document.body.dataset.authRole;
+    if(typeof window.closeCartTrackingView === 'function') window.closeCartTrackingView();
+    if(typeof window.hideCartAlertsOutsideContext === 'function') window.hideCartAlertsOutsideContext();
     if(loginShell) loginShell.hidden = false;
     if(passwordInput) passwordInput.value = '';
     setFeedback('', '');
@@ -9562,6 +9565,73 @@ if(false){(function(){
     clientUsers:'users'
   };
 
+  function isEinsteinCartSessionActive(){
+    const body = document.body;
+    const loginShell = document.getElementById('loginShell');
+    const loginVisible = Boolean(loginShell && loginShell.hidden !== true);
+    const session = window.activePanelSession || {};
+    const authRole = String(body?.dataset?.authRole || session.role || '').toLowerCase();
+    const panelRole = String(body?.dataset?.panelRole || window.currentRole || '').toLowerCase();
+    const ready = Boolean(
+      body?.classList.contains('auth-ready') &&
+      !body.classList.contains('auth-pending') &&
+      !loginVisible
+    );
+    const identityText = [
+      session.displayName,
+      session.display_name,
+      session.organization,
+      session.clienteNome,
+      session.clientName,
+      document.getElementById('currentUserLabel')?.textContent,
+      document.getElementById('pageSubtitle')?.textContent,
+      typeof selectedClient !== 'undefined' ? selectedClient : ''
+    ].join(' ').toLowerCase();
+
+    return Boolean(
+      ready &&
+      authRole === 'cart' &&
+      panelRole === 'cart' &&
+      identityText.includes('einstein')
+    );
+  }
+
+  function isEinsteinCartAlertContext(){
+    const cartView = document.getElementById('cartTrackingView');
+    const cartOpen = Boolean(
+      document.body?.classList.contains('cart-tracking-open') &&
+      cartView &&
+      cartView.hidden !== true
+    );
+    const title = (document.querySelector('.brand .title')?.textContent || '').toLowerCase();
+    const subtitle = (document.getElementById('pageSubtitle')?.textContent || '').toLowerCase();
+    const cartPanelText = `${title} ${subtitle}`;
+    const isCartPanel = (
+      cartPanelText.includes('c.r') ||
+      cartPanelText.includes('carrinho') ||
+      cartPanelText.includes('residuo') ||
+      cartPanelText.includes('resíduo')
+    );
+    return Boolean(isEinsteinCartSessionActive() && cartOpen && isCartPanel);
+  }
+
+  function hideCartAlertsOutsideContext(){
+    const stableOverlay = document.getElementById('cartAlertStableOverlay');
+    if(stableOverlay){
+      stableOverlay.hidden = true;
+      stableOverlay.dataset.alertId = '';
+    }
+    const legacyOverlay = document.getElementById('cartAlertModalOverlay');
+    if(legacyOverlay){
+      legacyOverlay.hidden = true;
+      legacyOverlay.dataset.alertId = '';
+    }
+    document.querySelectorAll('[data-cart-alerts-modal] b').forEach(badge => badge.remove());
+  }
+
+  window.isEinsteinCartAlertContext = isEinsteinCartAlertContext;
+  window.hideCartAlertsOutsideContext = hideCartAlertsOutsideContext;
+
   function clone(value){
     return JSON.parse(JSON.stringify(value));
   }
@@ -10367,6 +10437,11 @@ if(false){(function(){
   let readingsInFlight = false;
 
   async function refreshCartReadings(){
+    if(!isEinsteinCartAlertContext()){
+      hideCartAlertsOutsideContext();
+      lastGeneratedCartAlertId = '';
+      return;
+    }
     if(readingsInFlight) return;
     readingsInFlight = true;
     try{
@@ -10396,9 +10471,19 @@ if(false){(function(){
   }
 
   function startReadingsPolling(){
+    if(!isEinsteinCartAlertContext()) return;
     refreshCartReadings();
     if(readingsTimer) return;
     readingsTimer = setInterval(refreshCartReadings, CART_READING_POLL_MS);
+  }
+
+  function stopReadingsPolling(){
+    if(readingsTimer){
+      clearInterval(readingsTimer);
+      readingsTimer = null;
+    }
+    readingsInFlight = false;
+    lastGeneratedCartAlertId = '';
   }
 
   function escapeHtml(value){
@@ -11154,6 +11239,7 @@ if(false){(function(){
   }
 
   function playCartAlertSound(){
+    if(!isEinsteinCartAlertContext()) return;
     try{
       const AudioContextClass = window.AudioContext || window.webkitAudioContext;
       if(!AudioContextClass) return;
@@ -11365,6 +11451,10 @@ if(false){(function(){
   }
 
   function openCartAlertModal(alertId = '', options = {}){
+    if(!isEinsteinCartAlertContext()){
+      hideCartAlertsOutsideContext();
+      return;
+    }
     if(typeof window.openStableCartAlertModal === 'function'){
       return window.openStableCartAlertModal(alertId, options);
     }
@@ -11388,6 +11478,10 @@ if(false){(function(){
   }
 
   function openCartAlertInbox(){
+    if(!isEinsteinCartAlertContext()){
+      hideCartAlertsOutsideContext();
+      return;
+    }
     if(typeof window.openStableCartAlertInbox === 'function'){
       return window.openStableCartAlertInbox();
     }
@@ -11946,7 +12040,7 @@ if(false){(function(){
     if(!summary) return;
     const stats = globalStats(state);
     const transitTotal = state.carts.filter(cart => cart.locationStatus === 'transit').length;
-    const alertsTotal = unreadAlertCount(state);
+    const alertsTotal = isEinsteinCartAlertContext() ? unreadAlertCount(state) : 0;
     const countText = value => String(Math.max(0, Number(value || 0)));
     const totalText = value => countText(value).padStart(2, '0');
     summary.innerHTML = `
@@ -13470,6 +13564,8 @@ if(false){(function(){
     if(subtitle && previousSubtitle) subtitle.textContent = previousSubtitle;
     if(view) view.hidden = true;
     document.body.classList.remove('cart-tracking-open');
+    stopReadingsPolling();
+    hideCartAlertsOutsideContext();
   }
 
   document.addEventListener('click', event => {
@@ -13585,6 +13681,52 @@ if(false){(function(){
     };
   }
 
+  function isEinsteinCartAlertContext(){
+    if(typeof window.isEinsteinCartAlertContext === 'function'){
+      return window.isEinsteinCartAlertContext();
+    }
+    const body = document.body;
+    const loginShell = document.getElementById('loginShell');
+    const loginVisible = Boolean(loginShell && loginShell.hidden !== true);
+    const ready = Boolean(
+      body?.classList.contains('auth-ready') &&
+      !body.classList.contains('auth-pending') &&
+      !loginVisible
+    );
+    if(!ready) return false;
+
+    const cartView = document.getElementById('cartTrackingView');
+    const cartOpen = Boolean(body?.classList.contains('cart-tracking-open') && cartView && cartView.hidden !== true);
+    if(!cartOpen) return false;
+
+    const title = (document.querySelector('.brand .title')?.textContent || '').toLowerCase();
+    const subtitle = (document.getElementById('pageSubtitle')?.textContent || '').toLowerCase();
+    const currentUser = (document.getElementById('currentUserLabel')?.textContent || '').toLowerCase();
+    const selectedClientText = (typeof selectedClient !== 'undefined' ? String(selectedClient || '') : '').toLowerCase();
+    const session = window.activePanelSession || {};
+    const authRole = String(body?.dataset?.authRole || session.role || '').toLowerCase();
+    const panelRole = String(body?.dataset?.panelRole || window.currentRole || '').toLowerCase();
+    const cartPanelText = `${title} ${subtitle}`;
+    const userText = `${currentUser} ${selectedClientText} ${session.displayName || ''} ${session.display_name || ''} ${session.organization || ''} ${session.clienteNome || ''}`.toLowerCase();
+    const isCartPanel = cartPanelText.includes('c.r') || cartPanelText.includes('carrinho') || cartPanelText.includes('residuo') || cartPanelText.includes('resíduo');
+    const isEinstein = userText.includes('einstein') || subtitle.includes('einstein');
+    return Boolean(authRole === 'cart' && panelRole === 'cart' && isCartPanel && isEinstein);
+  }
+
+  function hideStableAlertsOutsideContext(){
+    if(isEinsteinCartAlertContext()) return false;
+    if(typeof window.hideCartAlertsOutsideContext === 'function'){
+      window.hideCartAlertsOutsideContext();
+    }
+    const overlay = document.getElementById(STABLE_OVERLAY_ID);
+    if(overlay && !overlay.hidden){
+      overlay.hidden = true;
+      overlay.dataset.alertId = '';
+    }
+    document.querySelectorAll('[data-cart-alerts-modal] b').forEach(badge => badge.remove());
+    return true;
+  }
+
   function stableAlertTimestamp(alert){
     const time = new Date(alert?.ts || alert?.createdAt || 0).getTime();
     return Number.isFinite(time) ? time : 0;
@@ -13661,7 +13803,7 @@ if(false){(function(){
     return alert?.message || alert?.detail || `${stableAlertRoom(alert)} - ${stableAlertCart(alert)}`;
   }
 
-  function renderStableAlertRows(alerts, emptyText){
+  function renderStableAlertRows(alerts, emptyText, groupTitle){
     if(!alerts.length){
       return `
         <div class="cart-alert-empty compact">
@@ -13673,28 +13815,44 @@ if(false){(function(){
     }
 
     return `
-      <div class="cart-alert-history-list">
+      <details class="cart-alert-group">
+        <summary>
+          <span>
+            <strong>${escapeStableAlertHtml(groupTitle || 'Mensagens')}</strong>
+            <small>Clique para ver todos os alertas deste grupo.</small>
+          </span>
+          <b>${alerts.length}</b>
+        </summary>
+        <div class="cart-alert-message-list">
         ${alerts.map(alert => `
-          <details class="cart-alert-history-item ${stableAlertTone(alert.type)} ${isUnreadStableAlert(alert) ? 'new' : 'read'}">
-            <summary>
-              <i aria-hidden="true"></i>
-              <span>
-                <strong>${escapeStableAlertHtml(alert.title || stableAlertTypeLabel(alert.type))}</strong>
-                <small>${escapeStableAlertHtml(stableAlertRoom(alert))} &middot; ${escapeStableAlertHtml(stableAlertCart(alert))}</small>
-              </span>
-              <time>${escapeStableAlertHtml(formatStableAlertTime(alert.ts || alert.createdAt))}</time>
-            </summary>
-            <div class="cart-alert-history-detail">
-              <p>${escapeStableAlertHtml(stableAlertText(alert))}</p>
-              <dl>
-                <div><dt>Sala</dt><dd>${escapeStableAlertHtml(stableAlertRoom(alert))}</dd></div>
-                <div><dt>Carrinho</dt><dd>${escapeStableAlertHtml(stableAlertCart(alert))}</dd></div>
-                <div><dt>Tipo</dt><dd>${escapeStableAlertHtml(stableAlertTypeLabel(alert.type))}</dd></div>
-              </dl>
-            </div>
-          </details>
+          <article class="cart-alert-message-row ${stableAlertTone(alert.type)} ${isUnreadStableAlert(alert) ? 'new' : 'read'}">
+            <i aria-hidden="true"></i>
+            <span>
+              <strong>${escapeStableAlertHtml(alert.title || stableAlertTypeLabel(alert.type))}</strong>
+              <small>${escapeStableAlertHtml(stableAlertRoom(alert))} &middot; ${escapeStableAlertHtml(stableAlertCart(alert))} &middot; ${escapeStableAlertHtml(formatStableAlertTime(alert.ts || alert.createdAt))}</small>
+              <em>${escapeStableAlertHtml(stableAlertText(alert))}</em>
+            </span>
+          </article>
         `).join('')}
-      </div>
+        </div>
+      </details>
+    `;
+  }
+
+  function renderStableAlertInbox(mode = 'unread'){
+    const allAlerts = sortedStableAlerts();
+    const unreadAlerts = allAlerts.filter(isUnreadStableAlert);
+    const isHistory = mode === 'history';
+    const alerts = (isHistory ? allAlerts : unreadAlerts).slice(0, 50);
+    const groupTitle = isHistory ? 'Hist&oacute;rico de alertas' : 'Alertas sem leitura';
+    return `
+      <header class="cart-alert-history-head">
+        <span>Alertas</span>
+        <h2>${isHistory ? 'Hist&oacute;rico de alertas' : 'Caixa de alertas'}</h2>
+        <p>${isHistory ? 'Registro dos avisos gerados pelo painel.' : `${unreadAlerts.length} alerta${unreadAlerts.length === 1 ? '' : 's'} sem leitura.`}</p>
+      </header>
+      ${renderStableAlertNav(isHistory ? 'history' : 'unread')}
+      ${renderStableAlertRows(alerts, isHistory ? 'Sem hist&oacute;rico por enquanto.' : 'Sem alertas novos.', groupTitle)}
     `;
   }
 
@@ -13766,7 +13924,7 @@ if(false){(function(){
     `;
   }
 
-  function renderStableAlertInbox(mode = 'unread'){
+  function renderStableAlertInboxLegacyUnused(mode = 'unread'){
     const allAlerts = sortedStableAlerts();
     const unreadAlerts = allAlerts.filter(isUnreadStableAlert);
     const isHistory = mode === 'history';
@@ -13860,7 +14018,7 @@ if(false){(function(){
             </label>
           `).join('')}
         </div>
-        <button type="button" class="cart-alert-save-btn" data-stable-cart-alert-save>Salvar configuracoes</button>
+        <button type="button" class="cart-alert-save-btn" data-stable-cart-alert-save>Salvar configura&ccedil;&otilde;es</button>
       </div>
     `;
   }
@@ -13883,7 +14041,7 @@ if(false){(function(){
         <div class="cart-alert-popup-grid">
           <span><small>Sala</small><strong>${escapeStableAlertHtml(alert.roomName || alert.roomId || 'Sala')}</strong></span>
           <span><small>Carrinho</small><strong>${escapeStableAlertHtml(alert.cartName || 'Carrinho')}</strong></span>
-          <span><small>Horario</small><strong>${escapeStableAlertHtml(formatStableAlertTime(alert.ts || alert.createdAt))}</strong></span>
+          <span><small>Hor&aacute;rio</small><strong>${escapeStableAlertHtml(formatStableAlertTime(alert.ts || alert.createdAt))}</strong></span>
           <span><small>Tipo</small><strong>${escapeStableAlertHtml(stableAlertTypeLabel(alert.type))}</strong></span>
         </div>
         ${alert.detail ? `<small class="cart-alert-detail">${escapeStableAlertHtml(alert.detail)}</small>` : ''}
@@ -13892,6 +14050,7 @@ if(false){(function(){
   }
 
   function openStableAlertInbox(){
+    if(!isEinsteinCartAlertContext()) return hideStableAlertsOutsideContext();
     const { overlay, content } = ensureStableAlertModal();
     overlay.dataset.mode = 'history';
     overlay.dataset.alertId = '';
@@ -13901,6 +14060,7 @@ if(false){(function(){
   }
 
   function openStableAlertHistory(){
+    if(!isEinsteinCartAlertContext()) return hideStableAlertsOutsideContext();
     const { overlay, content } = ensureStableAlertModal();
     overlay.dataset.mode = 'history';
     overlay.dataset.alertId = '';
@@ -13910,6 +14070,7 @@ if(false){(function(){
   }
 
   function openStableAlertSettings(){
+    if(!isEinsteinCartAlertContext()) return hideStableAlertsOutsideContext();
     const { overlay, content } = ensureStableAlertModal();
     overlay.dataset.mode = 'history';
     overlay.dataset.alertId = '';
@@ -13919,6 +14080,7 @@ if(false){(function(){
   }
 
   function openStableAlertPopup(alert, playSound){
+    if(!isEinsteinCartAlertContext()) return hideStableAlertsOutsideContext();
     const { overlay, content } = ensureStableAlertModal();
     overlay.dataset.mode = 'popup';
     overlay.dataset.alertId = stableAlertKey(alert);
@@ -13976,6 +14138,10 @@ if(false){(function(){
   }
 
   function updateStableAlertBadges(){
+    if(!isEinsteinCartAlertContext()){
+      hideStableAlertsOutsideContext();
+      return;
+    }
     const unread = unreadStableAlertCount();
     document.querySelectorAll('[data-cart-alerts-modal]').forEach(button => {
       let badge = button.querySelector('b');
@@ -14003,6 +14169,7 @@ if(false){(function(){
   }
 
   function playStableAlertSoundOnce(alertId){
+    if(!isEinsteinCartAlertContext()) return;
     const state = readStableAlertState();
     const settings = normalizeStableAlertSettings(state.alertSettings);
     if(!settings.soundEnabled) return;
@@ -14039,6 +14206,10 @@ if(false){(function(){
   }
 
   function maybeOpenStableNewAlert(){
+    if(!isEinsteinCartAlertContext()){
+      hideStableAlertsOutsideContext();
+      return;
+    }
     const state = readStableAlertState();
     const settings = normalizeStableAlertSettings(state.alertSettings);
     const alerts = sortedStableAlerts(state);
@@ -14067,6 +14238,10 @@ if(false){(function(){
       event.preventDefault();
       event.stopPropagation();
       if(typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
+      if(!isEinsteinCartAlertContext()){
+        hideStableAlertsOutsideContext();
+        return;
+      }
       openStableAlertInbox();
       return;
     }
