@@ -9590,7 +9590,7 @@ if(false){(function(){
 
     return Boolean(
       ready &&
-      authRole === 'cart' &&
+      (authRole === 'cart' || authRole === 'master') &&
       panelRole === 'cart' &&
       identityText.includes('einstein')
     );
@@ -13710,7 +13710,7 @@ if(false){(function(){
     const userText = `${currentUser} ${selectedClientText} ${session.displayName || ''} ${session.display_name || ''} ${session.organization || ''} ${session.clienteNome || ''}`.toLowerCase();
     const isCartPanel = cartPanelText.includes('c.r') || cartPanelText.includes('carrinho') || cartPanelText.includes('residuo') || cartPanelText.includes('resíduo');
     const isEinstein = userText.includes('einstein') || subtitle.includes('einstein');
-    return Boolean(authRole === 'cart' && panelRole === 'cart' && isCartPanel && isEinstein);
+    return Boolean((authRole === 'cart' || authRole === 'master') && panelRole === 'cart' && isCartPanel && isEinstein);
   }
 
   function hideStableAlertsOutsideContext(){
