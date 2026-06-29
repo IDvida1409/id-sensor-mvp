@@ -13642,6 +13642,62 @@ if(false){(function(){
     return '<svg viewBox="0 0 96 96" fill="none" aria-hidden="true"><path d="M34 22h45c4.4 0 8 3.6 8 8v37c0 4.4-3.6 8-8 8H37" stroke="#2f80ff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/><path d="M36 27 60 48 84 27M61 49 85 73" stroke="#2f80ff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/><path d="M31 41c-9 0-16 7.1-16 16v10.5c0 3-.9 5.8-2.7 8.2L10 79h45l-2.2-3.3a14.9 14.9 0 0 1-2.8-8.2V57c0-8.9-7.1-16-16-16h-3Z" fill="#eaf3ff" stroke="#2f80ff" stroke-width="6" stroke-linejoin="round"/><path d="M25 85c3.2 5 10.8 5 14 0M18 91c7 5 21 5 28 0" stroke="#2f80ff" stroke-width="6" stroke-linecap="round"/></svg>';
   }
 
+  function stableAlertTone(type){
+    if(type === 'exchange') return 'exchange';
+    if(type === 'obstruction' || type === 'sensor') return 'obstruction';
+    if(type === 'recurrence') return 'recurrence';
+    return 'critical';
+  }
+
+  function stableAlertRoom(alert){
+    return alert?.roomName || alert?.roomId || 'Sala';
+  }
+
+  function stableAlertCart(alert){
+    return alert?.cartName || 'Carrinho';
+  }
+
+  function stableAlertText(alert){
+    return alert?.message || alert?.detail || `${stableAlertRoom(alert)} - ${stableAlertCart(alert)}`;
+  }
+
+  function renderStableAlertRows(alerts, emptyText){
+    if(!alerts.length){
+      return `
+        <div class="cart-alert-empty compact">
+          <span class="cart-alert-mail-icon">${stableMailboxIcon()}</span>
+          <strong>${emptyText}</strong>
+          <small>Novos avisos aparecer&atilde;o aqui automaticamente.</small>
+        </div>
+      `;
+    }
+
+    return `
+      <div class="cart-alert-history-list">
+        ${alerts.map(alert => `
+          <details class="cart-alert-history-item ${stableAlertTone(alert.type)} ${isUnreadStableAlert(alert) ? 'new' : 'read'}">
+            <summary>
+              <i aria-hidden="true"></i>
+              <span>
+                <strong>${escapeStableAlertHtml(alert.title || stableAlertTypeLabel(alert.type))}</strong>
+                <small>${escapeStableAlertHtml(stableAlertRoom(alert))} &middot; ${escapeStableAlertHtml(stableAlertCart(alert))}</small>
+              </span>
+              <time>${escapeStableAlertHtml(formatStableAlertTime(alert.ts || alert.createdAt))}</time>
+            </summary>
+            <div class="cart-alert-history-detail">
+              <p>${escapeStableAlertHtml(stableAlertText(alert))}</p>
+              <dl>
+                <div><dt>Sala</dt><dd>${escapeStableAlertHtml(stableAlertRoom(alert))}</dd></div>
+                <div><dt>Carrinho</dt><dd>${escapeStableAlertHtml(stableAlertCart(alert))}</dd></div>
+                <div><dt>Tipo</dt><dd>${escapeStableAlertHtml(stableAlertTypeLabel(alert.type))}</dd></div>
+              </dl>
+            </div>
+          </details>
+        `).join('')}
+      </div>
+    `;
+  }
+
   function disableLegacyAlertOverlays(){
     document.querySelectorAll('#cartAlertModalOverlay').forEach(overlay => {
       overlay.hidden = true;
@@ -13690,30 +13746,47 @@ if(false){(function(){
   function renderStableAlertNav(active){
     const state = readStableAlertState();
     const unread = unreadStableAlertCount(state);
+    const total = sortedStableAlerts(state).length;
     const settings = normalizeStableAlertSettings(state.alertSettings);
     return `
       <div class="cart-alert-drill-actions">
-        <button type="button" class="${active === 'list' ? 'active' : ''}" data-cart-alert-stable-view="list">
-          <span>Caixa de alertas</span>
+        <button type="button" class="${active === 'unread' ? 'active' : ''}" data-cart-alert-stable-view="unread">
+          <span>Novos</span>
           <b>${unread}</b>
         </button>
+        <button type="button" class="${active === 'history' ? 'active' : ''}" data-cart-alert-stable-view="history">
+          <span>Hist&oacute;rico</span>
+          <b>${total}</b>
+        </button>
         <button type="button" class="${active === 'settings' ? 'active' : ''}" data-cart-alert-stable-view="settings">
-          <span>Configuracoes</span>
-          <small>${settings.popupEnabled ? 'Pop-up ativo' : 'Pop-up silenciado'}</small>
+          <span>Configura&ccedil;&otilde;es</span>
+          <small>${settings.popupEnabled ? 'Ativo' : 'Silenciado'}</small>
         </button>
       </div>
     `;
   }
 
-  function renderStableAlertInbox(){
-    const alerts = sortedStableAlerts().slice(0, 30);
+  function renderStableAlertInbox(mode = 'unread'){
+    const allAlerts = sortedStableAlerts();
+    const unreadAlerts = allAlerts.filter(isUnreadStableAlert);
+    const isHistory = mode === 'history';
+    const alerts = (isHistory ? allAlerts : unreadAlerts).slice(0, 40);
     return `
       <header class="cart-alert-history-head">
         <span>Alertas</span>
-        <h2>Caixa de alertas</h2>
-        <p>${alerts.length ? `${alerts.length} alerta${alerts.length === 1 ? '' : 's'} recente${alerts.length === 1 ? '' : 's'} do painel.` : 'Nenhum alerta registrado no painel.'}</p>
+        <h2>${isHistory ? 'Hist&oacute;rico de alertas' : 'Caixa de alertas'}</h2>
+        <p>${isHistory ? 'Registro dos avisos gerados pelo painel.' : `${unreadAlerts.length} alerta${unreadAlerts.length === 1 ? '' : 's'} sem leitura.`}</p>
       </header>
-      ${renderStableAlertNav('list')}
+      ${renderStableAlertNav(isHistory ? 'history' : 'unread')}
+      ${renderStableAlertRows(alerts, isHistory ? 'Sem hist&oacute;rico por enquanto.' : 'Sem alertas novos.')}
+    `;
+    return `
+      <header class="cart-alert-history-head">
+        <span>Alertas</span>
+        <h2>${isHistory ? 'Hist&oacute;rico de alertas' : 'Caixa de alertas'}</h2>
+        <p>${isHistory ? 'Registro dos avisos gerados pelo painel.' : `${unreadAlerts.length} alerta${unreadAlerts.length === 1 ? '' : 's'} sem leitura.`}</p>
+      </header>
+      ${renderStableAlertNav(isHistory ? 'history' : 'unread')}
       ${alerts.length ? `
         <div class="cart-alert-history-list">
           ${alerts.map(alert => `
@@ -13822,7 +13895,16 @@ if(false){(function(){
     const { overlay, content } = ensureStableAlertModal();
     overlay.dataset.mode = 'history';
     overlay.dataset.alertId = '';
-    content.innerHTML = renderStableAlertInbox();
+    content.innerHTML = renderStableAlertInbox('unread');
+    overlay.hidden = false;
+    updateStableAlertBadges();
+  }
+
+  function openStableAlertHistory(){
+    const { overlay, content } = ensureStableAlertModal();
+    overlay.dataset.mode = 'history';
+    overlay.dataset.alertId = '';
+    content.innerHTML = renderStableAlertInbox('history');
     overlay.hidden = false;
     updateStableAlertBadges();
   }
@@ -14001,8 +14083,11 @@ if(false){(function(){
     if(viewButton){
       event.preventDefault();
       event.stopPropagation();
-      if(viewButton.getAttribute('data-cart-alert-stable-view') === 'settings'){
+      const view = viewButton.getAttribute('data-cart-alert-stable-view');
+      if(view === 'settings'){
         openStableAlertSettings();
+      }else if(view === 'history'){
+        openStableAlertHistory();
       }else{
         openStableAlertInbox();
       }
@@ -14033,6 +14118,7 @@ if(false){(function(){
 
   window.setInterval(maybeOpenStableNewAlert, ALERT_POLL_MS);
   window.openStableCartAlertInbox = openStableAlertInbox;
+  window.openStableCartAlertHistory = openStableAlertHistory;
   window.openStableCartAlertSettings = openStableAlertSettings;
   window.closeStableCartAlertModal = closeStableAlertModal;
   window.openStableCartAlertModal = function(alertId = '', options = {}){

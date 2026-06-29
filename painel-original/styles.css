@@ -17012,16 +17012,143 @@ body.analytic-report-open{overflow:hidden}
   font-weight:800;
 }
 
+/* Compact alert inbox with drill-down rows. */
+.cart-alert-modal{
+  width:min(660px,calc(100vw - 44px));
+}
+
+.cart-alert-history-head h2{
+  font-size:22px;
+  margin-bottom:6px;
+}
+
+.cart-alert-history-head p{
+  font-size:13px;
+  margin-bottom:14px;
+}
+
+.cart-alert-drill-actions{
+  grid-template-columns:repeat(3,minmax(0,1fr));
+}
+
+.cart-alert-drill-actions button{
+  min-height:42px;
+  padding:8px 10px;
+}
+
+.cart-alert-history-item{
+  display:block;
+  min-height:0;
+  overflow:hidden;
+  padding:0;
+}
+
+.cart-alert-history-item summary{
+  align-items:center;
+  cursor:pointer;
+  display:grid;
+  gap:10px;
+  grid-template-columns:10px minmax(0,1fr) auto;
+  list-style:none;
+  padding:12px 14px;
+}
+
+.cart-alert-history-item summary::-webkit-details-marker{
+  display:none;
+}
+
+.cart-alert-history-item i{
+  background:#e12638;
+  border-radius:999px;
+  height:9px;
+  width:9px;
+}
+
+.cart-alert-history-item.exchange i{
+  background:#18a66f;
+}
+
+.cart-alert-history-item.obstruction i,
+.cart-alert-history-item.sensor i,
+.cart-alert-history-item.recurrence i{
+  background:#f59e0b;
+}
+
+.cart-alert-history-item strong{
+  font-size:14px;
+  line-height:1.15;
+}
+
+.cart-alert-history-item small{
+  display:block;
+  font-size:11px;
+  line-height:1.25;
+  margin-top:3px;
+}
+
+.cart-alert-history-detail{
+  background:#fbfdff;
+  border-top:1px solid #e3edf8;
+  display:grid;
+  gap:10px;
+  padding:10px 14px 12px 34px;
+}
+
+.cart-alert-history-detail p{
+  color:#41516b;
+  font-size:12px;
+  font-weight:800;
+  line-height:1.35;
+  margin:0;
+}
+
+.cart-alert-history-detail dl{
+  display:grid;
+  gap:8px;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  margin:0;
+}
+
+.cart-alert-history-detail div{
+  background:#fff;
+  border:1px solid #e3edf8;
+  border-radius:7px;
+  padding:7px 8px;
+}
+
+.cart-alert-history-detail dt{
+  color:#6b7a92;
+  font-size:10px;
+  font-weight:900;
+  margin:0 0 2px;
+}
+
+.cart-alert-history-detail dd{
+  color:#111c31;
+  font-size:12px;
+  font-weight:900;
+  margin:0;
+}
+
+.cart-alert-empty.compact{
+  min-height:130px;
+}
+
 @media (max-width:760px){
   .cart-alert-popup-grid{
     grid-template-columns:1fr;
   }
 
+  .cart-alert-drill-actions,
+  .cart-alert-history-detail dl{
+    grid-template-columns:1fr;
+  }
+
   .cart-alert-history-item{
-    grid-template-columns:34px minmax(0,1fr);
+    display:block;
   }
 
   .cart-alert-history-item time{
-    grid-column:2;
+    justify-self:start;
   }
 }
