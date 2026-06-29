@@ -16468,3 +16468,36 @@ body.analytic-report-open{overflow:hidden}
     width:min(330px,100%) !important;
   }
 }
+
+/* ===== Einstein report icon without inner card ===== */
+.cart-overview-report{
+  align-items:center !important;
+  justify-content:flex-start !important;
+  min-height:92px !important;
+  padding:8px 0 8px 34px !important;
+}
+
+.cart-report-global-btn{
+  background:transparent !important;
+  border:0 !important;
+  box-shadow:none !important;
+  height:58px !important;
+  min-height:58px !important;
+  padding:0 !important;
+  width:58px !important;
+}
+
+.cart-report-global-btn .graph-report-icon{
+  background:transparent !important;
+  border:0 !important;
+  border-radius:0 !important;
+  box-shadow:none !important;
+  color:#0753b5 !important;
+  height:58px !important;
+  width:58px !important;
+}
+
+.cart-report-global-btn .graph-report-icon svg{
+  height:42px !important;
+  width:42px !important;
+}
