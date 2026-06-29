@@ -16022,3 +16022,170 @@ body.analytic-report-open{overflow:hidden}
     border-bottom:1px solid #edf2f7 !important;
   }
 }
+
+/* ===== Einstein compact settings correction ===== */
+.cart-tracking-v2 .cart-room-grid{
+  grid-template-columns:repeat(2,minmax(0,1fr)) !important;
+}
+
+.cart-tracking-v2 .cart-room-card{
+  max-width:none !important;
+  min-width:0 !important;
+  width:auto !important;
+}
+
+.cart-settings-modal{
+  gap:12px !important;
+  max-height:min(720px,calc(100vh - 44px)) !important;
+  max-width:560px !important;
+  overflow:hidden !important;
+  padding:18px !important;
+  width:min(560px,calc(100vw - 36px)) !important;
+}
+
+.cart-settings-head{
+  padding-right:44px;
+}
+
+.cart-settings-head h2{
+  font-size:18px !important;
+}
+
+.cart-settings-head p{
+  font-size:11px !important;
+}
+
+.cart-settings-content{
+  gap:10px !important;
+  min-height:0;
+  overflow:hidden;
+}
+
+.cart-settings-drill-head{
+  align-items:center;
+  display:grid;
+  gap:10px;
+  grid-template-columns:auto minmax(0,1fr);
+}
+
+.cart-settings-drill-head button{
+  align-items:center;
+  appearance:none;
+  background:#eef6ff;
+  border:1px solid #c9dcf5;
+  border-radius:7px;
+  color:#2454a6;
+  cursor:pointer;
+  display:flex;
+  font-size:15px;
+  font-weight:950;
+  height:32px;
+  justify-content:center;
+  width:34px;
+}
+
+.cart-settings-drill-head span{
+  display:grid;
+  gap:2px;
+  min-width:0;
+}
+
+.cart-settings-drill-head strong{
+  color:#061329;
+  font-size:15px;
+  font-weight:950;
+  line-height:1.1;
+}
+
+.cart-settings-drill-head small{
+  color:#64748b;
+  font-size:10.5px;
+  font-weight:850;
+  line-height:1.2;
+}
+
+.cart-settings-home{
+  display:grid;
+  gap:8px;
+}
+
+.cart-settings-home-card{
+  align-items:center;
+  appearance:none;
+  background:#f8fbff;
+  border:1px solid #dfe7f1;
+  border-radius:8px;
+  cursor:pointer;
+  display:grid;
+  gap:10px;
+  grid-template-columns:minmax(0,1fr) auto;
+  min-height:58px;
+  padding:10px 12px;
+  text-align:left;
+}
+
+.cart-settings-home-card:hover{
+  background:#eef6ff;
+  border-color:#bfd5f2;
+}
+
+.cart-settings-home-card span{
+  display:grid;
+  gap:2px;
+  min-width:0;
+}
+
+.cart-settings-home-card strong{
+  color:#061329;
+  font-size:13px;
+  font-weight:950;
+  line-height:1.1;
+}
+
+.cart-settings-home-card small{
+  color:#64748b;
+  font-size:10.5px;
+  font-weight:850;
+  line-height:1.2;
+}
+
+.cart-settings-home-card b{
+  align-items:center;
+  background:#e8f2ff;
+  border:1px solid #c9dcf5;
+  border-radius:999px;
+  color:#2454a6;
+  display:flex;
+  font-size:13px;
+  font-weight:950;
+  height:30px;
+  justify-content:center;
+  min-width:30px;
+  padding:0 8px;
+}
+
+.cart-settings-list.drill-list{
+  max-height:360px;
+  min-height:0;
+  overflow:auto;
+  padding-right:3px;
+}
+
+.cart-settings-section{
+  gap:8px !important;
+  padding:10px !important;
+}
+
+.cart-settings-section-head strong{
+  font-size:13px !important;
+}
+
+.cart-settings-row{
+  padding:8px 9px !important;
+}
+
+@media (max-width:980px){
+  .cart-tracking-v2 .cart-room-grid{
+    grid-template-columns:1fr !important;
+  }
+}

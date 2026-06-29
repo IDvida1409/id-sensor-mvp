@@ -9029,12 +9029,6 @@ if(false){(function(){
         name: 'SALA BLOCO B1',
         gatewayDeviceId: '8ec5',
         expectedTotal: 16
-      },
-      {
-        id: 'sala-bloco-a',
-        name: 'SALA BLOCO A',
-        gatewayDeviceId: '',
-        expectedTotal: 0
       }
     ],
     carts: [
@@ -9457,11 +9451,11 @@ if(false){(function(){
   const CART_SUSPICIOUS_JUMP_PERCENT = 75;
   const CART_CRITICAL_PERCENT = 90;
   const CART_READING_POLL_MS = 5000;
+  const OBSOLETE_ROOM_IDS = new Set(['sala-bloco-a']);
 
   const defaultState = {
     rooms: [
       { id:'sala-bloco-b1', name:'SALA BLOCO B1', gatewayDeviceId:PILOT_GATEWAY_ID },
-      { id:'sala-bloco-a', name:'SALA BLOCO A', gatewayDeviceId:'' },
       { id:'sala-residuos', name:'SALA DE RESÍDUOS', gatewayDeviceId:'' },
       { id:'sala-higienizacao', name:'SALA DE HIGIENIZAÇÃO', gatewayDeviceId:'' }
     ],
@@ -9501,6 +9495,13 @@ if(false){(function(){
   let activeCartFilter = 'all';
   let activeRoomFilter = '';
   let cartSearchTerm = '';
+  let cartSettingsView = 'home';
+  const CART_SETTINGS_PARENT_VIEW = {
+    rooms:'home',
+    devices:'home',
+    gateways:'devices',
+    sensors:'devices'
+  };
 
   function clone(value){
     return JSON.parse(JSON.stringify(value));
@@ -9514,12 +9515,27 @@ if(false){(function(){
       telemetryEvents: Array.isArray(state?.telemetryEvents) ? state.telemetryEvents : []
     };
 
+    const activeRooms = normalized.rooms.filter(room => {
+      const isObsolete = OBSOLETE_ROOM_IDS.has(room?.id);
+      if(isObsolete) changed = true;
+      return !isObsolete;
+    });
+    normalized.rooms = activeRooms;
+
     const activeCarts = normalized.carts.filter(cart => {
       const isObsolete = OBSOLETE_CART_IDS.has(cart?.id) || OBSOLETE_CART_MACS.has(cleanMac(cart?.mac));
       if(isObsolete) changed = true;
       return !isObsolete;
     });
     normalized.carts = activeCarts;
+
+    normalized.carts.forEach(cart => {
+      if(OBSOLETE_ROOM_IDS.has(cart?.roomId)){
+        cart.roomId = '';
+        cart.locationStatus = 'offline';
+        changed = true;
+      }
+    });
 
     defaultState.rooms.forEach(defaultRoom => {
       if(!normalized.rooms.some(room => room.id === defaultRoom.id)){
@@ -11930,8 +11946,44 @@ if(false){(function(){
     return `${calibration.redPercent}% (${formatMm(distance)})`;
   }
 
+  function gatewaySettingsItems(state){
+    return state.rooms
+      .filter(room => normalizeGatewayId(room.gatewayDeviceId))
+      .map(room => ({
+        id:normalizeGatewayId(room.gatewayDeviceId),
+        short:formatGatewayShort(room.gatewayDeviceId),
+        roomId:room.id,
+        roomName:room.name
+      }))
+      .filter((item, index, list) => list.findIndex(other => other.id === item.id) === index);
+  }
+
+  function settingsPanelHeader(title, subtitle){
+    return `
+      <div class="cart-settings-drill-head">
+        ${cartSettingsView === 'home' ? '' : '<button type="button" data-settings-back aria-label="Voltar">←</button>'}
+        <span>
+          <strong>${escapeHtml(title)}</strong>
+          <small>${escapeHtml(subtitle)}</small>
+        </span>
+      </div>
+    `;
+  }
+
+  function settingsHomeCard(view, title, subtitle, count){
+    return `
+      <button type="button" class="cart-settings-home-card" data-settings-view="${escapeHtml(view)}">
+        <span>
+          <strong>${escapeHtml(title)}</strong>
+          <small>${escapeHtml(subtitle)}</small>
+        </span>
+        <b>${escapeHtml(String(count))}</b>
+      </button>
+    `;
+  }
+
   function cartSettingsRoomRows(state){
-    return state.rooms.map(room => {
+    const rows = state.rooms.map(room => {
       const count = state.carts.filter(cart => cart.roomId === room.id && cart.locationStatus !== 'transit').length;
       return `
         <div class="cart-settings-row">
@@ -11939,24 +11991,31 @@ if(false){(function(){
             <strong>${escapeHtml(room.name)}</strong>
             <small>Gateway ${escapeHtml(formatGatewayShort(room.gatewayDeviceId))} · ${count} CR</small>
           </span>
-          <button type="button" data-settings-room="${escapeHtml(room.id)}">Editar</button>
+          <span class="cart-settings-row-actions">
+            <button type="button" data-settings-room="${escapeHtml(room.id)}">Editar</button>
+            <button type="button" data-settings-delete-room="${escapeHtml(room.id)}">Remover</button>
+          </span>
         </div>
       `;
     }).join('');
+    return rows || '<p class="cart-settings-empty">Nenhuma sala cadastrada.</p>';
   }
 
   function cartSettingsGatewayRows(state){
-    const roomsWithGateway = state.rooms.filter(room => normalizeGatewayId(room.gatewayDeviceId));
-    if(!roomsWithGateway.length){
+    const gateways = gatewaySettingsItems(state);
+    if(!gateways.length){
       return '<p class="cart-settings-empty">Nenhum gateway vinculado.</p>';
     }
-    return roomsWithGateway.map(room => `
+    return gateways.map(gateway => `
       <div class="cart-settings-row">
         <span>
-          <strong>MKGW4 · ${escapeHtml(formatGatewayShort(room.gatewayDeviceId))}</strong>
-          <small>MOKO · BLE + 4G · ${escapeHtml(room.name)}</small>
+          <strong>MKGW4 Smart · ${escapeHtml(gateway.short)}</strong>
+          <small>MOKO · gateway ativo · ${escapeHtml(gateway.roomName)}</small>
         </span>
-        <button type="button" data-settings-room="${escapeHtml(room.id)}">Trocar</button>
+        <span class="cart-settings-row-actions">
+          <button type="button" data-settings-room="${escapeHtml(gateway.roomId)}">Trocar sala</button>
+          <button type="button" data-settings-clear-gateway="${escapeHtml(gateway.roomId)}">Remover</button>
+        </span>
       </div>
     `).join('');
   }
@@ -11975,6 +12034,7 @@ if(false){(function(){
         <span class="cart-settings-row-actions">
           <button type="button" data-settings-device="${escapeHtml(cart.id)}">Detalhes</button>
           <button type="button" data-settings-calibration="${escapeHtml(cart.id)}">Calibrar</button>
+          <button type="button" data-settings-delete-device="${escapeHtml(cart.id)}">Excluir</button>
         </span>
       </div>
     `).join('');
@@ -11984,36 +12044,76 @@ if(false){(function(){
     const content = document.getElementById('cartSettingsContent');
     if(!content) return;
     const state = readState();
+    const gatewayCount = gatewaySettingsItems(state).length;
+
+    if(cartSettingsView === 'rooms'){
+      content.innerHTML = `
+        ${settingsPanelHeader('Salas cadastradas', `${state.rooms.length} salas no ambiente atual.`)}
+        <section class="cart-settings-section">
+          <div class="cart-settings-section-head">
+            <span>
+              <strong>Salas</strong>
+              <small>Crie, edite, remova e vincule gateways.</small>
+            </span>
+            <button type="button" class="cart-settings-mini-btn" data-settings-add-room>Adicionar sala</button>
+          </div>
+          <div class="cart-settings-list drill-list">${cartSettingsRoomRows(state)}</div>
+        </section>
+      `;
+      return;
+    }
+
+    if(cartSettingsView === 'gateways'){
+      content.innerHTML = `
+        ${settingsPanelHeader('Gateways', `${gatewayCount} gateway ativo.`)}
+        <section class="cart-settings-section">
+          <div class="cart-settings-section-head">
+            <span>
+              <strong>Gateways</strong>
+              <small>Gateway MOKO atualmente vinculado.</small>
+            </span>
+          </div>
+          <div class="cart-settings-list drill-list">${cartSettingsGatewayRows(state)}</div>
+        </section>
+      `;
+      return;
+    }
+
+    if(cartSettingsView === 'devices'){
+      content.innerHTML = `
+        ${settingsPanelHeader('Dispositivos', `${gatewayCount} gateway e ${state.carts.length} sensores cadastrados.`)}
+        <div class="cart-settings-home">
+          ${settingsHomeCard('gateways', 'Gateways', 'Gateway MOKO ativo.', gatewayCount)}
+          ${settingsHomeCard('sensors', 'Sensores', 'Sensores ToF dos carrinhos.', state.carts.length)}
+        </div>
+      `;
+      return;
+    }
+
+    if(cartSettingsView === 'sensors'){
+      content.innerHTML = `
+        ${settingsPanelHeader('Sensores', `${state.carts.length} sensores cadastrados.`)}
+        <section class="cart-settings-section">
+          <div class="cart-settings-section-head">
+            <span>
+              <strong>Sensores</strong>
+              <small>Consulte, calibre ou exclua sensores.</small>
+            </span>
+            <button type="button" class="cart-settings-mini-btn" data-settings-add-device>Adicionar dispositivo</button>
+          </div>
+          <div class="cart-settings-list drill-list">${cartSettingsDeviceRows(state)}</div>
+        </section>
+      `;
+      return;
+    }
+
+    cartSettingsView = 'home';
     content.innerHTML = `
-      <section class="cart-settings-section">
-        <div class="cart-settings-section-head">
-          <span>
-            <strong>Salas</strong>
-            <small>Criar sala e vincular gateway.</small>
-          </span>
-          <button type="button" class="cart-settings-mini-btn" data-settings-add-room>Adicionar sala</button>
-        </div>
-        <div class="cart-settings-list">${cartSettingsRoomRows(state)}</div>
-      </section>
-      <section class="cart-settings-section">
-        <div class="cart-settings-section-head">
-          <span>
-            <strong>Gateways</strong>
-            <small>Dispositivos MOKO em uso.</small>
-          </span>
-        </div>
-        <div class="cart-settings-list">${cartSettingsGatewayRows(state)}</div>
-      </section>
-      <section class="cart-settings-section">
-        <div class="cart-settings-section-head">
-          <span>
-            <strong>Dispositivos</strong>
-            <small>Sensores e calibração atual.</small>
-          </span>
-          <button type="button" class="cart-settings-mini-btn" data-settings-add-device>Adicionar dispositivo</button>
-        </div>
-        <div class="cart-settings-list">${cartSettingsDeviceRows(state)}</div>
-      </section>
+      ${settingsPanelHeader('Configurações C.R.', 'Escolha uma área para configurar.')}
+      <div class="cart-settings-home">
+        ${settingsHomeCard('rooms', 'Salas cadastradas', 'Sala Bloco B1, resíduos e higiene.', state.rooms.length)}
+        ${settingsHomeCard('devices', 'Dispositivos', 'Gateway e sensores cadastrados.', gatewayCount + state.carts.length)}
+      </div>
     `;
   }
 
@@ -12031,6 +12131,20 @@ if(false){(function(){
   }
 
   function handleCartSettingsClick(event){
+    const backButton = event.target.closest('[data-settings-back]');
+    if(backButton){
+      cartSettingsView = CART_SETTINGS_PARENT_VIEW[cartSettingsView] || 'home';
+      renderCartSettingsContent();
+      return;
+    }
+
+    const viewButton = event.target.closest('[data-settings-view]');
+    if(viewButton){
+      cartSettingsView = viewButton.getAttribute('data-settings-view') || 'home';
+      renderCartSettingsContent();
+      return;
+    }
+
     const addRoom = event.target.closest('[data-settings-add-room]');
     if(addRoom){
       openRoomSettings('');
@@ -12050,6 +12164,24 @@ if(false){(function(){
       return;
     }
 
+    const deleteRoomButton = event.target.closest('[data-settings-delete-room]');
+    if(deleteRoomButton){
+      deleteCartRoom(deleteRoomButton.getAttribute('data-settings-delete-room') || '');
+      return;
+    }
+
+    const clearGatewayButton = event.target.closest('[data-settings-clear-gateway]');
+    if(clearGatewayButton){
+      clearRoomGateway(clearGatewayButton.getAttribute('data-settings-clear-gateway') || '');
+      return;
+    }
+
+    const deleteDeviceButton = event.target.closest('[data-settings-delete-device]');
+    if(deleteDeviceButton){
+      deleteCartDevice(deleteDeviceButton.getAttribute('data-settings-delete-device') || '');
+      return;
+    }
+
     const deviceButton = event.target.closest('[data-settings-device]');
     const calibrationButton = event.target.closest('[data-settings-calibration]');
     const cartId = deviceButton?.getAttribute('data-settings-device') || calibrationButton?.getAttribute('data-settings-calibration');
@@ -12065,9 +12197,55 @@ if(false){(function(){
     }
   }
 
+  function deleteCartRoom(roomId){
+    if(!canManageCartSettings() || !roomId) return;
+    const state = readState();
+    const room = state.rooms.find(item => item.id === roomId);
+    if(!room) return;
+    if(!window.confirm(`Remover a sala ${room.name}? Os sensores vinculados ficarão sem sala.`)) return;
+    state.rooms = state.rooms.filter(item => item.id !== roomId);
+    state.carts.forEach(cart => {
+      if(cart.roomId === roomId){
+        cart.roomId = '';
+        cart.locationStatus = 'offline';
+        cart.transitStep = 0;
+      }
+    });
+    if(activeRoomFilter === roomId) activeRoomFilter = '';
+    saveState(state);
+    renderCartSettingsContent();
+    renderRooms();
+  }
+
+  function clearRoomGateway(roomId){
+    if(!canManageCartSettings() || !roomId) return;
+    const state = readState();
+    const room = state.rooms.find(item => item.id === roomId);
+    if(!room) return;
+    if(!window.confirm(`Remover o gateway da sala ${room.name}?`)) return;
+    room.gatewayDeviceId = '';
+    saveState(state);
+    renderCartSettingsContent();
+    renderRooms();
+  }
+
+  function deleteCartDevice(cartId){
+    if(!canManageCartSettings() || !cartId) return;
+    const state = readState();
+    const cart = state.carts.find(item => item.id === cartId);
+    if(!cart) return;
+    if(!window.confirm(`Excluir o dispositivo ${cartDisplayName(cart)}?`)) return;
+    state.carts = state.carts.filter(item => item.id !== cartId);
+    state.telemetryEvents = (state.telemetryEvents || []).filter(event => event.cartId !== cartId);
+    saveState(state);
+    renderCartSettingsContent();
+    renderRooms();
+  }
+
   function openCartSettings(){
     if(!canManageCartSettings()) return;
     const overlay = document.getElementById('cartSettingsOverlay');
+    cartSettingsView = 'home';
     renderCartSettingsContent();
     if(overlay) overlay.hidden = false;
   }
@@ -12194,6 +12372,8 @@ if(false){(function(){
     const saveBtn = document.getElementById('cartDetailSaveBtn');
     const summary = document.getElementById('cartDetailDeviceSummary');
     const canManage = canManageCartSettings();
+    const isNewCart = !cart;
+    const canEditIdentity = canManage && isNewCart;
 
     if(title) title.textContent = cart?.name || 'Novo dispositivo';
     if(meta){
@@ -12203,9 +12383,9 @@ if(false){(function(){
     }
     if(name) name.value = cart?.name || '';
     if(mac) mac.value = cart ? formatMac(cart.mac) : '';
-    if(name) name.readOnly = !canManage;
-    if(mac) mac.readOnly = !canManage;
-    if(saveBtn) saveBtn.hidden = !canManage;
+    if(name) name.readOnly = !canEditIdentity;
+    if(mac) mac.readOnly = !canEditIdentity;
+    if(saveBtn) saveBtn.hidden = !canEditIdentity;
     if(summary){
       summary.innerHTML = cart ? `
         <span><small>MAC</small><strong>${escapeHtml(formatMac(cart.mac))}</strong></span>
@@ -12223,7 +12403,7 @@ if(false){(function(){
     setCalibrationExpanded(false);
 
     overlay.hidden = false;
-    name?.focus();
+    if(canEditIdentity) name?.focus();
   }
 
   function closeCartDetail(){
@@ -12252,6 +12432,12 @@ if(false){(function(){
     }
 
     let cart = state.carts.find(item => item.id === cartId);
+    if(cart){
+      closeCartDetail();
+      renderRooms();
+      return;
+    }
+
     if(!cart){
       cart = {
         id:`cart-${cleanMac(mac).toLowerCase()}`,
