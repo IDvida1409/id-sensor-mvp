@@ -11371,7 +11371,6 @@ if(false){(function(){
     overlay.dataset.mode = options.history ? 'history' : 'popup';
     if(options.history){
       cartAlertModalView = 'list';
-      acknowledgeCartAlert('', true);
       renderCartAlertModalContent();
     }else{
       const alert = (state.alerts || []).find(item => item.id === alertId) || sortedCartAlerts(state).find(item => !item.acknowledgedAt) || null;
@@ -11380,6 +11379,10 @@ if(false){(function(){
       if(options.playSound && !wasVisible && shouldPlayCartAlertSound(state)) playCartAlertSound();
     }
     overlay.hidden = false;
+  }
+
+  function openCartAlertInbox(){
+    openCartAlertModal('', { history:true });
   }
 
   function closeCartAlertModal(){
@@ -11975,7 +11978,7 @@ if(false){(function(){
           <button type="button" class="cart-report-global-btn" data-cart-report-modal aria-label="Relatório analítico" title="Relatório analítico">
             <span class="graph-report-icon">${getReportIcon()}</span>
           </button>
-          <button type="button" class="cart-alert-global-btn" data-cart-alerts-modal aria-label="Alertas do painel" title="Alertas do painel">
+          <button type="button" class="cart-alert-global-btn" data-cart-alerts-modal aria-label="Alertas do painel" title="Alertas do painel" onclick="if(window.openCartAlertInbox){window.openCartAlertInbox();} return false;">
             <span class="cart-alert-mail-icon">${getAlertMailboxIcon()}</span>
             ${alertsTotal ? `<b>${countText(alertsTotal)}</b>` : ''}
           </button>
@@ -11986,7 +11989,7 @@ if(false){(function(){
     summary.querySelector('[data-cart-alerts-modal]')?.addEventListener('click', event => {
       event.preventDefault();
       event.stopPropagation();
-      openCartAlertModal('', { history:true });
+      openCartAlertInbox();
     });
   }
 
@@ -12454,7 +12457,7 @@ if(false){(function(){
 
     const alertsButton = event.target.closest('[data-cart-alerts-modal]');
     if(alertsButton){
-      openCartAlertModal('', { history:true });
+      openCartAlertInbox();
       return;
     }
 
@@ -13470,7 +13473,7 @@ if(false){(function(){
     if(alertsButton){
       event.preventDefault();
       event.stopPropagation();
-      openCartAlertModal('', { history:true });
+      openCartAlertInbox();
     }
   });
 
@@ -13482,6 +13485,7 @@ if(false){(function(){
 
   window.openCartTrackingView = openCartTrackingView;
   window.closeCartTrackingView = closeCartTrackingView;
+  window.openCartAlertInbox = openCartAlertInbox;
 })();
 
 
