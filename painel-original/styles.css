@@ -16435,3 +16435,36 @@ body.analytic-report-open{overflow:hidden}
     width:min(330px,100%) !important;
   }
 }
+
+/* ===== Einstein card shell 10 percent reduction ===== */
+.cart-tracking-v2 .cart-item-unit{
+  grid-template-columns:137px minmax(153px,1fr) !important;
+  width:330px !important;
+}
+
+.cart-tracking-v2 .cart-card-stack{
+  max-width:137px !important;
+  min-width:137px !important;
+  width:137px !important;
+}
+
+.cart-tracking-v2 .cart-card-stack .cart-item-card,
+.cart-tracking-v2 .cart-card-stack .cart-item-card.transit{
+  height:119px !important;
+  max-height:119px !important;
+  max-width:137px !important;
+  min-height:119px !important;
+  min-width:137px !important;
+  width:137px !important;
+}
+
+.cart-tracking-v2 .cart-side-limit small{
+  max-width:153px !important;
+}
+
+@media (max-width:760px){
+  .cart-tracking-v2 .cart-item-unit{
+    grid-template-columns:137px minmax(153px,1fr) !important;
+    width:min(330px,100%) !important;
+  }
+}
