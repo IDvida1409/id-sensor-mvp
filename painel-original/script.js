@@ -10110,7 +10110,11 @@ if(false){(function(){
         alertState.lastCriticalAlertAt = ts;
         changed = true;
       }
-    }else if(previous.fillTone === 'full' && alertState.criticalStartedAt){
+    }else if(
+      previous.fillTone === 'full'
+      && !['obstruction', 'sensor', 'pending', 'lost'].includes(nextTone)
+      && alertState.criticalStartedAt
+    ){
       if(appendCartAlert(state, {
         key:`exchange|${cart.id}|${alertState.criticalStartedAt}|${ts}`,
         type:'exchange',
@@ -10184,6 +10188,21 @@ if(false){(function(){
       reading?.createdAt || '',
       reading?.lorawanDeviceId || ''
     ].join('|');
+  }
+
+  function isOfficialCartReading(reading){
+    return reading?.officialReading === true
+      || reading?.officialReading === 1
+      || String(reading?.officialReading || '').toLowerCase() === 'true';
+  }
+
+  function isTechnicalReadingStatus(status){
+    return [
+      'sensor_removed',
+      'sensor_obstructed',
+      'uncalibrated',
+      'calibration_pending'
+    ].includes(String(status || '').toLowerCase());
   }
 
   function setCartLocation(cart, nextLocationStatus, nextTransitStep = 0){
@@ -10275,7 +10294,6 @@ if(false){(function(){
         lastReadingAt:cart.lastReadingAt || ''
       };
       const fill = finiteNumberOrNull(reading.fillPercentage);
-      const candidateFill = finiteNumberOrNull(reading.candidateFillPercentage);
       const distance = finiteNumberOrNull(reading.distanceMm);
       const battery = finiteNumberOrNull(reading.battery);
       const batteryVoltage = finiteNumberOrNull(reading.batteryVoltageMv);
@@ -10286,6 +10304,7 @@ if(false){(function(){
       const candidateLevelReads = finiteNumberOrNull(reading.candidateLevelReadings);
       const gatewayRoomId = state.rooms.find(room => gatewayMatchesRoom(room.gatewayDeviceId, reading.lorawanDeviceId))?.id;
       const rawStatus = String(reading.status || '').toLowerCase();
+      const officialReading = isOfficialCartReading(reading);
       const confirmedLidState = String(reading.confirmedLidState || '').toLowerCase();
       const currentCalibration = cartCalibration(cart);
       const readingCalibration = reading.calibration
@@ -10293,6 +10312,7 @@ if(false){(function(){
         : null;
       const effectiveCalibration = readingCalibration || currentCalibration;
       const sensorPositionAlert = rawStatus === 'sensor_removed' || rawStatus === 'sensor_obstructed';
+      const technicalReadingStatus = isTechnicalReadingStatus(rawStatus);
       const readingLidOpen = effectiveCalibration.lidDetectionEnabled === true
         && !sensorPositionAlert
         && ([
@@ -10308,14 +10328,11 @@ if(false){(function(){
         cart.calibration = readingCalibration;
         changed = true;
       }
-      const calibratedFill = backendFill === null && !readingLidOpen && distance !== null
+      const calibratedFill = backendFill === null && !readingLidOpen && !technicalReadingStatus && distance !== null
         ? fillPercentageForDistance(cartCalibration(cart), distance)
         : null;
       const nextFill = backendFill !== null ? backendFill : calibratedFill;
-      const visualCandidateFill = normalizeCartFillPercentage(candidateFill);
-      const nextDisplayFill = visualCandidateFill !== null
-        ? visualCandidateFill
-        : nextFill;
+      const nextDisplayFill = nextFill;
 
       if(nextFill !== null && Math.round(nextFill) !== Math.round(Number(cart.fillPercentage || 0))){
         cart.fillPercentage = Math.round(nextFill);
@@ -10376,14 +10393,20 @@ if(false){(function(){
       let readingAt = '';
       if(reading.createdAt || reading.receivedAt){
         readingAt = reading.createdAt || reading.receivedAt;
-        const lastSeen = relativeTime(readingAt);
-        if(cart.lastReadingAt !== readingAt){
-          cart.lastReadingAt = readingAt;
+        if(cart.lastCommunicationAt !== readingAt){
+          cart.lastCommunicationAt = readingAt;
           changed = true;
         }
-        if(cart.lastSeen !== lastSeen){
-          cart.lastSeen = lastSeen;
-          changed = true;
+        if(officialReading){
+          const lastSeen = relativeTime(readingAt);
+          if(cart.lastReadingAt !== readingAt){
+            cart.lastReadingAt = readingAt;
+            changed = true;
+          }
+          if(cart.lastSeen !== lastSeen){
+            cart.lastSeen = lastSeen;
+            changed = true;
+          }
         }
       }
       if(applyGatewayRoomToCart(cart, gatewayRoomId, rssi, reading)) changed = true;
@@ -10398,7 +10421,7 @@ if(false){(function(){
         fill:cartVisualFill(cart),
         distanceMm:cart.distanceMm
       };
-      if(readingAt && readingAt !== previous.lastReadingAt){
+      if(officialReading && readingAt && readingAt !== previous.lastReadingAt){
         if(appendTelemetryEvent(state, {
           ...eventBase,
           key:`reading|${cart.id}|${readingAt}`,
@@ -10521,6 +10544,8 @@ if(false){(function(){
   function fillLabel(cart){
     const rawStatus = String(cart?.collectorStatus || '').toLowerCase();
     if(isLostCart(cart)) return 'Perdido';
+    if(rawStatus === 'uncalibrated') return 'Aguardando calibracao';
+    if(rawStatus === 'calibration_pending') return 'Validando leitura';
     if(rawStatus === 'sensor_removed') return 'Sensor fora da posição';
     if(rawStatus === 'sensor_obstructed') return 'Possível obstrução';
     if(isLidOpen(cart)) return 'Porta aberta';
@@ -10538,8 +10563,9 @@ if(false){(function(){
   function fillTone(cart){
     const rawStatus = String(cart?.collectorStatus || '').toLowerCase();
     if(isLostCart(cart)) return 'lost';
-    if(rawStatus === 'sensor_removed') return 'empty';
-    if(rawStatus === 'sensor_obstructed') return 'full';
+    if(rawStatus === 'uncalibrated' || rawStatus === 'calibration_pending') return 'pending';
+    if(rawStatus === 'sensor_removed') return 'sensor';
+    if(rawStatus === 'sensor_obstructed') return 'obstruction';
     const fill = cartVisualFill(cart);
     if(fill >= cartRedPercent(cart)) return 'full';
     return 'empty';
@@ -10561,6 +10587,8 @@ if(false){(function(){
   function cartReadingDetail(cart){
     const distance = finiteNumberOrNull(cart?.distanceMm);
     const rawStatus = String(cart?.collectorStatus || '').toLowerCase();
+    if(rawStatus === 'uncalibrated') return 'Aguardando calibracao';
+    if(rawStatus === 'calibration_pending') return 'Aguardando ciclo oficial';
     if(rawStatus === 'sensor_removed'){
       return distance !== null ? `Sensor fora da posição - ${Math.round(distance)} mm` : 'Sensor fora da posição';
     }
@@ -11761,6 +11789,28 @@ if(false){(function(){
     return normalizeCartCalibration(payload?.data?.calibration || calibration);
   }
 
+  function resetCartOperationalCycleAfterCalibration(cart){
+    if(!cart) return;
+    cart.collectorStatus = 'calibration_pending';
+    cart.levelStatus = '';
+    cart.candidateLevelReadings = 0;
+    cart.consecutiveCriticalReadings = 0;
+    cart.consecutiveLidOpenReadings = 0;
+    cart.consecutiveLidClosedReadings = 0;
+    cart.consecutiveObstructedReadings = 0;
+    cart.consecutiveSensorRemovedReadings = 0;
+    cart.lidOpen = false;
+    delete cart.pendingFullReadingKey;
+    delete cart.pendingFullReadings;
+    if(cart.alertState && typeof cart.alertState === 'object'){
+      cart.alertState.criticalStartedAt = '';
+      cart.alertState.lastCriticalAlertAt = '';
+      cart.alertState.lastObstructionAlertAt = '';
+      cart.alertState.lastSensorAlertAt = '';
+    }
+    cart.calibrationCycleResetAt = cart.calibration?.updatedAt || new Date().toISOString();
+  }
+
   function wait(ms){
     return new Promise(resolve => window.setTimeout(resolve, ms));
   }
@@ -11847,6 +11897,7 @@ if(false){(function(){
     try{
       setCalibrationStatus('Salvando calibracao no backend...', 'info');
       cart.calibration = await saveCartCalibrationToBackend(cart, next);
+      resetCartOperationalCycleAfterCalibration(cart);
       saveState(state);
       renderCartCalibrationPanel(cart);
       renderRooms();
@@ -11878,6 +11929,7 @@ if(false){(function(){
     try{
       setCalibrationStatus('Salvando modo de leitura...', 'info');
       cart.calibration = await saveCartCalibrationToBackend(cart, next);
+      resetCartOperationalCycleAfterCalibration(cart);
       saveState(state);
       renderCartCalibrationPanel(cart);
       renderRooms();
@@ -11925,6 +11977,7 @@ if(false){(function(){
     try{
       setCalibrationNewStatus('Salvando nova calibracao no backend...', 'info');
       cart.calibration = await saveCartCalibrationToBackend(cart, next);
+      resetCartOperationalCycleAfterCalibration(cart);
       saveState(state);
       renderCartCalibrationPanel(cart);
       renderRooms();
@@ -11972,7 +12025,7 @@ if(false){(function(){
   }
 
   function isFreeCart(cart){
-    return !isLostCart(cart) && fillTone(cart) !== 'full';
+    return !isLostCart(cart) && fillTone(cart) === 'empty';
   }
 
   function cartMatchesFilter(cart, filter = activeCartFilter){

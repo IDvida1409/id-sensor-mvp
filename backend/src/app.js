@@ -71,9 +71,14 @@ const CART_LEVEL_CONFIRM_READINGS = Number(process.env.CART_LEVEL_CONFIRM_READIN
 const CART_CRITICAL_CONFIRM_READINGS = Number(process.env.CART_CRITICAL_CONFIRM_READINGS || CART_LEVEL_CONFIRM_READINGS);
 const CART_LID_OPEN_CONFIRM_READINGS = Number(process.env.CART_LID_OPEN_CONFIRM_READINGS || 4);
 const CART_LID_CLOSE_CONFIRM_READINGS = Number(process.env.CART_LID_CLOSE_CONFIRM_READINGS || CART_LID_OPEN_CONFIRM_READINGS);
+const CART_OBSTRUCTION_CONFIRM_READINGS = Number(process.env.CART_OBSTRUCTION_CONFIRM_READINGS || 3);
+const CART_SENSOR_REMOVED_CONFIRM_READINGS = Number(process.env.CART_SENSOR_REMOVED_CONFIRM_READINGS || 3);
+const CART_READING_SPIKE_PERCENT = Number(process.env.CART_READING_SPIKE_PERCENT || 25);
 const COLLECTOR_LID_OPEN_STATUS = 'lid_open';
 const COLLECTOR_SENSOR_REMOVED_STATUS = 'sensor_removed';
 const COLLECTOR_SENSOR_OBSTRUCTED_STATUS = 'sensor_obstructed';
+const COLLECTOR_UNCALIBRATED_STATUS = 'uncalibrated';
+const COLLECTOR_CALIBRATION_PENDING_STATUS = 'calibration_pending';
 const COLLECTOR_LID_OPEN_STATE = 'open';
 const COLLECTOR_LID_CLOSED_STATE = 'closed';
 const COLLECTOR_EMPTY_LEVEL_STATUS = 'empty';
@@ -586,6 +591,18 @@ function collectorCalibrationForSensor(db, bleSensorId) {
   return normalizeCollectorCalibration(row || KNOWN_COLLECTOR_CALIBRATIONS[sensorId] || {});
 }
 
+function isCollectorOperationalCalibration(calibration) {
+  return Boolean(normalizeCollectorCalibration(calibration).updatedAt);
+}
+
+function isCollectorReadingBeforeCalibration(row, calibration) {
+  const calibrationMs = new Date(calibration?.updatedAt || '').getTime();
+  const readingMs = new Date(row?.created_at || row?.createdAt || '').getTime();
+  return Number.isFinite(calibrationMs)
+    && Number.isFinite(readingMs)
+    && readingMs < calibrationMs;
+}
+
 function saveCollectorCalibration(db, bleSensorId, calibration) {
   const sensorId = compactBleSensorId(bleSensorId);
   if (!sensorId) {
@@ -713,7 +730,7 @@ function calculateCollectorFillPercentage(distanceMm, calibration) {
   const normalized = normalizeCollectorCalibration(calibration);
   const distance = finiteNumberOrNull(distanceMm);
   if (distance === null) return null;
-  if (isCollectorObstructedDistance(distance, normalized)) return 100;
+  if (isCollectorObstructedDistance(distance, normalized)) return null;
   if (!isCollectorCalibratedDistance(distance, normalized)) return null;
 
   const fillPercentage = calculateFillPercentage(
@@ -748,7 +765,8 @@ function collectorLevelForFillPercentage(fillPercentage, calibration = null) {
 function collectorStatusForLevel(levelStatus) {
   if (levelStatus === COLLECTOR_CRITICAL_LEVEL_STATUS) return 'critical_confirmed';
   if (levelStatus === COLLECTOR_ATTENTION_LEVEL_STATUS) return 'attention';
-  return 'normal';
+  if ([COLLECTOR_EMPTY_LEVEL_STATUS, COLLECTOR_NORMAL_LEVEL_STATUS].includes(levelStatus)) return 'normal';
+  return COLLECTOR_CALIBRATION_PENDING_STATUS;
 }
 
 function isCollectorReadingOffline(createdAt) {
@@ -796,6 +814,9 @@ function collectorStatusForRow(row, fillPercentage, calibration = null) {
   if (isCollectorReadingOffline(row.created_at)) return 'offline';
   const normalizedCalibration = normalizeCollectorCalibration(calibration);
   const storedStatus = String(row?.status || '').trim().toLowerCase();
+  if ([COLLECTOR_UNCALIBRATED_STATUS, COLLECTOR_CALIBRATION_PENDING_STATUS].includes(storedStatus)) {
+    return storedStatus;
+  }
   if ([COLLECTOR_SENSOR_REMOVED_STATUS, COLLECTOR_SENSOR_OBSTRUCTED_STATUS].includes(storedStatus)) {
     return storedStatus;
   }
@@ -841,6 +862,16 @@ function isSameCollectorPayload(previous, normalizedReading, receivedAt) {
     && String(previous.lorawan_device_id || '') === String(normalizedReading?.lorawanDeviceId || '');
 }
 
+function isCollectorTechnicalStatus(status) {
+  return [
+    COLLECTOR_LID_OPEN_STATUS,
+    COLLECTOR_SENSOR_REMOVED_STATUS,
+    COLLECTOR_SENSOR_OBSTRUCTED_STATUS,
+    COLLECTOR_UNCALIBRATED_STATUS,
+    COLLECTOR_CALIBRATION_PENDING_STATUS
+  ].includes(String(status || '').trim().toLowerCase());
+}
+
 function previousCollectorReading(db, bleSensorId) {
   if (!bleSensorId) return null;
   return db.prepare(`
@@ -852,11 +883,30 @@ function previousCollectorReading(db, bleSensorId) {
   `).get(bleSensorId);
 }
 
+function previousCollectorOfficialReading(db, bleSensorId, calibration) {
+  if (!bleSensorId) return null;
+  const rows = db.prepare(`
+    SELECT *
+    FROM collector_readings
+    WHERE ble_sensor_id = ?
+    ORDER BY created_at DESC
+    LIMIT 200
+  `).all(bleSensorId);
+
+  return rows.find((row) => {
+    if (!row || isCollectorReadingBeforeCalibration(row, calibration)) return false;
+    if (isCollectorTechnicalStatus(row.status)) return false;
+    return normalizeCollectorFillPercentage(row.fill_percentage) !== null;
+  }) || null;
+}
+
 function serializeCollectorReading(row, calibration = null) {
   const rowCalibration = serializeCollectorCalibration(calibration || row.calibration || {});
   const consecutiveCriticalReadings = Number(row.consecutive_critical_readings || 0);
   const consecutiveLidOpenReadings = Number(row.consecutive_lid_open_readings || 0);
   const consecutiveLidClosedReadings = Number(row.consecutive_lid_closed_readings || 0);
+  const consecutiveObstructedReadings = Number(row.consecutive_obstructed_readings || 0);
+  const consecutiveSensorRemovedReadings = Number(row.consecutive_sensor_removed_readings || 0);
   const candidateLevelReadings = Number(row.candidate_level_readings || 0);
   const fillPercentage = normalizeCollectorFillPercentage(row.fill_percentage);
   const confirmedLidState = collectorLidStateForRow(row);
@@ -885,9 +935,12 @@ function serializeCollectorReading(row, calibration = null) {
     consecutiveCriticalReadings,
     consecutiveLidOpenReadings,
     consecutiveLidClosedReadings,
+    consecutiveObstructedReadings,
+    consecutiveSensorRemovedReadings,
     candidateLevelStatus: row.candidate_level_status || null,
     candidateLevelReadings,
     candidateFillPercentage: normalizeCollectorFillPercentage(row.candidate_fill_percentage),
+    officialReading: Boolean(Number(row.official_reading || 0)),
     fPort: row.f_port === null || row.f_port === undefined ? null : Number(row.f_port),
     rawPayload: row.raw_payload,
     receivedAt: row.received_at,
@@ -909,19 +962,36 @@ function saveCollectorReading(db, normalizedReading) {
   const receivedAt = collectorPayloadReceivedAt(normalizedReading) || createdAt;
   const distanceMm = finiteNumberOrNull(normalizedReading.distanceMm);
   const calibration = collectorCalibrationForSensor(db, bleSensorId);
+  const hasOperationalCalibration = isCollectorOperationalCalibration(calibration);
   const requiredReadings = Math.max(1, Number(calibration.confirmationReadings || CART_LEVEL_CONFIRM_READINGS));
-  const previous = previousCollectorReading(db, bleSensorId);
-  const previousFillPercentage = normalizeCollectorFillPercentage(previous?.fill_percentage);
-  const previousConfirmedFill = previousFillPercentage !== null ? previousFillPercentage : 0;
-  const previousConfirmedLevel = collectorLevelForRow(previous, previousFillPercentage, calibration);
+  let previous = previousCollectorReading(db, bleSensorId);
+  if (previous && isCollectorReadingBeforeCalibration(previous, calibration)) {
+    previous = null;
+  }
+  const previousOfficial = previousCollectorOfficialReading(db, bleSensorId, calibration);
+  const previousFillPercentage = normalizeCollectorFillPercentage(previousOfficial?.fill_percentage);
+  const previousConfirmedFill = previousFillPercentage !== null ? previousFillPercentage : null;
+  const previousConfirmedLevel = previousFillPercentage !== null
+    ? collectorLevelForRow(previousOfficial, previousFillPercentage, calibration)
+    : null;
   const previousLidState = collectorLidStateForRow(previous);
   const previousLidOpenReadings = Number(previous?.consecutive_lid_open_readings || 0);
   const previousLidClosedReadings = Number(previous?.consecutive_lid_closed_readings || 0);
-  const samePayloadAsPrevious = isSameCollectorPayload(previous, normalizedReading, receivedAt);
-  const lidOpenCandidate = isCollectorLidOpenDistance(distanceMm, calibration);
-  const sensorRemovedCandidate = isCollectorSensorRemovedDistance(distanceMm, calibration);
-  const sensorObstructedCandidate = isCollectorObstructedDistance(distanceMm, calibration);
-  const lidClosedCandidate = isCollectorLidClosedDistance(distanceMm, calibration);
+  const previousObstructedReadings = Number(previous?.consecutive_obstructed_readings || 0);
+  const previousSensorRemovedReadings = Number(previous?.consecutive_sensor_removed_readings || 0);
+  const samePayloadAsPrevious = Boolean(previous) && isSameCollectorPayload(previous, normalizedReading, receivedAt);
+  const lidOpenCandidate = hasOperationalCalibration && isCollectorLidOpenDistance(distanceMm, calibration);
+  const sensorRemovedCandidate = hasOperationalCalibration && isCollectorSensorRemovedDistance(distanceMm, calibration);
+  const sensorObstructedCandidate = hasOperationalCalibration && isCollectorObstructedDistance(distanceMm, calibration);
+  const lidClosedCandidate = hasOperationalCalibration && isCollectorLidClosedDistance(distanceMm, calibration);
+  const consecutiveObstructedReadings = sensorObstructedCandidate
+    ? (samePayloadAsPrevious ? previousObstructedReadings : previousObstructedReadings + 1)
+    : 0;
+  const consecutiveSensorRemovedReadings = sensorRemovedCandidate
+    ? (samePayloadAsPrevious ? previousSensorRemovedReadings : previousSensorRemovedReadings + 1)
+    : 0;
+  const confirmedObstructed = consecutiveObstructedReadings >= Math.max(1, CART_OBSTRUCTION_CONFIRM_READINGS);
+  const confirmedSensorRemoved = consecutiveSensorRemovedReadings >= Math.max(1, CART_SENSOR_REMOVED_CONFIRM_READINGS);
   let confirmedLidState = previousLidState;
   let consecutiveLidOpenReadings = previousLidOpenReadings;
   let consecutiveLidClosedReadings = previousLidClosedReadings;
@@ -958,37 +1028,47 @@ function saveCollectorReading(db, normalizedReading) {
     confirmedLidState = COLLECTOR_LID_CLOSED_STATE;
   }
 
-  if (!calibration.lidDetectionEnabled || sensorRemovedCandidate || sensorObstructedCandidate) {
+  if (!calibration.lidDetectionEnabled || confirmedSensorRemoved || confirmedObstructed) {
     confirmedLidState = COLLECTOR_LID_CLOSED_STATE;
     consecutiveLidOpenReadings = 0;
     consecutiveLidClosedReadings = 0;
   }
 
-  const rawFillPercentage = calculateCollectorFillPercentage(distanceMm, calibration);
+  const rawFillPercentage = hasOperationalCalibration
+    && !sensorRemovedCandidate
+    && !sensorObstructedCandidate
+    && !lidOpenCandidate
+    ? calculateCollectorFillPercentage(distanceMm, calibration)
+    : null;
   const rawLevelStatus = collectorLevelForFillPercentage(rawFillPercentage, calibration);
   const previousCandidateLevel = String(previous?.candidate_level_status || '').trim().toLowerCase();
   const previousCandidateReadings = Number(previous?.candidate_level_readings || 0);
-  let candidateLevelStatus = null;
-  let candidateLevelReadings = 0;
-  let candidateFillPercentage = null;
+  const previousCandidateFill = normalizeCollectorFillPercentage(previous?.candidate_fill_percentage);
+  let candidateLevelStatus = previousCandidateLevel || null;
+  let candidateLevelReadings = previousCandidateReadings;
+  let candidateFillPercentage = previousCandidateFill;
   let fillPercentage = previousConfirmedFill;
   let confirmedLevelStatus = previousConfirmedLevel;
+  let officialReading = false;
 
   if (rawFillPercentage !== null && rawLevelStatus) {
-    const materialLevelChange = rawLevelStatus !== previousConfirmedLevel;
-    const materialFillChange = Math.abs(rawFillPercentage - previousConfirmedFill) >= CART_FILL_CHANGE_DEADBAND_PERCENT;
+    const sameCandidate = previousCandidateLevel === rawLevelStatus;
+    const spikeFromCandidate = sameCandidate
+      && previousCandidateFill !== null
+      && Math.abs(rawFillPercentage - previousCandidateFill) > CART_READING_SPIKE_PERCENT;
+    candidateLevelStatus = rawLevelStatus;
+    candidateFillPercentage = rawFillPercentage;
+    candidateLevelReadings = samePayloadAsPrevious
+      ? previousCandidateReadings
+      : (sameCandidate && !spikeFromCandidate ? previousCandidateReadings + 1 : 1);
 
-    if (materialLevelChange || materialFillChange || previousFillPercentage === null) {
-      candidateLevelStatus = rawLevelStatus;
-      candidateFillPercentage = rawFillPercentage;
-      candidateLevelReadings = samePayloadAsPrevious
-        ? previousCandidateReadings
-        : (previousCandidateLevel === rawLevelStatus ? previousCandidateReadings + 1 : 1);
-
-      if (candidateLevelReadings >= requiredReadings) {
-        fillPercentage = rawFillPercentage;
-        confirmedLevelStatus = rawLevelStatus;
-      }
+    if (candidateLevelReadings >= requiredReadings) {
+      fillPercentage = rawFillPercentage;
+      confirmedLevelStatus = rawLevelStatus;
+      candidateLevelStatus = null;
+      candidateLevelReadings = 0;
+      candidateFillPercentage = null;
+      officialReading = true;
     }
   }
 
@@ -997,13 +1077,15 @@ function saveCollectorReading(db, normalizedReading) {
   const consecutiveCriticalReadings = criticalCandidate
     ? candidateLevelReadings
     : (confirmedCritical ? Math.max(requiredReadings, Number(previous?.consecutive_critical_readings || 0)) : 0);
-  const status = sensorRemovedCandidate
-    ? COLLECTOR_SENSOR_REMOVED_STATUS
-    : (sensorObstructedCandidate
-      ? COLLECTOR_SENSOR_OBSTRUCTED_STATUS
-      : (confirmedLidState === COLLECTOR_LID_OPEN_STATE
-        ? COLLECTOR_LID_OPEN_STATUS
-        : collectorStatusForLevel(confirmedLevelStatus)));
+  const status = !hasOperationalCalibration
+    ? COLLECTOR_UNCALIBRATED_STATUS
+    : (confirmedSensorRemoved
+      ? COLLECTOR_SENSOR_REMOVED_STATUS
+      : (confirmedObstructed
+        ? COLLECTOR_SENSOR_OBSTRUCTED_STATUS
+        : (confirmedLidState === COLLECTOR_LID_OPEN_STATE
+          ? COLLECTOR_LID_OPEN_STATUS
+          : collectorStatusForLevel(confirmedLevelStatus))));
   const row = {
     id: id('collector_reading'),
     bleSensorId,
@@ -1023,6 +1105,9 @@ function saveCollectorReading(db, normalizedReading) {
     candidateLevelStatus,
     candidateLevelReadings,
     candidateFillPercentage,
+    consecutiveObstructedReadings,
+    consecutiveSensorRemovedReadings,
+    officialReading,
     fPort: finiteNumberOrNull(normalizedReading.fPort),
     rawPayload: normalizedReading.rawPayload || null,
     receivedAt,
@@ -1035,10 +1120,11 @@ function saveCollectorReading(db, normalizedReading) {
       id, ble_sensor_id, lorawan_device_id, lorawan_gateway_id,
       distance_mm, fill_percentage, status, battery, battery_voltage_mv, rssi_ble,
       consecutive_critical_readings, consecutive_lid_open_readings, consecutive_lid_closed_readings,
+      consecutive_obstructed_readings, consecutive_sensor_removed_readings,
       confirmed_lid_state, confirmed_level_status, candidate_level_status, candidate_level_readings,
-      candidate_fill_percentage, f_port, raw_payload, received_at,
+      candidate_fill_percentage, official_reading, f_port, raw_payload, received_at,
       created_at, original_payload_json
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     row.id,
     row.bleSensorId,
@@ -1053,11 +1139,14 @@ function saveCollectorReading(db, normalizedReading) {
     row.consecutiveCriticalReadings,
     row.consecutiveLidOpenReadings,
     row.consecutiveLidClosedReadings,
+    row.consecutiveObstructedReadings,
+    row.consecutiveSensorRemovedReadings,
     row.confirmedLidState,
     row.confirmedLevelStatus,
     row.candidateLevelStatus,
     row.candidateLevelReadings,
     row.candidateFillPercentage,
+    row.officialReading ? 1 : 0,
     row.fPort,
     row.rawPayload,
     row.receivedAt,
@@ -1079,11 +1168,14 @@ function saveCollectorReading(db, normalizedReading) {
     consecutive_critical_readings: row.consecutiveCriticalReadings,
     consecutive_lid_open_readings: row.consecutiveLidOpenReadings,
     consecutive_lid_closed_readings: row.consecutiveLidClosedReadings,
+    consecutive_obstructed_readings: row.consecutiveObstructedReadings,
+    consecutive_sensor_removed_readings: row.consecutiveSensorRemovedReadings,
     confirmed_lid_state: row.confirmedLidState,
     confirmed_level_status: row.confirmedLevelStatus,
     candidate_level_status: row.candidateLevelStatus,
     candidate_level_readings: row.candidateLevelReadings,
     candidate_fill_percentage: row.candidateFillPercentage,
+    official_reading: row.officialReading ? 1 : 0,
     f_port: row.fPort,
     raw_payload: row.rawPayload,
     received_at: row.receivedAt,

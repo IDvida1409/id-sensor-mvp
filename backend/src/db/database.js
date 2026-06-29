@@ -180,11 +180,14 @@ function initDb() {
       consecutive_critical_readings INTEGER NOT NULL DEFAULT 0,
       consecutive_lid_open_readings INTEGER NOT NULL DEFAULT 0,
       consecutive_lid_closed_readings INTEGER NOT NULL DEFAULT 0,
+      consecutive_obstructed_readings INTEGER NOT NULL DEFAULT 0,
+      consecutive_sensor_removed_readings INTEGER NOT NULL DEFAULT 0,
       confirmed_lid_state TEXT NOT NULL DEFAULT 'closed',
       confirmed_level_status TEXT,
       candidate_level_status TEXT,
       candidate_level_readings INTEGER NOT NULL DEFAULT 0,
       candidate_fill_percentage REAL,
+      official_reading INTEGER NOT NULL DEFAULT 0,
       f_port INTEGER,
       raw_payload TEXT,
       received_at TEXT,
@@ -230,11 +233,14 @@ function initDb() {
   ensureColumn(database, 'app_devices', 'usuario_perfil', 'TEXT');
   ensureColumn(database, 'collector_readings', 'consecutive_lid_open_readings', 'INTEGER NOT NULL DEFAULT 0');
   ensureColumn(database, 'collector_readings', 'consecutive_lid_closed_readings', 'INTEGER NOT NULL DEFAULT 0');
+  ensureColumn(database, 'collector_readings', 'consecutive_obstructed_readings', 'INTEGER NOT NULL DEFAULT 0');
+  ensureColumn(database, 'collector_readings', 'consecutive_sensor_removed_readings', 'INTEGER NOT NULL DEFAULT 0');
   ensureColumn(database, 'collector_readings', 'confirmed_lid_state', "TEXT NOT NULL DEFAULT 'closed'");
   ensureColumn(database, 'collector_readings', 'confirmed_level_status', 'TEXT');
   ensureColumn(database, 'collector_readings', 'candidate_level_status', 'TEXT');
   ensureColumn(database, 'collector_readings', 'candidate_level_readings', 'INTEGER NOT NULL DEFAULT 0');
   ensureColumn(database, 'collector_readings', 'candidate_fill_percentage', 'REAL');
+  ensureColumn(database, 'collector_readings', 'official_reading', 'INTEGER NOT NULL DEFAULT 0');
   ensureColumn(database, 'collector_readings', 'battery_voltage_mv', 'REAL');
   ensureColumn(database, 'collector_calibrations', 'lid_detection_enabled', 'INTEGER NOT NULL DEFAULT 0');
   ensureColumn(database, 'panel_users', 'cliente_nome', 'TEXT');
