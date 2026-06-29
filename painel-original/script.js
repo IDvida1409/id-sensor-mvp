@@ -10283,8 +10283,6 @@ if(false){(function(){
 
   function renderCartSideMeta(cart){
     const statusTone = cartStatusTone(cart);
-    const battery = cartBatteryPercent(cart);
-    const batteryWidth = battery === null ? 8 : Math.max(8, Math.min(100, battery));
     const statusLabel = cartSideStatusLabel(cart);
     const statusDetail = cartSideStatusDetail(cart);
     return `
@@ -10298,14 +10296,23 @@ if(false){(function(){
             <small>${escapeHtml(statusDetail)}</small>
           </span>
         ` : ''}
-        <span class="cart-side-row cart-side-reading">
-          <small>Última leitura:</small>
-          <b>${escapeHtml(cart.lastSeen || 'sem leitura')}</b>
-        </span>
-        <span class="cart-side-row cart-side-battery">
+      </div>
+    `;
+  }
+
+  function renderCartUnderMeta(cart){
+    const battery = cartBatteryPercent(cart);
+    const batteryWidth = battery === null ? 8 : Math.max(8, Math.min(100, battery));
+    return `
+      <div class="cart-under-meta" aria-label="Leitura e bateria de ${escapeHtml(cartDisplayName(cart))}">
+        <span class="cart-under-row cart-under-battery">
           <i class="cart-battery-mini ${cartBatteryTone(cart)}" aria-hidden="true"><em style="width:${batteryWidth}%"></em></i>
           <small>Bateria</small>
-          <b>${escapeHtml(cartBatteryLabel(cart))}</b>
+          <span>${escapeHtml(cartBatteryLabel(cart))}</span>
+        </span>
+        <span class="cart-under-row cart-under-reading">
+          <small>Última leitura</small>
+          <span>${escapeHtml(cart.lastSeen || 'sem leitura')}</span>
         </span>
       </div>
     `;
@@ -11457,29 +11464,32 @@ if(false){(function(){
 
     return `
       <div class="cart-item-unit">
-        <button type="button" class="cart-item-card ${tone} ${escapeHtml(cart.locationStatus)} ${lidOpen ? 'lid-open' : 'lid-closed'}" data-cart-id="${escapeHtml(cart.id)}" style="--cart-fill:${visualFill}%;--cart-liquid:${visualFill}%">
-          <span class="cart-card-online-dot ${isLostCart(cart) ? 'offline' : 'online'}" aria-hidden="true"></span>
-          ${showStatus ? `<span class="cart-card-status"><i>${locationLabel(cart)}</i></span>` : ''}
-          <span class="cart-item-body">
-            <strong>${escapeHtml(cartDisplayName(cart))}</strong>
-          </span>
-          <span class="cart-visual" aria-hidden="true">
-            <span class="cart-bin-empty-shell ${lidOpen ? 'open' : 'closed'}">
-              <img
-                class="cart-bin-empty-img"
-                src="./assets/${lidOpen ? 'cart-bin-open-empty.png' : 'cart-bin-closed-empty.png'}"
-                alt=""
-                loading="lazy"
-              />
-              <span class="cart-bin-fill-zone">
-                <span class="cart-bin-liquid"></span>
+        <div class="cart-card-stack">
+          <button type="button" class="cart-item-card ${tone} ${escapeHtml(cart.locationStatus)} ${lidOpen ? 'lid-open' : 'lid-closed'}" data-cart-id="${escapeHtml(cart.id)}" style="--cart-fill:${visualFill}%;--cart-liquid:${visualFill}%">
+            <span class="cart-card-online-dot ${isLostCart(cart) ? 'offline' : 'online'}" aria-hidden="true"></span>
+            ${showStatus ? `<span class="cart-card-status"><i>${locationLabel(cart)}</i></span>` : ''}
+            <span class="cart-item-body">
+              <strong>${escapeHtml(cartDisplayName(cart))}</strong>
+            </span>
+            <span class="cart-visual" aria-hidden="true">
+              <span class="cart-bin-empty-shell ${lidOpen ? 'open' : 'closed'}">
+                <img
+                  class="cart-bin-empty-img"
+                  src="./assets/${lidOpen ? 'cart-bin-open-empty.png' : 'cart-bin-closed-empty.png'}"
+                  alt=""
+                  loading="lazy"
+                />
+                <span class="cart-bin-fill-zone">
+                  <span class="cart-bin-liquid"></span>
+                </span>
               </span>
             </span>
-          </span>
-          <span class="cart-item-foot">
-            <small>${cardLabel}</small>
-          </span>
-        </button>
+            <span class="cart-item-foot">
+              <small>${cardLabel}</small>
+            </span>
+          </button>
+          ${renderCartUnderMeta(cart)}
+        </div>
         ${renderCartSideMeta(cart)}
       </div>
     `;
