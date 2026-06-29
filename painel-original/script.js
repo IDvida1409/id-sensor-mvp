@@ -11978,7 +11978,7 @@ if(false){(function(){
           <button type="button" class="cart-report-global-btn" data-cart-report-modal aria-label="Relatório analítico" title="Relatório analítico">
             <span class="graph-report-icon">${getReportIcon()}</span>
           </button>
-          <button type="button" class="cart-alert-global-btn" data-cart-alerts-modal aria-label="Alertas do painel" title="Alertas do painel" onclick="if(window.openCartAlertInbox){window.openCartAlertInbox();} return false;">
+          <button type="button" class="cart-alert-global-btn" data-cart-alerts-modal aria-label="Alertas do painel" title="Alertas do painel">
             <span class="cart-alert-mail-icon">${getAlertMailboxIcon()}</span>
             ${alertsTotal ? `<b>${countText(alertsTotal)}</b>` : ''}
           </button>
@@ -13493,6 +13493,9 @@ if(false){(function(){
   const STORAGE_KEY = 'idsensor.cartTracking.v8';
   const LAST_POPUP_KEY = 'idsensor.cartAlert.lastPopupId';
   const LAST_SOUND_KEY = 'idsensor.cartAlert.lastSoundId';
+  const STABLE_OVERLAY_ID = 'cartAlertStableOverlay';
+  const STABLE_CONTENT_ID = 'cartAlertStableContent';
+  const STABLE_CLOSE_ID = 'cartAlertStableCloseBtn';
   const ALERT_POLL_MS = 2500;
   const ALERT_TYPES = [
     {
@@ -13627,34 +13630,44 @@ if(false){(function(){
     return '<svg viewBox="0 0 96 96" fill="none" aria-hidden="true"><path d="M34 22h45c4.4 0 8 3.6 8 8v37c0 4.4-3.6 8-8 8H37" stroke="#2f80ff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/><path d="M36 27 60 48 84 27M61 49 85 73" stroke="#2f80ff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/><path d="M31 41c-9 0-16 7.1-16 16v10.5c0 3-.9 5.8-2.7 8.2L10 79h45l-2.2-3.3a14.9 14.9 0 0 1-2.8-8.2V57c0-8.9-7.1-16-16-16h-3Z" fill="#eaf3ff" stroke="#2f80ff" stroke-width="6" stroke-linejoin="round"/><path d="M25 85c3.2 5 10.8 5 14 0M18 91c7 5 21 5 28 0" stroke="#2f80ff" stroke-width="6" stroke-linecap="round"/></svg>';
   }
 
+  function disableLegacyAlertOverlays(){
+    document.querySelectorAll('#cartAlertModalOverlay').forEach(overlay => {
+      overlay.hidden = true;
+      overlay.dataset.mode = 'legacy-disabled';
+      const content = overlay.querySelector('#cartAlertModalContent');
+      if(content) content.innerHTML = '';
+    });
+  }
+
   function ensureStableAlertModal(){
-    let overlay = document.getElementById('cartAlertModalOverlay');
+    disableLegacyAlertOverlays();
+    let overlay = document.getElementById(STABLE_OVERLAY_ID);
     if(!overlay){
       overlay = document.createElement('div');
       overlay.className = 'cart-alert-modal-overlay';
-      overlay.id = 'cartAlertModalOverlay';
+      overlay.id = STABLE_OVERLAY_ID;
       overlay.hidden = true;
       overlay.innerHTML = `
         <div class="cart-alert-modal">
-          <button type="button" class="cart-detail-close" id="cartAlertModalCloseBtn" aria-label="Fechar">x</button>
-          <div id="cartAlertModalContent"></div>
+          <button type="button" class="cart-detail-close" id="${STABLE_CLOSE_ID}" aria-label="Fechar">x</button>
+          <div id="${STABLE_CONTENT_ID}"></div>
         </div>
       `;
     }
     if(overlay.parentElement !== document.body){
       document.body.appendChild(overlay);
     }
-    let content = document.getElementById('cartAlertModalContent');
+    let content = document.getElementById(STABLE_CONTENT_ID);
     if(!content){
       content = document.createElement('div');
-      content.id = 'cartAlertModalContent';
+      content.id = STABLE_CONTENT_ID;
       overlay.querySelector('.cart-alert-modal')?.appendChild(content);
     }
-    if(!document.getElementById('cartAlertModalCloseBtn')){
+    if(!document.getElementById(STABLE_CLOSE_ID)){
       const closeButton = document.createElement('button');
       closeButton.type = 'button';
       closeButton.className = 'cart-detail-close';
-      closeButton.id = 'cartAlertModalCloseBtn';
+      closeButton.id = STABLE_CLOSE_ID;
       closeButton.setAttribute('aria-label', 'Fechar');
       closeButton.textContent = 'x';
       overlay.querySelector('.cart-alert-modal')?.prepend(closeButton);
@@ -13822,7 +13835,8 @@ if(false){(function(){
   }
 
   function closeStableAlertModal(){
-    const overlay = document.getElementById('cartAlertModalOverlay');
+    const overlay = document.getElementById(STABLE_OVERLAY_ID);
+    disableLegacyAlertOverlays();
     if(!overlay) return;
     const alertId = overlay.dataset.alertId || '';
     const isPopup = overlay.dataset.mode === 'popup';
@@ -13848,7 +13862,7 @@ if(false){(function(){
   }
 
   function saveStableAlertSettings(){
-    const content = document.getElementById('cartAlertModalContent');
+    const content = document.getElementById(STABLE_CONTENT_ID);
     if(!content) return;
     const state = readStableAlertState();
     const current = normalizeStableAlertSettings(state.alertSettings);
@@ -13940,7 +13954,7 @@ if(false){(function(){
       updateStableAlertBadges();
     }
     if(!settings.popupEnabled) return;
-    const overlay = document.getElementById('cartAlertModalOverlay');
+    const overlay = document.getElementById(STABLE_OVERLAY_ID);
     if(overlay && !overlay.hidden) return;
     const nextAlert = alerts.find(alert => (
       isUnreadStableAlert(alert) &&
@@ -13963,7 +13977,7 @@ if(false){(function(){
       return;
     }
 
-    if(event.target.closest('#cartAlertModalCloseBtn')){
+    if(event.target.closest(`#${STABLE_CLOSE_ID}`) || event.target.closest('#cartAlertModalCloseBtn')){
       event.preventDefault();
       event.stopPropagation();
       if(typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
