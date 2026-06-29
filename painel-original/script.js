@@ -873,6 +873,15 @@ function getReportIcon(){
   </svg>`;
 }
 
+function getAlertMailboxIcon(){
+  return `<svg viewBox="0 0 64 64" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+    <path d="M23 15h28a5 5 0 0 1 5 5v25a5 5 0 0 1-5 5H23" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="m24 19 16 13 15-13M38 34 55 48" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M20 30a10 10 0 0 0-10 10v7c0 2-.6 3.8-1.8 5.4L7 54h27l-1.2-1.6A9 9 0 0 1 31 47v-7a10 10 0 0 0-11-10Z" fill="#eaf3ff" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/>
+    <path d="M16 58a5 5 0 0 0 8 0M12 60c4 3 12 3 16 0" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
+  </svg>`;
+}
+
 function getOperationalTelemetryIcon(kind){
   const icons = {
     limit: `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="8.5" stroke="currentColor" stroke-width="1.8"/><path d="m8.2 12.2 2.4 2.4 5.1-5.4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
@@ -9451,6 +9460,8 @@ if(false){(function(){
   const CART_SUSPICIOUS_JUMP_PERCENT = 75;
   const CART_CRITICAL_PERCENT = 90;
   const CART_READING_POLL_MS = 5000;
+  const CART_ALERT_RECURRENCE_MS = 30 * 60 * 1000;
+  const CART_ALERT_LIMIT = 80;
   const OBSOLETE_ROOM_IDS = new Set(['sala-bloco-a']);
 
   const defaultState = {
@@ -9487,7 +9498,8 @@ if(false){(function(){
         transitStep:0
       }
     ],
-    telemetryEvents:[]
+    telemetryEvents:[],
+    alerts:[]
   };
 
   let previousSubtitle = '';
@@ -9496,6 +9508,7 @@ if(false){(function(){
   let activeRoomFilter = '';
   let cartSearchTerm = '';
   let cartSettingsView = 'home';
+  let lastGeneratedCartAlertId = '';
   const CART_SETTINGS_PARENT_VIEW = {
     rooms:'home',
     devices:'home',
@@ -9512,7 +9525,8 @@ if(false){(function(){
     const normalized = {
       rooms: Array.isArray(state?.rooms) ? state.rooms : [],
       carts: Array.isArray(state?.carts) ? state.carts : [],
-      telemetryEvents: Array.isArray(state?.telemetryEvents) ? state.telemetryEvents : []
+      telemetryEvents: Array.isArray(state?.telemetryEvents) ? state.telemetryEvents : [],
+      alerts: Array.isArray(state?.alerts) ? state.alerts : []
     };
 
     const activeRooms = normalized.rooms.filter(room => {
@@ -9842,6 +9856,174 @@ if(false){(function(){
     return true;
   }
 
+  function roomNameForAlert(state, roomId){
+    return state.rooms.find(room => room.id === roomId)?.name || 'Sala sem nome';
+  }
+
+  function alertSeverityLabel(type){
+    if(type === 'obstruction') return 'Obstrução provável';
+    if(type === 'sensor') return 'Sensor fora da calibração';
+    if(type === 'recurrence') return 'Recorrência';
+    if(type === 'exchange') return 'Troca registrada';
+    return 'Crítico';
+  }
+
+  function appendCartAlert(state, alert){
+    if(!state || !alert) return false;
+    const list = Array.isArray(state.alerts) ? state.alerts : [];
+    const ts = alert.ts || new Date().toISOString();
+    const key = alert.key || [alert.type, alert.roomId, alert.cartId, ts].join('|');
+    if(list.some(item => item.key === key)) return false;
+    const nextAlert = {
+      id:`alert-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+      key,
+      ts,
+      type:alert.type || 'critical',
+      roomId:alert.roomId || '',
+      roomName:alert.roomName || roomNameForAlert(state, alert.roomId),
+      cartId:alert.cartId || '',
+      cartName:alert.cartName || '',
+      title:alert.title || alertSeverityLabel(alert.type),
+      message:alert.message || '',
+      detail:alert.detail || '',
+      read:false,
+      acknowledgedAt:null
+    };
+    list.push(nextAlert);
+    state.alerts = list
+      .sort((a, b) => new Date(a.ts || 0) - new Date(b.ts || 0))
+      .slice(-CART_ALERT_LIMIT);
+    lastGeneratedCartAlertId = nextAlert.id;
+    appendTelemetryEvent(state, {
+      key:`alert-telemetry|${nextAlert.key}`,
+      type:'alert',
+      roomId:nextAlert.roomId,
+      cartId:nextAlert.cartId,
+      cartName:nextAlert.cartName,
+      ts:nextAlert.ts,
+      title:nextAlert.title,
+      detail:nextAlert.message || nextAlert.detail
+    });
+    return true;
+  }
+
+  function alertAgeLabel(startIso, nowIso){
+    const start = new Date(startIso || '').getTime();
+    const now = new Date(nowIso || '').getTime();
+    if(!Number.isFinite(start) || !Number.isFinite(now) || now < start) return 'agora';
+    return formatCartDurationFromMs(now - start, 'agora');
+  }
+
+  function ensureCartAlertState(cart){
+    if(!cart.alertState || typeof cart.alertState !== 'object') cart.alertState = {};
+    return cart.alertState;
+  }
+
+  function processCartAlerts(state, cart, previous, eventBase, rawStatus){
+    const alertState = ensureCartAlertState(cart);
+    const ts = eventBase.ts || new Date().toISOString();
+    const nowMs = new Date(ts).getTime();
+    const roomName = roomNameForAlert(state, eventBase.roomId);
+    const cartName = cartDisplayName(cart);
+    const nextTone = fillTone(cart);
+    let changed = false;
+
+    if(nextTone === 'full'){
+      if(!alertState.criticalStartedAt || previous.fillTone !== 'full'){
+        alertState.criticalStartedAt = ts;
+        alertState.lastCriticalAlertAt = '';
+        changed = true;
+      }
+      const lastMs = new Date(alertState.lastCriticalAlertAt || 0).getTime();
+      const shouldSendInitial = !alertState.lastCriticalAlertAt;
+      const shouldSendRecurrence = !shouldSendInitial && Number.isFinite(nowMs) && Number.isFinite(lastMs) && nowMs - lastMs >= CART_ALERT_RECURRENCE_MS;
+      if(shouldSendInitial || shouldSendRecurrence){
+        const type = shouldSendInitial ? 'critical' : 'recurrence';
+        const elapsed = alertAgeLabel(alertState.criticalStartedAt, ts);
+        if(appendCartAlert(state, {
+          key:`${type}|${cart.id}|${alertState.criticalStartedAt}|${shouldSendInitial ? 'initial' : Math.floor(nowMs / CART_ALERT_RECURRENCE_MS)}`,
+          type,
+          roomId:eventBase.roomId,
+          roomName,
+          cartId:cart.id,
+          cartName,
+          ts,
+          title:shouldSendInitial ? `${cartName} crítico` : `${cartName} segue crítico`,
+          message:shouldSendInitial
+            ? `${roomName}: ${cartName} atingiu o limite crítico.`
+            : `${roomName}: ${cartName} está crítico há ${elapsed}.`,
+          detail:`Leitura ${Math.round(cartVisualFill(cart))}%${eventBase.distanceMm !== null && eventBase.distanceMm !== undefined ? ` - ${Math.round(eventBase.distanceMm)} mm` : ''}.`
+        })) changed = true;
+        alertState.lastCriticalAlertAt = ts;
+        changed = true;
+      }
+    }else if(previous.fillTone === 'full' && alertState.criticalStartedAt){
+      if(appendCartAlert(state, {
+        key:`exchange|${cart.id}|${alertState.criticalStartedAt}|${ts}`,
+        type:'exchange',
+        roomId:eventBase.roomId,
+        roomName,
+        cartId:cart.id,
+        cartName,
+        ts,
+        title:'Troca de carrinho registrada',
+        message:`${roomName}: ${cartName} voltou para livre.`,
+        detail:`Tempo desde o alerta: ${alertAgeLabel(alertState.criticalStartedAt, ts)}.`
+      })) changed = true;
+      alertState.criticalStartedAt = '';
+      alertState.lastCriticalAlertAt = '';
+      changed = true;
+    }
+
+    if(rawStatus === 'sensor_obstructed'){
+      const lastObstructionMs = new Date(alertState.lastObstructionAlertAt || 0).getTime();
+      if(!alertState.lastObstructionAlertAt || (Number.isFinite(nowMs) && Number.isFinite(lastObstructionMs) && nowMs - lastObstructionMs >= CART_ALERT_RECURRENCE_MS)){
+        if(appendCartAlert(state, {
+          key:`obstruction|${cart.id}|${Math.floor(nowMs / CART_ALERT_RECURRENCE_MS)}`,
+          type:'obstruction',
+          roomId:eventBase.roomId,
+          roomName,
+          cartId:cart.id,
+          cartName,
+          ts,
+          title:`${cartName}: obstrução provável`,
+          message:`${roomName}: possível obstrução no ${cartName}.`,
+          detail:'Salto de leitura detectado pelo sensor.'
+        })) changed = true;
+        alertState.lastObstructionAlertAt = ts;
+        changed = true;
+      }
+    }else if(alertState.lastObstructionAlertAt && rawStatus !== 'sensor_obstructed'){
+      alertState.lastObstructionAlertAt = '';
+      changed = true;
+    }
+
+    if(rawStatus === 'sensor_removed'){
+      const lastSensorMs = new Date(alertState.lastSensorAlertAt || 0).getTime();
+      if(!alertState.lastSensorAlertAt || (Number.isFinite(nowMs) && Number.isFinite(lastSensorMs) && nowMs - lastSensorMs >= CART_ALERT_RECURRENCE_MS)){
+        if(appendCartAlert(state, {
+          key:`sensor|${cart.id}|${Math.floor(nowMs / CART_ALERT_RECURRENCE_MS)}`,
+          type:'sensor',
+          roomId:eventBase.roomId,
+          roomName,
+          cartId:cart.id,
+          cartName,
+          ts,
+          title:`${cartName}: sensor fora da calibração`,
+          message:`${roomName}: sensor do ${cartName} fora da faixa esperada.`,
+          detail:'Verifique fixação lateral e calibração.'
+        })) changed = true;
+        alertState.lastSensorAlertAt = ts;
+        changed = true;
+      }
+    }else if(alertState.lastSensorAlertAt && rawStatus !== 'sensor_removed'){
+      alertState.lastSensorAlertAt = '';
+      changed = true;
+    }
+
+    return changed;
+  }
+
   function readingIdentity(reading){
     return [
       reading?.id || '',
@@ -10092,6 +10274,7 @@ if(false){(function(){
           detail:locationLabel(cart)
         })) changed = true;
       }
+      if(processCartAlerts(state, cart, previous, eventBase, rawStatus)) changed = true;
     });
 
     return changed;
@@ -10111,6 +10294,11 @@ if(false){(function(){
       if(applyReadingsToState(state, readings)){
         saveState(state);
         renderRooms();
+        if(lastGeneratedCartAlertId){
+          const alertId = lastGeneratedCartAlertId;
+          lastGeneratedCartAlertId = '';
+          openCartAlertModal(alertId, { playSound:true });
+        }
       }
     }catch(err){
       console.warn('Falha ao buscar leituras dos carrinhos', err);
@@ -10429,6 +10617,7 @@ if(false){(function(){
     const freeCarts = carts.filter(cart => fillTone(cart) === 'empty');
     const readingEvents = events.filter(event => finiteNumberOrNull(event.fill) !== null);
     const criticalEvents = events.filter(isCriticalEvent);
+    const alertEvents = events.filter(event => event.type === 'alert');
     const obstructionCount = events.filter(isObstructionEvent).length
       + carts.filter(cart => String(cart.collectorStatus || '').toLowerCase() === 'sensor_obstructed').length;
     const firstReading = readingEvents[0];
@@ -10451,7 +10640,7 @@ if(false){(function(){
       : DEFAULT_CART_CALIBRATION.redPercent;
     const criticalDistance = distanceForFillPercentage(calibration, criticalPercent);
     const staleEvents = events.filter(event => event.type === 'reading' && event._time && now - event._time > 30 * 60000);
-    const panelAlerts = Math.max(fullCarts.length, criticalEvents.length);
+    const panelAlerts = Math.max(fullCarts.length, criticalEvents.length, alertEvents.length);
     return {
       carts,
       events,
@@ -10662,7 +10851,7 @@ if(false){(function(){
       const roomEntry = isRoomEntryEvent(event);
       return {
         time:formatDateTime(event.ts),
-        tone:obstruction ? 'alert' : (critical ? 'critical' : (event.type === 'transit' ? 'offline' : (roomEntry ? 'normal' : 'limit'))),
+        tone:obstruction || event.type === 'alert' ? 'alert' : (critical ? 'critical' : (event.type === 'transit' ? 'offline' : (roomEntry ? 'normal' : 'limit'))),
         title:event.title || (critical ? 'Crítico iniciado' : 'Leitura registrada'),
         detail:event.detail || ''
       };
@@ -10851,6 +11040,154 @@ if(false){(function(){
   function closeCartReportModal(){
     const overlay = document.getElementById('cartReportModalOverlay');
     if(overlay) overlay.hidden = true;
+  }
+
+  function sortedCartAlerts(state){
+    return (state.alerts || [])
+      .slice()
+      .sort((a, b) => new Date(b.ts || 0) - new Date(a.ts || 0));
+  }
+
+  function acknowledgeCartAlert(alertId, acknowledgeAll = false){
+    const state = readState();
+    const now = new Date().toISOString();
+    let changed = false;
+    (state.alerts || []).forEach(alert => {
+      if((acknowledgeAll || alert.id === alertId) && !alert.acknowledgedAt){
+        alert.acknowledgedAt = now;
+        alert.read = true;
+        changed = true;
+      }
+    });
+    if(changed){
+      saveState(state);
+      renderRooms();
+    }
+  }
+
+  function playCartAlertSound(){
+    try{
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if(!AudioContextClass) return;
+      const ctx = new AudioContextClass();
+      const gain = ctx.createGain();
+      const oscillator = ctx.createOscillator();
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(880, ctx.currentTime);
+      oscillator.frequency.setValueAtTime(660, ctx.currentTime + .12);
+      gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.12, ctx.currentTime + .02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + .38);
+      oscillator.connect(gain);
+      gain.connect(ctx.destination);
+      oscillator.start();
+      oscillator.stop(ctx.currentTime + .42);
+      window.setTimeout(() => ctx.close?.(), 700);
+    }catch(err){
+      console.warn('Som de alerta bloqueado pelo navegador', err);
+    }
+  }
+
+  function alertTypeClass(type){
+    if(type === 'obstruction') return 'obstruction';
+    if(type === 'sensor') return 'sensor';
+    if(type === 'exchange') return 'exchange';
+    if(type === 'recurrence') return 'recurrence';
+    return 'critical';
+  }
+
+  function renderCartAlertPopup(alert){
+    if(!alert){
+      return `
+        <div class="cart-alert-empty">
+          <span class="cart-alert-mail-icon">${getAlertMailboxIcon()}</span>
+          <strong>Nenhum alerta novo.</strong>
+          <small>Os próximos alertas aparecerão aqui automaticamente.</small>
+        </div>
+      `;
+    }
+    const typeClass = alertTypeClass(alert.type);
+    return `
+      <article class="cart-alert-popup-card ${typeClass}">
+        <span class="cart-alert-eyebrow">Alerta do painel</span>
+        <h2>${escapeHtml(alert.title)}</h2>
+        <p>${escapeHtml(alert.message || alert.detail || '')}</p>
+        <div class="cart-alert-popup-grid">
+          <span><small>Sala</small><strong>${escapeHtml(alert.roomName || roomNameForAlert(readState(), alert.roomId))}</strong></span>
+          <span><small>Carrinho</small><strong>${escapeHtml(alert.cartName || 'C--')}</strong></span>
+          <span><small>Horário</small><strong>${escapeHtml(formatDateTime(alert.ts))}</strong></span>
+          <span><small>Tipo</small><strong>${escapeHtml(alertSeverityLabel(alert.type))}</strong></span>
+        </div>
+        ${alert.detail ? `<small class="cart-alert-detail">${escapeHtml(alert.detail)}</small>` : ''}
+      </article>
+    `;
+  }
+
+  function renderCartAlertHistory(){
+    const state = readState();
+    const alerts = sortedCartAlerts(state).slice(0, 12);
+    if(!alerts.length){
+      return `
+        <header class="cart-alert-history-head">
+          <span>Alertas</span>
+          <h2>Caixa de alertas</h2>
+          <p>Nenhum alerta registrado no painel.</p>
+        </header>
+        <div class="cart-alert-empty">
+          <span class="cart-alert-mail-icon">${getAlertMailboxIcon()}</span>
+          <strong>Sem alertas por enquanto.</strong>
+          <small>Alertas críticos, obstruções e trocas aparecerão nesta lista.</small>
+        </div>
+      `;
+    }
+    return `
+      <header class="cart-alert-history-head">
+        <span>Alertas</span>
+        <h2>Caixa de alertas</h2>
+        <p>${alerts.length} alerta${alerts.length === 1 ? '' : 's'} recente${alerts.length === 1 ? '' : 's'} do painel.</p>
+      </header>
+      <div class="cart-alert-history-list">
+        ${alerts.map(alert => `
+          <article class="cart-alert-history-item ${alertTypeClass(alert.type)} ${alert.acknowledgedAt ? 'read' : 'new'}">
+            <i>${getOperationalTelemetryIcon(alert.type === 'exchange' ? 'limit' : (alert.type === 'obstruction' || alert.type === 'sensor' ? 'attention' : 'critical'))}</i>
+            <span>
+              <strong>${escapeHtml(alert.title)}</strong>
+              <small>${escapeHtml(alert.message || alert.detail || '')}</small>
+            </span>
+            <time>${escapeHtml(formatDateTime(alert.ts))}</time>
+          </article>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  function openCartAlertModal(alertId = '', options = {}){
+    const overlay = document.getElementById('cartAlertModalOverlay');
+    const content = document.getElementById('cartAlertModalContent');
+    if(!overlay || !content) return;
+    const state = readState();
+    const wasVisible = !overlay.hidden;
+    overlay.dataset.alertId = alertId || '';
+    overlay.dataset.mode = options.history ? 'history' : 'popup';
+    if(options.history){
+      acknowledgeCartAlert('', true);
+      content.innerHTML = renderCartAlertHistory();
+    }else{
+      const alert = (state.alerts || []).find(item => item.id === alertId) || sortedCartAlerts(state).find(item => !item.acknowledgedAt) || null;
+      overlay.dataset.alertId = alert?.id || '';
+      content.innerHTML = renderCartAlertPopup(alert);
+      if(options.playSound && !wasVisible) playCartAlertSound();
+    }
+    overlay.hidden = false;
+  }
+
+  function closeCartAlertModal(){
+    const overlay = document.getElementById('cartAlertModalOverlay');
+    if(!overlay) return;
+    const alertId = overlay.dataset.alertId || '';
+    const isPopup = overlay.dataset.mode !== 'history';
+    overlay.hidden = true;
+    if(isPopup && alertId) acknowledgeCartAlert(alertId);
   }
 
   function currentDetailCart(){
@@ -11380,6 +11717,10 @@ if(false){(function(){
     return { total: state.carts.length, empty, full, lost };
   }
 
+  function unreadAlertCount(state){
+    return (state.alerts || []).filter(alert => !alert.acknowledgedAt).length;
+  }
+
   function roomCartTotal(state, roomId){
     return state.carts.filter(cart => cart.roomId === roomId).length;
   }
@@ -11389,6 +11730,7 @@ if(false){(function(){
     if(!summary) return;
     const stats = globalStats(state);
     const transitTotal = state.carts.filter(cart => cart.locationStatus === 'transit').length;
+    const alertsTotal = unreadAlertCount(state);
     const countText = value => String(Math.max(0, Number(value || 0)));
     const totalText = value => countText(value).padStart(2, '0');
     summary.innerHTML = `
@@ -11428,9 +11770,15 @@ if(false){(function(){
         </button>
       </article>
       <article class="cart-overview-card cart-overview-report">
-        <button type="button" class="cart-report-global-btn" data-cart-report-modal aria-label="Relatório analítico" title="Relatório analítico">
-          <span class="graph-report-icon">${getReportIcon()}</span>
-        </button>
+        <div class="cart-overview-actions">
+          <button type="button" class="cart-report-global-btn" data-cart-report-modal aria-label="Relatório analítico" title="Relatório analítico">
+            <span class="graph-report-icon">${getReportIcon()}</span>
+          </button>
+          <button type="button" class="cart-alert-global-btn" data-cart-alerts-modal aria-label="Alertas do painel" title="Alertas do painel">
+            <span class="cart-alert-mail-icon">${getAlertMailboxIcon()}</span>
+            ${alertsTotal ? `<b>${countText(alertsTotal)}</b>` : ''}
+          </button>
+        </div>
       </article>
       <article class="cart-overview-card cart-overview-empty" aria-hidden="true"></article>
     `;
@@ -11776,6 +12124,12 @@ if(false){(function(){
           <div id="cartReportModalContent"></div>
         </div>
       </div>
+      <div class="cart-alert-modal-overlay" id="cartAlertModalOverlay" hidden>
+        <div class="cart-alert-modal">
+          <button type="button" class="cart-detail-close" id="cartAlertModalCloseBtn">x</button>
+          <div id="cartAlertModalContent"></div>
+        </div>
+      </div>
     `;
 
     const layoutNode = document.getElementById('layout');
@@ -11852,6 +12206,7 @@ if(false){(function(){
     document.getElementById('cartReportModalOverlay')?.addEventListener('click', event => {
       if(event.target.id === 'cartReportModalOverlay') closeCartReportModal();
     });
+    document.getElementById('cartAlertModalCloseBtn')?.addEventListener('click', closeCartAlertModal);
     document.getElementById('cartCalibrationToggle')?.addEventListener('click', toggleCartCalibrationPanel);
     document.getElementById('cartCalibrationPanel')?.addEventListener('click', handleCalibrationSelectClick);
     document.getElementById('cartCalibrationPanel')?.addEventListener('keydown', handleCalibrationSelectKeydown);
@@ -11877,6 +12232,12 @@ if(false){(function(){
     const reportButton = event.target.closest('[data-cart-report-modal]');
     if(reportButton){
       openCartReportModal();
+      return;
+    }
+
+    const alertsButton = event.target.closest('[data-cart-alerts-modal]');
+    if(alertsButton){
+      openCartAlertModal('', { history:true });
       return;
     }
 
