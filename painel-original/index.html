@@ -309,6 +309,10 @@
                 <div class="acc-option-copy"><strong>Vincular dispositivo</strong><span>Gera um código para vincular um smartphone aos alertas da área selecionada.</span></div>
                 <button class="bind-device-plus" id="openBindDeviceModal" type="button" aria-label="Vincular dispositivo">+</button>
               </div>
+              <div class="acc-option panel-users-entry" id="panelUsersEntry">
+                <div class="acc-option-copy"><strong>Usuários do painel</strong><span>Cadastre acessos básicos por cliente.</span></div>
+                <button class="bind-device-plus" id="openPanelUsersModal" type="button" aria-label="Cadastrar usuário">+</button>
+              </div>
             </div>
           </div>
         </div>
@@ -775,6 +779,14 @@
         <button class="info-btn primary bind-device-submit" id="submitBindDevice" type="submit">Gerar código</button>
       </div>
     </form>
+  </div>
+</div>
+
+
+<div class="info-overlay bind-device-overlay" id="panelUsersOverlay">
+  <div class="info-modal bind-device-modal panel-users-modal" role="dialog" aria-modal="true" aria-labelledby="panelUsersTitle">
+    <button class="info-modal-close" id="closePanelUsersModal" type="button" aria-label="Fechar">×</button>
+    <div id="panelUsersContent"></div>
   </div>
 </div>
 

@@ -9550,6 +9550,7 @@ if(false){(function(){
   let cartPanelClientsLoaded = false;
   let cartPanelUsersClientId = '';
   let cartPanelSettingsLoading = false;
+  let panelUsersView = 'clients';
   let cartAlertModalView = 'list';
   let lastGeneratedCartAlertId = '';
   const CART_SETTINGS_PARENT_VIEW = {
@@ -11982,6 +11983,11 @@ if(false){(function(){
       </article>
       <article class="cart-overview-card cart-overview-empty" aria-hidden="true"></article>
     `;
+    summary.querySelector('[data-cart-alerts-modal]')?.addEventListener('click', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      openCartAlertModal('', { history:true });
+    });
   }
 
   function renderTransitStrip(cart){
@@ -12367,6 +12373,16 @@ if(false){(function(){
       if(event.target.id === 'cartSettingsOverlay') closeCartSettings();
     });
     document.getElementById('cartSettingsContent')?.addEventListener('click', handleCartSettingsClick);
+    document.getElementById('openPanelUsersModal')?.addEventListener('click', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      openPanelUsersManager();
+    });
+    document.getElementById('closePanelUsersModal')?.addEventListener('click', closePanelUsersManager);
+    document.getElementById('panelUsersOverlay')?.addEventListener('click', event => {
+      if(event.target.id === 'panelUsersOverlay') closePanelUsersManager();
+    });
+    document.getElementById('panelUsersContent')?.addEventListener('click', handlePanelUsersClick);
     document.getElementById('cartRoomSettingsCloseBtn')?.addEventListener('click', closeRoomSettings);
     document.getElementById('cartRoomSettingsOverlay')?.addEventListener('click', event => {
       if(event.target.id === 'cartRoomSettingsOverlay') closeRoomSettings();
@@ -12557,6 +12573,7 @@ if(false){(function(){
     if(cartPanelSettingsLoading) return;
     cartPanelSettingsLoading = true;
     renderCartSettingsContent();
+    renderPanelUsersModalContent();
     try{
       const data = await panelApi('/api/panel/clients');
       cartPanelClients = data?.clients || [];
@@ -12566,6 +12583,7 @@ if(false){(function(){
     }finally{
       cartPanelSettingsLoading = false;
       renderCartSettingsContent();
+      renderPanelUsersModalContent();
     }
   }
 
@@ -12574,6 +12592,7 @@ if(false){(function(){
     cartPanelSettingsLoading = true;
     cartPanelUsersClientId = clientId || '';
     renderCartSettingsContent();
+    renderPanelUsersModalContent();
     try{
       const data = await panelApi(`/api/panel/users?client_id=${encodeURIComponent(clientId || '')}`);
       cartPanelUsers = data?.users || [];
@@ -12582,12 +12601,14 @@ if(false){(function(){
     }finally{
       cartPanelSettingsLoading = false;
       renderCartSettingsContent();
+      renderPanelUsersModalContent();
     }
   }
 
   async function refreshPanelUsersAndClients(clientId){
     cartPanelSettingsLoading = true;
     renderCartSettingsContent();
+    renderPanelUsersModalContent();
     try{
       const [clientsData, usersData] = await Promise.all([
         panelApi('/api/panel/clients'),
@@ -12602,6 +12623,7 @@ if(false){(function(){
     }finally{
       cartPanelSettingsLoading = false;
       renderCartSettingsContent();
+      renderPanelUsersModalContent();
     }
   }
 
@@ -12917,9 +12939,109 @@ if(false){(function(){
       <div class="cart-settings-home">
         ${settingsHomeCard('rooms', 'Salas cadastradas', 'Sala Bloco B1, resíduos e higiene.', state.rooms.length)}
         ${settingsHomeCard('devices', 'Dispositivos', 'Gateway e sensores cadastrados.', gatewayCount + state.carts.length)}
-        ${settingsHomeCard('users', 'Usuários', 'Cadastrar acessos por cliente.', cartPanelClients.reduce((total, client) => total + Number(client.userCount || 0), 0))}
       </div>
     `;
+  }
+
+  function renderPanelUsersModalContent(){
+    const content = document.getElementById('panelUsersContent');
+    if(!content) return;
+
+    if(!cartPanelClientsLoaded && !cartPanelSettingsLoading){
+      loadPanelClientsForSettings();
+    }
+
+    if(panelUsersView === 'clientUsers'){
+      const client = selectedPanelClient();
+      content.innerHTML = `
+        <header class="panel-users-head">
+          <span>Usuários</span>
+          <h2 id="panelUsersTitle">${escapeHtml(client?.nome || 'Cliente')}</h2>
+          <p>Cadastre, redefina senha ou exclua acessos básicos.</p>
+        </header>
+        <button type="button" class="panel-users-back" data-panel-users-back>← Voltar aos clientes</button>
+        <section class="cart-settings-section panel-users-section">
+          <div class="cart-settings-section-head">
+            <span>
+              <strong>Usuários cadastrados</strong>
+              <small>O login usa o logo e o nome do cliente.</small>
+            </span>
+          </div>
+          <div class="cart-settings-list drill-list">${cartSettingsUserRows()}</div>
+        </section>
+        ${renderPanelUserCreateForm(client)}
+      `;
+      return;
+    }
+
+    content.innerHTML = `
+      <header class="panel-users-head">
+        <span>Usuários</span>
+        <h2 id="panelUsersTitle">Usuários do painel</h2>
+        <p>Escolha o cliente para ver ou criar acessos.</p>
+      </header>
+      <section class="cart-settings-section panel-users-section">
+        <div class="cart-settings-section-head">
+          <span>
+            <strong>Clientes ativos</strong>
+            <small>Usuários básicos herdam o logo do cliente.</small>
+          </span>
+        </div>
+        <div class="cart-settings-list drill-list">${cartSettingsClientRows()}</div>
+      </section>
+    `;
+  }
+
+  function openPanelUsersManager(){
+    if(!canManageCartSettings()) return;
+    const overlay = document.getElementById('panelUsersOverlay');
+    document.getElementById('panelConfigMenu')?.classList.remove('show');
+    document.getElementById('panelConfigBtn')?.setAttribute('aria-expanded', 'false');
+    panelUsersView = 'clients';
+    renderPanelUsersModalContent();
+    if(overlay) overlay.classList.add('show');
+  }
+
+  function closePanelUsersManager(){
+    document.getElementById('panelUsersOverlay')?.classList.remove('show');
+  }
+
+  function handlePanelUsersClick(event){
+    if(event.target.closest('[data-panel-users-back]')){
+      panelUsersView = 'clients';
+      cartPanelUsersClientId = '';
+      cartPanelUsers = [];
+      renderPanelUsersModalContent();
+      return;
+    }
+
+    const clientButton = event.target.closest('[data-settings-user-client]');
+    if(clientButton){
+      const clientId = clientButton.getAttribute('data-settings-user-client') || '';
+      panelUsersView = 'clientUsers';
+      cartPanelUsersClientId = clientId;
+      cartPanelUsers = [];
+      renderPanelUsersModalContent();
+      loadPanelUsersForSettings(clientId);
+      return;
+    }
+
+    const createPanelUserButton = event.target.closest('[data-settings-create-panel-user]');
+    if(createPanelUserButton){
+      createPanelUser(createPanelUserButton.getAttribute('data-settings-create-panel-user') || cartPanelUsersClientId);
+      return;
+    }
+
+    const resetPanelUserButton = event.target.closest('[data-settings-reset-panel-user]');
+    if(resetPanelUserButton){
+      resetPanelUserPassword(resetPanelUserButton.getAttribute('data-settings-reset-panel-user') || '');
+      return;
+    }
+
+    const deletePanelUserButton = event.target.closest('[data-settings-delete-panel-user]');
+    if(deletePanelUserButton){
+      deletePanelUser(deletePanelUserButton.getAttribute('data-settings-delete-panel-user') || '');
+    }
   }
 
   function createRoomIdFromName(state, name){
@@ -13334,6 +13456,23 @@ if(false){(function(){
     if(view) view.hidden = true;
     document.body.classList.remove('cart-tracking-open');
   }
+
+  document.addEventListener('click', event => {
+    const panelUsersButton = event.target.closest('#openPanelUsersModal');
+    if(panelUsersButton){
+      event.preventDefault();
+      event.stopPropagation();
+      openPanelUsersManager();
+      return;
+    }
+
+    const alertsButton = event.target.closest('[data-cart-alerts-modal]');
+    if(alertsButton){
+      event.preventDefault();
+      event.stopPropagation();
+      openCartAlertModal('', { history:true });
+    }
+  });
 
   if(document.readyState === 'loading'){
     document.addEventListener('DOMContentLoaded', ensureCartTrackingUi);
