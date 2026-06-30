@@ -12903,7 +12903,103 @@ body.analytic-report-open{overflow:hidden}
 
 /* ===== CR tools and room icons review ===== */
 .cart-tracking-v2 .cart-tracking-head{
-  grid-template-columns:minmax(0,1fr) auto !important;
+  grid-template-columns:minmax(0,1fr) minmax(0,var(--cart-search-width,0px)) auto !important;
+}
+
+.cart-alert-ticker{
+  align-items:center !important;
+  appearance:none !important;
+  background:#fff7f8 !important;
+  border:1px solid #ffd2d9 !important;
+  border-left:4px solid #e12638 !important;
+  border-radius:8px !important;
+  color:#0f1d34 !important;
+  cursor:pointer !important;
+  display:flex !important;
+  gap:8px !important;
+  height:42px !important;
+  justify-self:stretch !important;
+  min-width:0 !important;
+  overflow:hidden !important;
+  padding:0 12px !important;
+  text-align:left !important;
+}
+
+.cart-alert-ticker[hidden]{
+  display:none !important;
+}
+
+.cart-alert-ticker.exchange{
+  background:#f1fff7 !important;
+  border-color:#bcebd1 !important;
+  border-left-color:#16a260 !important;
+}
+
+.cart-alert-ticker.obstruction,
+.cart-alert-ticker.sensor{
+  background:#fffaf0 !important;
+  border-color:#ffe0a3 !important;
+  border-left-color:#e59b12 !important;
+}
+
+.cart-alert-ticker.recurrence{
+  background:#fff6f1 !important;
+  border-color:#ffd8c2 !important;
+  border-left-color:#f97316 !important;
+}
+
+.cart-alert-ticker-dot{
+  background:#e12638 !important;
+  border-radius:999px !important;
+  box-shadow:0 0 0 3px rgba(225,38,56,.12) !important;
+  flex:0 0 auto !important;
+  height:8px !important;
+  width:8px !important;
+}
+
+.cart-alert-ticker.exchange .cart-alert-ticker-dot{
+  background:#16a260 !important;
+  box-shadow:0 0 0 3px rgba(22,162,96,.12) !important;
+}
+
+.cart-alert-ticker.obstruction .cart-alert-ticker-dot,
+.cart-alert-ticker.sensor .cart-alert-ticker-dot{
+  background:#e59b12 !important;
+  box-shadow:0 0 0 3px rgba(229,155,18,.14) !important;
+}
+
+.cart-alert-ticker.recurrence .cart-alert-ticker-dot{
+  background:#f97316 !important;
+  box-shadow:0 0 0 3px rgba(249,115,22,.14) !important;
+}
+
+.cart-alert-ticker-copy{
+  align-items:baseline !important;
+  display:flex !important;
+  gap:8px !important;
+  min-width:0 !important;
+  overflow:hidden !important;
+  white-space:nowrap !important;
+}
+
+.cart-alert-ticker-copy strong{
+  color:#0f1d34 !important;
+  flex:0 1 auto !important;
+  font-size:13px !important;
+  font-weight:950 !important;
+  min-width:0 !important;
+  overflow:hidden !important;
+  text-overflow:ellipsis !important;
+}
+
+.cart-alert-ticker-copy small{
+  color:#64748b !important;
+  flex:1 1 auto !important;
+  font-size:12px !important;
+  font-weight:800 !important;
+  min-width:0 !important;
+  overflow:hidden !important;
+  text-overflow:ellipsis !important;
 }
 
 .cart-tracking-v2 .cart-search-box{

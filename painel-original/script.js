@@ -2243,7 +2243,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const payload = await response.json();
     const items = Array.isArray(payload?.data) ? payload.data : (Array.isArray(payload) ? payload : []);
-    if(!items.length) throw new Error('Backend nao retornou dispositivos.');
+    if(!items.length) throw new Error('Backend não retornou dispositivos.');
     const nextDevices = items.map(asPanelDevice);
 
     notifyNewPanelAlerts(nextDevices);
@@ -9398,7 +9398,7 @@ if(false){(function(){
           <div class="cart-room-title">
             <div>
               <h2>${room.name}</h2>
-              <span>Gateway: ${room.gatewayDeviceId || 'nao vinculado'}</span>
+              <span>Gateway: ${room.gatewayDeviceId || 'não vinculado'}</span>
             </div>
             <strong>${Number(room.expectedTotal || 0)}</strong>
           </div>
@@ -9779,7 +9779,7 @@ if(false){(function(){
 
   function formatGatewayShort(value){
     const compact = normalizeGatewayId(value);
-    if(!compact) return 'nao vinculado';
+    if(!compact) return 'não vinculado';
     return compact.length > 4 ? compact.slice(-4) : compact;
   }
 
@@ -10476,14 +10476,11 @@ if(false){(function(){
         saveState(state);
         renderRooms();
         if(lastGeneratedCartAlertId){
-          const alertId = lastGeneratedCartAlertId;
           lastGeneratedCartAlertId = '';
-          if(shouldOpenCartAlertPopup(state)){
-            window.setTimeout(() => {
-              const openAlert = window.openStableCartAlertModal || window.openCartAlertModal;
-              if(typeof openAlert === 'function') openAlert(alertId, { playSound:true });
-            }, 0);
-          }
+          window.setTimeout(() => {
+            const refreshAlerts = window.refreshStableCartAlertUi || window.updateStableAlertBadges;
+            if(typeof refreshAlerts === 'function') refreshAlerts();
+          }, 0);
         }
       }
     }catch(err){
@@ -10544,7 +10541,7 @@ if(false){(function(){
   function fillLabel(cart){
     const rawStatus = String(cart?.collectorStatus || '').toLowerCase();
     if(isLostCart(cart)) return 'Perdido';
-    if(rawStatus === 'uncalibrated') return 'Aguardando calibracao';
+    if(rawStatus === 'uncalibrated') return 'Aguardando calibração';
     if(rawStatus === 'calibration_pending') return 'Validando leitura';
     if(rawStatus === 'sensor_removed') return 'Sensor fora da posição';
     if(rawStatus === 'sensor_obstructed') return 'Possível obstrução';
@@ -10587,7 +10584,7 @@ if(false){(function(){
   function cartReadingDetail(cart){
     const distance = finiteNumberOrNull(cart?.distanceMm);
     const rawStatus = String(cart?.collectorStatus || '').toLowerCase();
-    if(rawStatus === 'uncalibrated') return 'Aguardando calibracao';
+    if(rawStatus === 'uncalibrated') return 'Aguardando calibração';
     if(rawStatus === 'calibration_pending') return 'Aguardando ciclo oficial';
     if(rawStatus === 'sensor_removed'){
       return distance !== null ? `Sensor fora da posição - ${Math.round(distance)} mm` : 'Sensor fora da posição';
@@ -11019,9 +11016,9 @@ if(false){(function(){
     const blockLabel = roomBlockLabel(room);
     const peak = demand.peak;
     return `
-      <div class="cart-demand-chart" role="img" aria-label="Demanda por horario do ${escapeHtml(blockLabel)}">
+      <div class="cart-demand-chart" role="img" aria-label="Demanda por horário do ${escapeHtml(blockLabel)}">
         <div class="cart-demand-head">
-          <span>Demanda por horario</span>
+          <span>Demanda por horário</span>
           <strong>${escapeHtml(peak ? `${peak.label} - ${demandScoreLabel(peak.score)}` : '--')}</strong>
         </div>
         <div class="cart-demand-axis">
@@ -11086,7 +11083,7 @@ if(false){(function(){
     }).map(item => `<text x="${item.x}" y="${height - 4}" text-anchor="middle" class="cart-room-chart-axis">${escapeHtml(item.label)}</text>`).join('');
 
     return `
-      <svg class="cart-room-chart-svg cart-room-step-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="Nivel oficial do carrinho em degraus">
+      <svg class="cart-room-chart-svg cart-room-step-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="Nível oficial do carrinho em degraus">
         ${grid}
         <rect x="${padX}" y="${padY}" width="${innerW}" height="${innerH}" rx="8" class="cart-room-chart-band"></rect>
         <rect x="${padX}" y="${padY}" width="${innerW}" height="${Math.max(0, redY - padY)}" rx="8" class="cart-room-chart-critical-zone"></rect>
@@ -11128,7 +11125,7 @@ if(false){(function(){
     const carts = roomCartsForDetails(state, room);
     return [{
       label:'Ciclo atual',
-      fillTime:'sem critico',
+      fillTime:'sem crítico',
       fullTime:carts.length ? `${Math.round(Math.max(...carts.map(cart => cartVisualFill(cart))))}%` : '--',
       at:carts[0]?.lastReadingAt ? formatClock(carts[0].lastReadingAt) : '--:--',
       tone:'open'
@@ -11163,9 +11160,9 @@ if(false){(function(){
   function roomChartLegendHtml(view){
     if(view === 'detail'){
       return `
-        <div class="graph-legend-item"><span class="graph-line-swatch"></span> Nivel oficial</div>
-        <div class="graph-legend-item"><span class="graph-risk-swatch"></span> Limite critico</div>
-        <div class="graph-legend-item"><span class="cart-obstruction-swatch"></span> Falha tecnica</div>
+        <div class="graph-legend-item"><span class="graph-line-swatch"></span> Nível oficial</div>
+        <div class="graph-legend-item"><span class="graph-risk-swatch"></span> Limite crítico</div>
+        <div class="graph-legend-item"><span class="cart-obstruction-swatch"></span> Falha técnica</div>
       `;
     }
     return `
@@ -11273,8 +11270,8 @@ if(false){(function(){
     const graphEyebrow = `BLOCO - ${roomBlockLabel(room).toUpperCase()}`;
     const graphTitle = view === 'detail' ? 'Ciclos do carrinho' : 'Demanda do bloco';
     const graphDesc = view === 'detail'
-      ? 'Nivel oficial por ciclo, limite critico e tempo cheio.'
-      : 'Horarios de maior pressao para orientar a equipe.';
+      ? 'Nível oficial por ciclo, limite crítico e tempo cheio.'
+      : 'Horários de maior pressão para orientar a equipe.';
     const metricCards = [
       { label:'Tempo até crítico', value:summary.timeToCriticalLabel, note:'Do início da leitura ao limite.' },
       { label:'Em crítico', value:summary.timeInCriticalLabel, note:summary.fullCount ? 'Aguardando troca.' : 'Sem crítico ativo.' },
@@ -11285,16 +11282,16 @@ if(false){(function(){
     ];
     const chartCards = view === 'detail'
       ? [
-        { label:'Tempo ate critico', value:summary.timeToCriticalLabel, note:'Ciclo atual.' },
-        { label:'Cheio', value:summary.timeInCriticalLabel, note:summary.fullCount ? 'Em andamento.' : 'Sem critico.' },
+        { label:'Tempo até crítico', value:summary.timeToCriticalLabel, note:'Ciclo atual.' },
+        { label:'Cheio', value:summary.timeInCriticalLabel, note:summary.fullCount ? 'Em andamento.' : 'Sem crítico.' },
         { label:'Troca', value:summary.exchangeLabel, note:'Depois do alerta.' },
-        { label:'Obstrucoes', value:String(summary.obstructionCount), note:'Falhas tecnicas.' }
+        { label:'Obstruções', value:String(summary.obstructionCount), note:'Falhas técnicas.' }
       ]
       : [
         { label:'Pico do bloco', value:demand.peak?.label || '--', note:demand.peak ? demandScoreLabel(demand.peak.score) : 'Sem dados.' },
-        { label:'Pressao atual', value:demand.current ? demandScoreLabel(demand.current.score) : '--', note:demand.current?.fill !== null && demand.current?.fill !== undefined ? `${Math.round(demand.current.fill)}% no horario.` : 'Sem leitura.' },
+        { label:'Pressão atual', value:demand.current ? demandScoreLabel(demand.current.score) : '--', note:demand.current?.fill !== null && demand.current?.fill !== undefined ? `${Math.round(demand.current.fill)}% no horário.` : 'Sem leitura.' },
         { label:'Trocas hoje', value:String(demand.exchangeTotal), note:'Entradas/trocas.' },
-        { label:'Falhas hoje', value:String(demand.obstructionTotal), note:'Obstrucao ou sensor.' }
+        { label:'Falhas hoje', value:String(demand.obstructionTotal), note:'Obstrução ou sensor.' }
       ];
     const visibleCards = chartCards;
     return `
@@ -12520,7 +12517,7 @@ if(false){(function(){
 
   async function saveCartCalibrationToBackend(cart, calibration){
     const mac = cleanMac(cart?.mac);
-    if(mac.length !== 12) throw new Error('MAC do sensor invalido.');
+    if(mac.length !== 12) throw new Error('MAC do sensor inválido.');
     const response = await fetch(`/api/cart-tracking/calibration/${encodeURIComponent(mac)}`, {
       method:'POST',
       headers:{'Content-Type':'application/json'},
@@ -12528,7 +12525,7 @@ if(false){(function(){
     });
     const payload = await response.json().catch(() => null);
     if(!response.ok || payload?.ok === false){
-      throw new Error(payload?.message || 'Falha ao salvar calibracao.');
+      throw new Error(payload?.message || 'Falha ao salvar calibração.');
     }
     return normalizeCartCalibration(payload?.data?.calibration || calibration);
   }
@@ -12639,7 +12636,7 @@ if(false){(function(){
     });
 
     try{
-      setCalibrationStatus('Salvando calibracao no backend...', 'info');
+      setCalibrationStatus('Salvando calibração no backend...', 'info');
       cart.calibration = await saveCartCalibrationToBackend(cart, next);
       resetCartOperationalCycleAfterCalibration(cart);
       saveState(state);
@@ -12647,10 +12644,10 @@ if(false){(function(){
       renderRooms();
       setCalibrationExpanded(true);
       setCalibrationMode('');
-      setCalibrationStatus('Limite critico salvo no backend.', 'success');
+      setCalibrationStatus('Limite crítico salvo no backend.', 'success');
     }catch(err){
-      console.warn('Falha ao salvar calibracao', err);
-      setCalibrationStatus('Nao foi possivel salvar a calibracao no backend.', 'error');
+      console.warn('Falha ao salvar calibração', err);
+      setCalibrationStatus('Não foi possível salvar a calibração no backend.', 'error');
     }
   }
 
@@ -12678,10 +12675,10 @@ if(false){(function(){
       renderCartCalibrationPanel(cart);
       renderRooms();
       setCalibrationExpanded(true);
-      setCalibrationStatus(next.lidDetectionEnabled ? 'Deteccao de porta aberta ligada.' : 'Leitura lateral salva. Distancia alta vira alerta de sensor.', 'success');
+      setCalibrationStatus(next.lidDetectionEnabled ? 'Detecção de porta aberta ligada.' : 'Leitura lateral salva. Distância alta vira alerta de sensor.', 'success');
     }catch(err){
       console.warn('Falha ao salvar modo de leitura', err);
-      setCalibrationStatus('Nao foi possivel salvar o modo de leitura.', 'error');
+      setCalibrationStatus('Não foi possível salvar o modo de leitura.', 'error');
     }
   }
 
@@ -12719,7 +12716,7 @@ if(false){(function(){
     }
 
     try{
-      setCalibrationNewStatus('Salvando nova calibracao no backend...', 'info');
+      setCalibrationNewStatus('Salvando nova calibração no backend...', 'info');
       cart.calibration = await saveCartCalibrationToBackend(cart, next);
       resetCartOperationalCycleAfterCalibration(cart);
       saveState(state);
@@ -12727,10 +12724,10 @@ if(false){(function(){
       renderRooms();
       setCalibrationExpanded(true);
       setCalibrationMode('');
-      setCalibrationStatus('Nova calibracao salva no backend.', 'success');
+      setCalibrationStatus('Nova calibração salva no backend.', 'success');
     }catch(err){
-      console.warn('Falha ao confirmar calibracao', err);
-      setCalibrationNewStatus('Nao foi possivel salvar a calibracao no backend.', 'error');
+      console.warn('Falha ao confirmar calibração', err);
+      setCalibrationNewStatus('Não foi possível salvar a calibração no backend.', 'error');
     }
   }
 
@@ -13080,6 +13077,7 @@ if(false){(function(){
     view.hidden = true;
     view.innerHTML = `
       <div class="cart-tracking-head">
+        <button type="button" class="cart-alert-ticker" id="cartAlertTicker" data-cart-alert-ticker hidden aria-live="polite"></button>
         <label class="cart-search-box" aria-label="Buscar CR">
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <circle cx="11" cy="11" r="6"></circle>
@@ -13470,7 +13468,7 @@ if(false){(function(){
     });
     const payload = await response.json().catch(() => null);
     if(!response.ok || !payload?.ok){
-      throw new Error(payload?.message || 'Nao foi possivel concluir a operacao.');
+      throw new Error(payload?.message || 'Não foi possível concluir a operação.');
     }
     return payload.data;
   }
@@ -13485,7 +13483,7 @@ if(false){(function(){
       cartPanelClients = data?.clients || [];
       cartPanelClientsLoaded = true;
     }catch(err){
-      alert(err.message || 'Nao foi possivel carregar os clientes.');
+      alert(err.message || 'Não foi possível carregar os clientes.');
     }finally{
       cartPanelSettingsLoading = false;
       renderCartSettingsContent();
@@ -13503,7 +13501,7 @@ if(false){(function(){
       const data = await panelApi(`/api/panel/users?client_id=${encodeURIComponent(clientId || '')}`);
       cartPanelUsers = data?.users || [];
     }catch(err){
-      alert(err.message || 'Nao foi possivel carregar os usuarios.');
+      alert(err.message || 'Não foi possível carregar os usuários.');
     }finally{
       cartPanelSettingsLoading = false;
       renderCartSettingsContent();
@@ -13525,7 +13523,7 @@ if(false){(function(){
       cartPanelUsers = usersData?.users || [];
       cartPanelUsersClientId = clientId || '';
     }catch(err){
-      alert(err.message || 'Nao foi possivel atualizar os usuarios.');
+      alert(err.message || 'Não foi possível atualizar os usuários.');
     }finally{
       cartPanelSettingsLoading = false;
       renderCartSettingsContent();
@@ -13559,7 +13557,7 @@ if(false){(function(){
     }catch(err){
       cartPanelSettingsLoading = false;
       renderCartSettingsContent();
-      alert(err.message || 'Nao foi possivel cadastrar o usuário.');
+      alert(err.message || 'Não foi possível cadastrar o usuário.');
     }
   }
 
@@ -13578,7 +13576,7 @@ if(false){(function(){
       });
       await refreshPanelUsersAndClients(cartPanelUsersClientId);
     }catch(err){
-      alert(err.message || 'Nao foi possivel redefinir a senha.');
+      alert(err.message || 'Não foi possível redefinir a senha.');
     }
   }
 
@@ -13590,7 +13588,7 @@ if(false){(function(){
       await panelApi(`/api/panel/users/${encodeURIComponent(userId)}/delete`, { method:'POST' });
       await refreshPanelUsersAndClients(cartPanelUsersClientId);
     }catch(err){
-      alert(err.message || 'Nao foi possivel excluir o usuário.');
+      alert(err.message || 'Não foi possível excluir o usuário.');
     }
   }
 
@@ -14300,7 +14298,7 @@ if(false){(function(){
 
     const duplicate = state.carts.find(cart => cleanMac(cart.mac) === cleanMac(mac) && cart.id !== cartId);
     if(duplicate){
-      alert('Este MAC ja esta cadastrado em outro carrinho.');
+      alert('Este MAC já está cadastrado em outro carrinho.');
       return;
     }
 
@@ -14401,7 +14399,9 @@ if(false){(function(){
   const STABLE_OVERLAY_ID = 'cartAlertStableOverlay';
   const STABLE_CONTENT_ID = 'cartAlertStableContent';
   const STABLE_CLOSE_ID = 'cartAlertStableCloseBtn';
+  const ALERT_TICKER_ID = 'cartAlertTicker';
   const ALERT_POLL_MS = 2500;
+  const ALERT_TICKER_ROTATE_MS = 5200;
   const ALERT_TYPES = [
     {
       id:'critical',
@@ -14431,6 +14431,8 @@ if(false){(function(){
   ];
   let audioContext = null;
   let lastAlertSignature = '';
+  let stableAlertTickerIndex = 0;
+  let stableAlertTickerSignature = '';
 
   function escapeStableAlertHtml(value){
     return String(value ?? '')
@@ -14521,6 +14523,7 @@ if(false){(function(){
       overlay.dataset.alertId = '';
     }
     document.querySelectorAll('[data-cart-alerts-modal] b').forEach(badge => badge.remove());
+    clearStableAlertTicker();
     return true;
   }
 
@@ -14600,6 +14603,87 @@ if(false){(function(){
     return alert?.message || alert?.detail || `${stableAlertRoom(alert)} - ${stableAlertCart(alert)}`;
   }
 
+  function clearStableAlertTicker(){
+    const ticker = document.getElementById(ALERT_TICKER_ID);
+    if(!ticker) return;
+    ticker.hidden = true;
+    ticker.dataset.alertId = '';
+    ticker.className = 'cart-alert-ticker';
+    ticker.innerHTML = '';
+  }
+
+  function stableTickerAlerts(state = readStableAlertState()){
+    const settings = normalizeStableAlertSettings(state.alertSettings);
+    if(!settings.popupEnabled) return [];
+    return sortedStableAlerts(state)
+      .filter(alert => (
+        isUnreadStableAlert(alert) &&
+        settings.enabledTypes[alert.type || 'critical'] !== false
+      ))
+      .slice(0, 8);
+  }
+
+  function stableTickerTitle(alert){
+    const room = stableAlertRoom(alert);
+    const title = alert?.title || stableAlertTypeLabel(alert?.type);
+    return String(title)
+      .replace(/\s+/g, ' ')
+      .replace(new RegExp(`\\s*${escapeStableAlertRegExp(room)}:.*`, 'i'), '')
+      .trim();
+  }
+
+  function escapeStableAlertRegExp(value){
+    return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  function stableTickerSubtitle(alert){
+    const room = stableAlertRoom(alert);
+    const detail = stableAlertText(alert)
+      .replace(/\s+/g, ' ')
+      .replace(new RegExp(`^${escapeStableAlertRegExp(room)}:?\\s*`, 'i'), '')
+      .trim();
+    if(detail && detail.length <= 72) return detail;
+    return room;
+  }
+
+  function renderStableAlertTicker(alerts){
+    const ticker = document.getElementById(ALERT_TICKER_ID);
+    if(!ticker) return;
+    if(!isEinsteinCartAlertContext() || !alerts.length){
+      clearStableAlertTicker();
+      return;
+    }
+    const signature = alerts.map(stableAlertKey).join('|');
+    if(signature !== stableAlertTickerSignature){
+      stableAlertTickerSignature = signature;
+      stableAlertTickerIndex = 0;
+    }
+    if(stableAlertTickerIndex >= alerts.length) stableAlertTickerIndex = 0;
+    const alert = alerts[stableAlertTickerIndex] || alerts[0];
+    const alertId = stableAlertKey(alert);
+    const tone = stableAlertTone(alert.type);
+    ticker.hidden = false;
+    ticker.dataset.alertId = alertId;
+    ticker.className = `cart-alert-ticker ${tone}`;
+    ticker.innerHTML = `
+      <span class="cart-alert-ticker-dot" aria-hidden="true"></span>
+      <span class="cart-alert-ticker-copy">
+        <strong>${escapeStableAlertHtml(stableTickerTitle(alert))}</strong>
+        <small>${escapeStableAlertHtml(stableTickerSubtitle(alert))}</small>
+      </span>
+    `;
+  }
+
+  function rotateStableAlertTicker(){
+    if(!isEinsteinCartAlertContext()){
+      clearStableAlertTicker();
+      return;
+    }
+    const alerts = stableTickerAlerts();
+    if(alerts.length > 1) stableAlertTickerIndex = (stableAlertTickerIndex + 1) % alerts.length;
+    renderStableAlertTicker(alerts);
+  }
+
   function renderStableAlertRows(alerts, emptyText, groupTitle){
     if(!alerts.length){
       return `
@@ -14641,15 +14725,15 @@ if(false){(function(){
     const unreadAlerts = allAlerts.filter(isUnreadStableAlert);
     const isHistory = mode === 'history';
     const alerts = (isHistory ? allAlerts : unreadAlerts).slice(0, 50);
-    const groupTitle = isHistory ? 'Hist&oacute;rico de alertas' : 'Alertas sem leitura';
+    const groupTitle = isHistory ? 'Histórico de alertas' : 'Alertas sem leitura';
     return `
       <header class="cart-alert-history-head">
         <span>Alertas</span>
-        <h2>${isHistory ? 'Hist&oacute;rico de alertas' : 'Caixa de alertas'}</h2>
+        <h2>${isHistory ? 'Histórico de alertas' : 'Caixa de alertas'}</h2>
         <p>${isHistory ? 'Registro dos avisos gerados pelo painel.' : `${unreadAlerts.length} alerta${unreadAlerts.length === 1 ? '' : 's'} sem leitura.`}</p>
       </header>
       ${renderStableAlertNav(isHistory ? 'history' : 'unread')}
-      ${renderStableAlertRows(alerts, isHistory ? 'Sem hist&oacute;rico por enquanto.' : 'Sem alertas novos.', groupTitle)}
+      ${renderStableAlertRows(alerts, isHistory ? 'Sem histórico por enquanto.' : 'Sem alertas novos.', groupTitle)}
     `;
   }
 
@@ -14710,7 +14794,7 @@ if(false){(function(){
           <b>${unread}</b>
         </button>
         <button type="button" class="${active === 'history' ? 'active' : ''}" data-cart-alert-stable-view="history">
-          <span>Hist&oacute;rico</span>
+          <span>Histórico</span>
           <b>${total}</b>
         </button>
         <button type="button" class="${active === 'settings' ? 'active' : ''}" data-cart-alert-stable-view="settings">
@@ -14729,16 +14813,16 @@ if(false){(function(){
     return `
       <header class="cart-alert-history-head">
         <span>Alertas</span>
-        <h2>${isHistory ? 'Hist&oacute;rico de alertas' : 'Caixa de alertas'}</h2>
+        <h2>${isHistory ? 'Histórico de alertas' : 'Caixa de alertas'}</h2>
         <p>${isHistory ? 'Registro dos avisos gerados pelo painel.' : `${unreadAlerts.length} alerta${unreadAlerts.length === 1 ? '' : 's'} sem leitura.`}</p>
       </header>
       ${renderStableAlertNav(isHistory ? 'history' : 'unread')}
-      ${renderStableAlertRows(alerts, isHistory ? 'Sem hist&oacute;rico por enquanto.' : 'Sem alertas novos.')}
+      ${renderStableAlertRows(alerts, isHistory ? 'Sem histórico por enquanto.' : 'Sem alertas novos.')}
     `;
     return `
       <header class="cart-alert-history-head">
         <span>Alertas</span>
-        <h2>${isHistory ? 'Hist&oacute;rico de alertas' : 'Caixa de alertas'}</h2>
+        <h2>${isHistory ? 'Histórico de alertas' : 'Caixa de alertas'}</h2>
         <p>${isHistory ? 'Registro dos avisos gerados pelo painel.' : `${unreadAlerts.length} alerta${unreadAlerts.length === 1 ? '' : 's'} sem leitura.`}</p>
       </header>
       ${renderStableAlertNav(isHistory ? 'history' : 'unread')}
@@ -14779,15 +14863,15 @@ if(false){(function(){
       <div class="cart-alert-settings-panel">
         <label class="cart-alert-toggle-row">
           <span>
-            <strong>Popup na tela</strong>
-            <small>Abre a janela quando um alerta novo chega.</small>
+            <strong>Mensagem no card</strong>
+            <small>Mostra um alerta resumido no card superior.</small>
           </span>
           <input type="checkbox" name="stable-cart-alert-popup" ${settings.popupEnabled ? 'checked' : ''}>
         </label>
         <label class="cart-alert-toggle-row">
           <span>
             <strong>Som do alerta</strong>
-            <small>Toca uma vez quando a janela abre.</small>
+            <small>Toca uma vez quando uma mensagem nova chega.</small>
           </span>
           <input type="checkbox" name="stable-cart-alert-sound" ${settings.soundEnabled ? 'checked' : ''}>
         </label>
@@ -14939,6 +15023,8 @@ if(false){(function(){
       hideStableAlertsOutsideContext();
       return;
     }
+    const state = readStableAlertState();
+    const tickerAlerts = stableTickerAlerts(state);
     const unread = unreadStableAlertCount();
     document.querySelectorAll('[data-cart-alerts-modal]').forEach(button => {
       let badge = button.querySelector('b');
@@ -14952,6 +15038,7 @@ if(false){(function(){
         badge.remove();
       }
     });
+    renderStableAlertTicker(tickerAlerts);
   }
 
   function unlockStableAlertAudio(){
@@ -15015,9 +15102,6 @@ if(false){(function(){
       lastAlertSignature = signature;
       updateStableAlertBadges();
     }
-    if(!settings.popupEnabled) return;
-    const overlay = document.getElementById(STABLE_OVERLAY_ID);
-    if(overlay && !overlay.hidden) return;
     const nextAlert = alerts.find(alert => (
       isUnreadStableAlert(alert) &&
       settings.enabledTypes[alert.type || 'critical'] !== false
@@ -15026,10 +15110,27 @@ if(false){(function(){
     const alertId = stableAlertKey(nextAlert);
     if(sessionStorage.getItem(LAST_POPUP_KEY) === alertId) return;
     sessionStorage.setItem(LAST_POPUP_KEY, alertId);
-    openStableAlertPopup(nextAlert, true);
+    if(settings.soundEnabled){
+      playStableAlertSoundOnce(alertId);
+    }
   }
 
   document.addEventListener('click', event => {
+    const tickerButton = event.target.closest('[data-cart-alert-ticker]');
+    if(tickerButton){
+      event.preventDefault();
+      event.stopPropagation();
+      if(typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
+      if(!isEinsteinCartAlertContext()){
+        hideStableAlertsOutsideContext();
+        return;
+      }
+      const alertId = tickerButton.dataset.alertId || '';
+      const alert = sortedStableAlerts().find(item => stableAlertKey(item) === alertId) || sortedStableAlerts()[0] || null;
+      if(alert) openStableAlertPopup(alert, false);
+      return;
+    }
+
     const alertButton = event.target.closest('[data-cart-alerts-modal]');
     if(alertButton){
       event.preventDefault();
@@ -15089,6 +15190,11 @@ if(false){(function(){
   }
 
   window.setInterval(maybeOpenStableNewAlert, ALERT_POLL_MS);
+  window.setInterval(rotateStableAlertTicker, ALERT_TICKER_ROTATE_MS);
+  window.refreshStableCartAlertUi = function(){
+    updateStableAlertBadges();
+    maybeOpenStableNewAlert();
+  };
   window.openStableCartAlertInbox = openStableAlertInbox;
   window.openStableCartAlertHistory = openStableAlertHistory;
   window.openStableCartAlertSettings = openStableAlertSettings;
