@@ -10843,6 +10843,7 @@ if(false){(function(){
     const battery = cartBatteryPercent(cart);
     const batteryWidth = battery === null ? 8 : Math.max(8, Math.min(100, battery));
     const communicationSeen = cart.lastCommunicationSeen || cart.lastSeen || 'sem comunicação';
+    const validReadingSeen = cart.lastSeen || 'sem leitura válida';
     return `
       <div class="cart-under-meta" aria-label="Comunicação e bateria de ${escapeHtml(cartDisplayName(cart))}">
         <span class="cart-under-row cart-under-battery">
@@ -10851,8 +10852,12 @@ if(false){(function(){
           <span>${escapeHtml(cartBatteryLabel(cart))}</span>
         </span>
         <span class="cart-under-row cart-under-reading">
-          <small>Última comunicação</small>
+          <small>&Uacute;ltima leitura</small>
           <span>${escapeHtml(communicationSeen)}</span>
+        </span>
+        <span class="cart-under-row cart-under-reading">
+          <small>&Uacute;ltima leitura v&aacute;lida</small>
+          <span>${escapeHtml(validReadingSeen)}</span>
         </span>
       </div>
     `;
