@@ -11412,10 +11412,12 @@ if(false){(function(){
     };
   }
 
-  function chartTickLabel(value, period){
+  function chartTickLabel(value, period, span = 0){
     const date = new Date(value);
     if(Number.isNaN(date.getTime())) return '--';
-    if(period === 'day') return date.toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' });
+    if(period === 'day' || (period === 'custom' && span <= 48 * 60 * 60000)){
+      return date.toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' });
+    }
     return date.toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit' });
   }
 
@@ -11489,6 +11491,42 @@ if(false){(function(){
     return event?.type === 'recurrence' || text.includes('recorr') || text.includes('segue');
   }
 
+  function roomChartBoundaryPoint(samples, meta, criticalPercent){
+    const previous = samples
+      .filter(point => point.time < meta.start)
+      .sort((a, b) => b.time - a.time)[0];
+    if(previous){
+      return { ...previous, time:meta.start };
+    }
+    return {
+      time:meta.start,
+      value:0,
+      tone:'free',
+      cartName:''
+    };
+  }
+
+  function normalizeRoomChartPoints(samples, points, meta, criticalPercent){
+    const sorted = points.slice().sort((a, b) => a.time - b.time);
+    const startPoint = roomChartBoundaryPoint(samples, meta, criticalPercent);
+    const visibleEnd = Math.min(meta.end, Date.now());
+    if(!sorted.length){
+      return [
+        startPoint,
+        { ...startPoint, time:visibleEnd }
+      ];
+    }
+    const first = sorted[0];
+    const last = sorted[sorted.length - 1];
+    if(first.time > meta.start){
+      sorted.unshift(startPoint);
+    }
+    if(last.time < visibleEnd){
+      sorted.push({ ...last, time:visibleEnd });
+    }
+    return sorted;
+  }
+
   function roomOperationalChartModel(state, room, period = 'day'){
     const summary = roomOperationalSummary(state, room);
     const carts = roomCartsForDetails(state, room);
@@ -11500,25 +11538,7 @@ if(false){(function(){
     const inRangeEvents = chartData.events.filter(event => event._time >= meta.start && event._time <= meta.end);
     let points = chartData.samples.filter(point => point.time >= meta.start && point.time <= meta.end);
     points = roomChartBucketPoints(points, meta.start, meta.end, meta.maxPoints);
-    if(!points.length){
-      const current = roomCartsForDetails(state, room)
-        .filter(cart => !isObstructedCart(cart))
-        .map(cart => cartVisualFill(cart));
-      const value = current.length ? Math.max(...current) : 0;
-      points = [
-        { time:meta.start, value, tone:value >= criticalPercent ? 'critical' : 'free', cartName:'' },
-        { time:Math.min(meta.end, Date.now()), value, tone:value >= criticalPercent ? 'critical' : 'free', cartName:'' }
-      ];
-    }else{
-      const first = points[0];
-      const last = points[points.length - 1];
-      if(first.time > meta.start){
-        points.unshift({ ...first, time:meta.start });
-      }
-      if(last.time < meta.end){
-        points.push({ ...last, time:meta.end });
-      }
-    }
+    points = normalizeRoomChartPoints(chartData.samples, points, meta, criticalPercent);
 
     const criticalPoint = detectCriticalCrossing(points, criticalPercent);
     const detectedExchangePoint = detectExchangePoint(points, criticalPoint, criticalPercent);
@@ -11558,28 +11578,36 @@ if(false){(function(){
   }
 
   function layoutChartLabels(items){
-    const levels = [];
-    return items
+    const sorted = items
       .filter(item => Number.isFinite(item.x))
-      .sort((a, b) => a.x - b.x)
-      .map(item => {
-        let level = levels.findIndex(lastX => Math.abs(item.x - lastX) >= 96);
-        if(level < 0){
-          level = levels.length;
-          levels.push(item.x);
-        }else{
-          levels[level] = item.x;
-        }
-        return { ...item, level:Math.min(level, 2) };
-      });
+      .sort((a, b) => a.x - b.x);
+    const groups = [];
+    sorted.forEach(item => {
+      const group = groups.find(entry => Math.abs(entry.center - item.x) < 112);
+      if(group){
+        group.items.push(item);
+        group.center = group.items.reduce((sum, entry) => sum + entry.x, 0) / group.items.length;
+      }else{
+        groups.push({ center:item.x, items:[item] });
+      }
+    });
+    return groups.flatMap(group => {
+      const count = group.items.length;
+      const offsets = count === 1 ? [0] : count === 2 ? [-42, 42] : [-66, 0, 66];
+      return group.items.map((item, index) => ({
+        ...item,
+        labelX:clampNumber(item.x + offsets[Math.min(index, offsets.length - 1)], 82, 994),
+        level:Math.min(index, 2)
+      }));
+    });
   }
 
   function renderRoomOperationalGraphSvg(model, view = 'detail'){
     const detailed = view !== 'summary';
     const left = 72;
-    const top = detailed ? 68 : 50;
+    const top = detailed ? 86 : 72;
     const width = 904;
-    const height = detailed ? 220 : 190;
+    const height = detailed ? 206 : 176;
     const bottom = top + height;
     const endY = detailed ? 470 : 350;
     const span = Math.max(1, model.period.end - model.period.start);
@@ -11616,7 +11644,7 @@ if(false){(function(){
       const gx = x(value);
       return `
         <line x1="${gx}" y1="${top}" x2="${gx}" y2="${bottom}" class="cart-op-grid"></line>
-        <text x="${gx}" y="${bottom + 26}" text-anchor="middle" class="cart-op-axis">${escapeHtml(chartTickLabel(value, model.period.key))}</text>
+        <text x="${gx}" y="${bottom + 26}" text-anchor="middle" class="cart-op-axis">${escapeHtml(chartTickLabel(value, model.period.key, span))}</text>
       `;
     }).join('');
     const eventItems = [
@@ -11626,11 +11654,11 @@ if(false){(function(){
     ].filter(Boolean);
     const labels = layoutChartLabels(eventItems);
     const eventSvg = labels.map(item => {
-      const labelY = 18 + item.level * 24;
+      const labelY = 22 + item.level * 21;
       return `
         <line x1="${item.x}" y1="${top - 8}" x2="${item.x}" y2="${detailed ? 428 : bottom}" class="cart-op-event-line ${item.tone}"></line>
-        <text x="${item.x}" y="${labelY}" text-anchor="middle" class="cart-op-event-label ${item.tone}">${escapeHtml(item.label)}</text>
-        <text x="${item.x}" y="${labelY + 16}" text-anchor="middle" class="cart-op-event-label ${item.tone}">${escapeHtml(chartEventClock(item.time))}</text>
+        <text x="${item.labelX}" y="${labelY}" text-anchor="middle" class="cart-op-event-label ${item.tone}">${escapeHtml(item.label)}</text>
+        <text x="${item.labelX}" y="${labelY + 14}" text-anchor="middle" class="cart-op-event-label ${item.tone}">${escapeHtml(chartEventClock(item.time))}</text>
       `;
     }).join('');
     const markerSvg = eventItems.map(item => {
@@ -11648,10 +11676,10 @@ if(false){(function(){
       <rect x="${left}" y="${stateY}" width="${Math.max(0, freeEnd - left)}" height="16" rx="2" class="cart-op-state free"></rect>
       ${alertX ? `<rect x="${alertX}" y="${stateY}" width="${Math.max(0, criticalEnd - alertX)}" height="16" class="cart-op-state critical"></rect>` : ''}
       ${exchangeX ? `<rect x="${exchangeX}" y="${stateY}" width="${Math.max(0, left + width - exchangeX)}" height="16" rx="2" class="cart-op-state exchanged"></rect>` : ''}
-      <text x="${left}" y="${stateY + 42}" text-anchor="middle" class="cart-op-axis">${escapeHtml(chartTickLabel(model.period.start, model.period.key))}</text>
+      <text x="${left}" y="${stateY + 42}" text-anchor="middle" class="cart-op-axis">${escapeHtml(chartTickLabel(model.period.start, model.period.key, span))}</text>
       ${alertX && Math.abs(alertX - left) > 70 ? `<text x="${alertX}" y="${stateY + 42}" text-anchor="middle" class="cart-op-axis">${escapeHtml(chartEventClock(model.alertTime))}</text>` : ''}
       ${exchangeX && (!alertX || Math.abs(exchangeX - alertX) > 70) ? `<text x="${exchangeX}" y="${stateY + 42}" text-anchor="middle" class="cart-op-axis">${escapeHtml(chartEventClock(model.exchangeTime))}</text>` : ''}
-      <text x="${left + width}" y="${stateY + 42}" text-anchor="middle" class="cart-op-axis">${escapeHtml(chartTickLabel(model.period.end, model.period.key))}</text>
+      <text x="${left + width}" y="${stateY + 42}" text-anchor="middle" class="cart-op-axis">${escapeHtml(chartTickLabel(model.period.end, model.period.key, span))}</text>
 
       <circle cx="110" cy="${legendY}" r="5" class="cart-op-dot free"></circle>
       <text x="130" y="${legendY + 5}" class="cart-op-legend-text">Livre</text>
@@ -11686,7 +11714,7 @@ if(false){(function(){
         <text x="${left + 10}" y="${criticalY - 10}" class="cart-op-critical-text">Limite crítico ${model.criticalPercent}%</text>
         <path d="${areaPath}" class="cart-op-area"></path>
         ${lineSegments}
-        ${points.map((point, index) => index === 0 || index === points.length - 1 || point.value >= model.criticalPercent
+        ${points.map((point, index) => index === 0 || index === points.length - 1
           ? `<circle cx="${point.x}" cy="${point.y}" r="4.5" class="${point.value >= model.criticalPercent ? 'cart-op-marker-red' : 'cart-op-marker-blue'}"></circle>`
           : '').join('')}
         ${eventSvg}
