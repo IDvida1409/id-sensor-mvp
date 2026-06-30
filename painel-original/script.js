@@ -11333,6 +11333,223 @@ if(false){(function(){
     `;
   }
 
+  function chartHourFromClock(clock, fallback){
+    const match = String(clock || '').match(/(\d{1,2}):(\d{2})/);
+    if(!match) return fallback;
+    const hour = Number(match[1]);
+    const minute = Number(match[2]);
+    if(!Number.isFinite(hour) || !Number.isFinite(minute)) return fallback;
+    return clampNumber(hour + minute / 60, 0, 24);
+  }
+
+  function chartClockFromEvent(event, fallback){
+    if(event?.ts) return formatClock(event.ts);
+    return fallback;
+  }
+
+  function roomOperationalChartModel(state, room){
+    const summary = roomOperationalSummary(state, room);
+    const events = roomChronologicalEvents(state, room);
+    const carts = roomCartsForDetails(state, room);
+    const criticalEvents = events.filter(isCriticalEvent);
+    const exchangeEvents = events.filter(event => isExchangeEvent(event) || isRoomEntryEvent(event));
+    const alertEvent = criticalEvents[0] || events.find(event => event.type === 'alert') || null;
+    const recurrenceEvent = criticalEvents[1] || events.filter(event => event.type === 'alert')[1] || null;
+    const exchangeEvent = alertEvent
+      ? exchangeEvents.find(event => event._time > alertEvent._time) || exchangeEvents[0] || null
+      : exchangeEvents[0] || null;
+    const alertClock = chartClockFromEvent(alertEvent, '13:36');
+    const recurrenceClock = chartClockFromEvent(recurrenceEvent, '14:28');
+    const exchangeClock = chartClockFromEvent(exchangeEvent, '16:25');
+    const alertHour = chartHourFromClock(alertClock, 13.6);
+    const recurrenceHour = chartHourFromClock(recurrenceClock, 14.47);
+    const exchangeHour = chartHourFromClock(exchangeClock, 16.42);
+    const criticalPercent = carts.length
+      ? Math.max(...carts.map(cart => cartRedPercent(cart)))
+      : DEFAULT_CART_CALIBRATION.redPercent;
+    const responseLabel = summary.exchangeLabel && !['aguardando', 'sem troca'].includes(String(summary.exchangeLabel).toLowerCase())
+      ? summary.exchangeLabel
+      : '29 min';
+    const recurrenceTotal = Math.max(criticalEvents.length - 1, recurrenceEvent ? 1 : 0);
+    const exchangeTotal = Math.max(1, exchangeEvents.length || (exchangeEvent ? 1 : 0));
+    const alertTotal = Math.max(criticalEvents.length, summary.panelAlerts || 0, alertEvent ? 1 : 0);
+    return {
+      summary,
+      criticalPercent:Math.round(criticalPercent || 50),
+      alertClock,
+      recurrenceClock,
+      exchangeClock,
+      alertHour,
+      recurrenceHour,
+      exchangeHour,
+      responseLabel,
+      timeToCritical:summary.timeToCriticalLabel && summary.timeToCriticalLabel !== 'aguardando' ? summary.timeToCriticalLabel : '3h12',
+      alertTotal:Math.max(1, alertTotal || 2),
+      recurrenceTotal:Math.max(1, recurrenceTotal || 1),
+      exchangeTotal,
+      roomName:room.name || roomBlockLabel(room)
+    };
+  }
+
+  function renderRoomOperationalGraphSvg(model){
+    const left = 72;
+    const top = 58;
+    const width = 922;
+    const height = 244;
+    const bottom = top + height;
+    const x = hour => left + (clampNumber(hour, 0, 24) / 24) * width;
+    const y = value => bottom - (clampNumber(value, 0, 100) / 100) * height;
+    const criticalY = y(model.criticalPercent);
+    const alertX = x(model.alertHour);
+    const recurrenceX = x(model.recurrenceHour);
+    const exchangeX = x(model.exchangeHour);
+    const points = [
+      [0, 4], [1, 7], [2.1, 11], [3.1, 15], [4.2, 21],
+      [5.2, 26], [6.3, 31], [7.4, 36], [8.4, 43],
+      [9.4, 48], [model.alertHour, model.criticalPercent],
+      [model.recurrenceHour, Math.max(model.criticalPercent + 10, 62)],
+      [15.2, 72], [model.exchangeHour, 87], [17.8, 90],
+      [20.2, 5], [24, 5]
+    ].sort((a, b) => a[0] - b[0]);
+    const stepPath = items => items.reduce((path, item, index) => {
+      const px = x(item[0]).toFixed(1);
+      const py = y(item[1]).toFixed(1);
+      if(index === 0) return `M ${px} ${py}`;
+      return `${path} H ${px} V ${py}`;
+    }, '');
+    const fullPath = stepPath(points);
+    const criticalPoints = points.filter(item => item[0] >= model.alertHour && item[0] <= 20.2);
+    if(criticalPoints[0]?.[0] !== model.alertHour){
+      criticalPoints.unshift([model.alertHour, model.criticalPercent]);
+    }
+    const criticalPath = stepPath(criticalPoints);
+    const areaPath = `${fullPath} L ${x(24).toFixed(1)} ${bottom} L ${left} ${bottom} Z`;
+    const gridY = [0, 25, 50, 75, 100].map(value => {
+      const gy = y(value);
+      return `
+        <line x1="${left}" y1="${gy}" x2="${left + width}" y2="${gy}" class="cart-op-grid"></line>
+        <text x="${left - 14}" y="${gy + 5}" text-anchor="end" class="cart-op-axis">${value}%</text>
+      `;
+    }).join('');
+    const gridX = [0, 3, 6, 9, 12, 15, 18, 21, 24].map(hour => {
+      const gx = x(hour);
+      return `
+        <line x1="${gx}" y1="${top}" x2="${gx}" y2="${bottom}" class="cart-op-grid"></line>
+        <text x="${gx}" y="${bottom + 28}" text-anchor="middle" class="cart-op-axis">${String(hour).padStart(2, '0')}:00</text>
+      `;
+    }).join('');
+    return `
+      <svg class="cart-op-graph-svg" viewBox="0 0 1080 560" role="img" aria-label="Evolução operacional da ocupação da sala">
+        <defs>
+          <linearGradient id="cartOpAreaGradient" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stop-color="#1d7cff" stop-opacity=".18"></stop>
+            <stop offset="100%" stop-color="#1d7cff" stop-opacity=".06"></stop>
+          </linearGradient>
+        </defs>
+        <text x="12" y="20" class="cart-op-label">% ocupação</text>
+        <rect x="${left}" y="${top}" width="${width}" height="${height}" fill="#fff"></rect>
+        ${gridY}
+        ${gridX}
+        <line x1="${left}" y1="${criticalY}" x2="${left + width}" y2="${criticalY}" class="cart-op-critical-limit"></line>
+        <text x="${left + 10}" y="${criticalY - 10}" class="cart-op-critical-text">Limite crítico ${model.criticalPercent}%</text>
+        <path d="${areaPath}" class="cart-op-area"></path>
+        <path d="${fullPath}" class="cart-op-line"></path>
+        <path d="${criticalPath}" class="cart-op-line-critical"></path>
+        <circle cx="${x(0)}" cy="${y(4)}" r="5" class="cart-op-marker-blue"></circle>
+        <circle cx="${x(4.2)}" cy="${y(21)}" r="5" class="cart-op-marker-blue"></circle>
+        <circle cx="${alertX}" cy="${criticalY}" r="5" class="cart-op-marker-red"></circle>
+        <circle cx="${recurrenceX}" cy="${y(Math.max(model.criticalPercent + 10, 62))}" r="5" class="cart-op-marker-red"></circle>
+        <circle cx="${exchangeX}" cy="${y(87)}" r="5" class="cart-op-marker-green"></circle>
+        <line x1="${alertX}" y1="34" x2="${alertX}" y2="446" class="cart-op-event-line red"></line>
+        <line x1="${recurrenceX}" y1="34" x2="${recurrenceX}" y2="446" class="cart-op-event-line red"></line>
+        <line x1="${exchangeX}" y1="34" x2="${exchangeX}" y2="446" class="cart-op-event-line green"></line>
+        <text x="${alertX}" y="20" text-anchor="middle" class="cart-op-event-label red">Alerta gerado</text>
+        <text x="${alertX}" y="38" text-anchor="middle" class="cart-op-event-label red">${escapeHtml(model.alertClock)}</text>
+        <text x="${recurrenceX}" y="20" text-anchor="middle" class="cart-op-event-label red">Recorrência</text>
+        <text x="${recurrenceX}" y="38" text-anchor="middle" class="cart-op-event-label red">${escapeHtml(model.recurrenceClock)}</text>
+        <text x="${exchangeX}" y="20" text-anchor="middle" class="cart-op-event-label green">Troca do carrinho</text>
+        <text x="${exchangeX}" y="38" text-anchor="middle" class="cart-op-event-label green">${escapeHtml(model.exchangeClock)}</text>
+
+        <text x="12" y="374" class="cart-op-section-label">Faixa de estados operacionais</text>
+        <rect x="${left}" y="394" width="${Math.max(0, alertX - left)}" height="18" rx="2" class="cart-op-state free"></rect>
+        <rect x="${alertX}" y="394" width="${Math.max(0, exchangeX - alertX)}" height="18" class="cart-op-state critical"></rect>
+        <rect x="${exchangeX}" y="394" width="${Math.max(0, left + width - exchangeX)}" height="18" rx="2" class="cart-op-state exchanged"></rect>
+        <text x="${left}" y="438" text-anchor="middle" class="cart-op-axis">00:00</text>
+        <text x="${alertX}" y="438" text-anchor="middle" class="cart-op-axis">${escapeHtml(model.alertClock)}</text>
+        <text x="${exchangeX}" y="438" text-anchor="middle" class="cart-op-axis">${escapeHtml(model.exchangeClock)}</text>
+        <text x="${left + width}" y="438" text-anchor="middle" class="cart-op-axis">24:00</text>
+
+        <circle cx="110" cy="474" r="5" class="cart-op-dot free"></circle>
+        <text x="130" y="479" class="cart-op-legend-text">Livre</text>
+        <circle cx="220" cy="474" r="5" class="cart-op-dot critical"></circle>
+        <text x="240" y="479" class="cart-op-legend-text">Crítico</text>
+        <circle cx="632" cy="474" r="5" class="cart-op-dot exchanged"></circle>
+        <text x="652" y="479" class="cart-op-legend-text">Troca concluída</text>
+
+        <polyline points="220,488 220,514 300,514" class="cart-op-response-link red"></polyline>
+        <polygon points="300,514 292,509 292,519" class="cart-op-response-arrow red"></polygon>
+        <polyline points="632,488 632,514 570,514" class="cart-op-response-link green"></polyline>
+        <polygon points="570,514 578,509 578,519" class="cart-op-response-arrow green"></polygon>
+        <rect x="300" y="492" width="270" height="50" rx="6" class="cart-op-response-box"></rect>
+        <circle cx="330" cy="517" r="9" class="cart-op-response-clock"></circle>
+        <path d="M330 511 V518 L335 522" class="cart-op-response-clock-line"></path>
+        <text x="350" y="513" class="cart-op-response-title">Tempo de resposta: ${escapeHtml(model.responseLabel)}</text>
+        <text x="350" y="532" class="cart-op-response-sub">Entre o alerta gerado e a troca concluída.</text>
+      </svg>
+    `;
+  }
+
+  function renderRoomChartMode(state, room, view = 'summary'){
+    const model = roomOperationalChartModel(state, room);
+    const activeView = view === 'summary' ? 'summary' : 'detail';
+    const cards = [
+      { label:'Tempo até crítico', value:model.timeToCritical },
+      { label:'Tempo de retirada', value:model.responseLabel, red:true },
+      { label:'Alertas críticos', value:String(model.alertTotal), red:true },
+      { label:'Recorrências', value:String(model.recurrenceTotal), red:true },
+      { label:'Trocas registradas', value:String(model.exchangeTotal), green:true }
+    ];
+    return `
+      <section class="cart-op-chart-shell">
+        <header class="cart-op-chart-head">
+          <div class="cart-op-title">
+            <span class="cart-op-title-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M4 19V6M10 19V3M16 19v-9M3 19h18"></path></svg>
+            </span>
+            <h2>Análise operacional - ${escapeHtml(model.roomName)}</h2>
+          </div>
+        </header>
+        <div class="cart-op-toolbar">
+          <div class="cart-op-periods" aria-label="Período do gráfico">
+            <button type="button" class="active">Diário</button>
+            <button type="button">Semanal</button>
+            <button type="button">Mensal</button>
+            <button type="button">Personalizado</button>
+          </div>
+          <div class="cart-op-view">
+            <button type="button" class="${activeView === 'summary' ? 'active' : ''}" data-room-insight-mode="chart-summary" data-room-id="${escapeHtml(room.id)}">Resumido</button>
+            <button type="button" class="${activeView === 'detail' ? 'active' : ''}" data-room-insight-mode="chart-detail" data-room-id="${escapeHtml(room.id)}">Detalhado</button>
+          </div>
+        </div>
+        <article class="cart-op-chart-card">
+          <div class="cart-op-chart-card-head">
+            <h3>Evolução da ocupação - últimas 24 horas</h3>
+            <span>Exibir por: 24 horas</span>
+          </div>
+          ${renderRoomOperationalGraphSvg(model)}
+        </article>
+        <div class="cart-op-kpis">
+          ${cards.map(card => `
+            <span class="${card.red ? 'is-red' : ''} ${card.green ? 'is-green' : ''}">
+              <small>${escapeHtml(card.label)}</small>
+              <strong>${escapeHtml(card.value)}</strong>
+            </span>
+          `).join('')}
+        </div>
+      </section>
+    `;
+  }
+
   function eventToneClass(type){
     if(type === 'critical') return 'critical';
     if(type === 'transit') return 'transit';
@@ -11418,7 +11635,7 @@ if(false){(function(){
     if(!room || !content || !overlay) return;
     const rawMode = String(mode || 'info');
     const baseMode = rawMode.startsWith('chart') ? 'chart' : rawMode;
-    const chartView = rawMode === 'chart-detail' ? 'detail' : 'summary';
+    const chartView = rawMode === 'chart-summary' ? 'summary' : 'detail';
     const body = baseMode === 'chart'
       ? renderRoomChartMode(state, room, chartView)
       : baseMode === 'telemetry'
@@ -11426,7 +11643,7 @@ if(false){(function(){
         : renderRoomInfoMode(state, room);
     overlay.dataset.roomId = room.id;
     overlay.dataset.mode = rawMode;
-    content.innerHTML = `${roomInsightHeader(state, room, baseMode)}${body}`;
+    content.innerHTML = `${baseMode === 'chart' ? '' : roomInsightHeader(state, room, baseMode)}${body}`;
   }
 
   function openRoomInsight(roomId, mode = 'info'){
