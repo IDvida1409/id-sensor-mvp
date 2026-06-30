@@ -9520,6 +9520,8 @@ if(false){(function(){
         consecutiveCriticalReadings:0,
         calibration:clone(DEFAULT_CART_CALIBRATION),
         rssi:null,
+        lastCommunicationAt:'',
+        lastCommunicationSeen:'aguardando comunicação',
         lastSeen:'aguardando leitura',
         transitStep:0
       },
@@ -9533,6 +9535,8 @@ if(false){(function(){
         consecutiveCriticalReadings:0,
         calibration:clone(DEFAULT_CART_CALIBRATION),
         rssi:null,
+        lastCommunicationAt:'',
+        lastCommunicationSeen:'sem comunicação',
         lastSeen:'sem leitura',
         transitStep:0
       }
@@ -10393,8 +10397,13 @@ if(false){(function(){
       let readingAt = '';
       if(reading.createdAt || reading.receivedAt){
         readingAt = reading.createdAt || reading.receivedAt;
+        const lastCommunicationSeen = relativeTime(readingAt);
         if(cart.lastCommunicationAt !== readingAt){
           cart.lastCommunicationAt = readingAt;
+          changed = true;
+        }
+        if(cart.lastCommunicationSeen !== lastCommunicationSeen){
+          cart.lastCommunicationSeen = lastCommunicationSeen;
           changed = true;
         }
         if(officialReading){
@@ -10689,16 +10698,17 @@ if(false){(function(){
   function renderCartUnderMeta(cart){
     const battery = cartBatteryPercent(cart);
     const batteryWidth = battery === null ? 8 : Math.max(8, Math.min(100, battery));
+    const communicationSeen = cart.lastCommunicationSeen || cart.lastSeen || 'sem comunicação';
     return `
-      <div class="cart-under-meta" aria-label="Leitura e bateria de ${escapeHtml(cartDisplayName(cart))}">
+      <div class="cart-under-meta" aria-label="Comunicação e bateria de ${escapeHtml(cartDisplayName(cart))}">
         <span class="cart-under-row cart-under-battery">
           <i class="cart-battery-mini ${cartBatteryTone(cart)}" aria-hidden="true"><em style="width:${batteryWidth}%"></em></i>
           <small>Bateria</small>
           <span>${escapeHtml(cartBatteryLabel(cart))}</span>
         </span>
         <span class="cart-under-row cart-under-reading">
-          <small>Última leitura</small>
-          <span>${escapeHtml(cart.lastSeen || 'sem leitura')}</span>
+          <small>Última comunicação</small>
+          <span>${escapeHtml(communicationSeen)}</span>
         </span>
       </div>
     `;
@@ -14263,7 +14273,8 @@ if(false){(function(){
         <span><small>Modelo</small><strong>Sensor ToF BLE</strong></span>
         <span><small>Sala</small><strong>${escapeHtml(cartRoomNameById(state, cart.roomId))}</strong></span>
         <span><small>Bateria</small><strong>${escapeHtml(cartBatteryLabel(cart))}</strong></span>
-        <span><small>Última leitura</small><strong>${escapeHtml(cart.lastSeen || 'sem leitura')}</strong></span>
+        <span><small>Última comunicação</small><strong>${escapeHtml(cart.lastCommunicationSeen || cart.lastSeen || 'sem comunicação')}</strong></span>
+        <span><small>Leitura válida</small><strong>${escapeHtml(cart.lastSeen || 'sem leitura válida')}</strong></span>
         <span><small>Calibração</small><strong>${escapeHtml(cartCalibrationSummaryLabel(cart))}</strong></span>
       ` : `
         <span><small>Tipo</small><strong>Sensor ToF BLE</strong></span>
@@ -14320,6 +14331,8 @@ if(false){(function(){
         consecutiveCriticalReadings:0,
         calibration:clone(DEFAULT_CART_CALIBRATION),
         rssi:null,
+        lastCommunicationAt:'',
+        lastCommunicationSeen:'cadastro manual',
         lastSeen:'cadastro manual',
         transitStep:0
       };
