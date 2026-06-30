@@ -9451,6 +9451,8 @@ if(false){(function(){
   const STORAGE_KEY = 'idsensor.cartTracking.v8';
   const ROOM_SWITCH_RSSI_MIN = -70;
   const ROOM_SWITCH_CONFIRM_READINGS = 2;
+  const ROOM_READING_RECENT_MS = 30 * 60 * 1000;
+  const CART_ROOM_EXIT_GRACE_MS = 30 * 60 * 1000;
   const OBSOLETE_CART_IDS = new Set(['cart-flat-03']);
   const OBSOLETE_CART_MACS = new Set(['AABBCC000003']);
   const RESIDUE_ROOM_ID = 'sala-residuos';
@@ -9471,6 +9473,8 @@ if(false){(function(){
   };
   const CALIBRATION_SAMPLE_COUNT = 3;
   const CALIBRATION_SAMPLE_DELAY_MS = 1200;
+  const CALIBRATION_FRESH_TIMEOUT_MS = 60 * 1000;
+  const CALIBRATION_FRESH_POLL_MS = 5000;
   const CALIBRATION_STABILITY_MIN_MM = 20;
   const CALIBRATION_STABILITY_PERCENT = 5;
   const INVALID_SENSOR_DISTANCE_MM = 60000;
@@ -9728,7 +9732,8 @@ if(false){(function(){
         cart.name = defaultName;
         changed = true;
       }
-      if(PILOT_CART_MACS.has(compactMac) && cart.roomId !== PILOT_ROOM_ID){
+      const pilotCartInTransit = cart.locationStatus === 'transit' || SPECIAL_ROOM_IDS.has(cart.roomId);
+      if(PILOT_CART_MACS.has(compactMac) && cart.roomId !== PILOT_ROOM_ID && !pilotCartInTransit){
         cart.roomId = PILOT_ROOM_ID;
         cart.locationStatus = 'in_room';
         cart.transitStep = 0;
@@ -10239,17 +10244,125 @@ if(false){(function(){
     return changed;
   }
 
+  function gatewayRoomIdForReading(state, reading){
+    return state.rooms.find(room => gatewayMatchesRoom(room.gatewayDeviceId, reading?.lorawanDeviceId))?.id || '';
+  }
+
+  function isSpecialRoomId(roomId){
+    return SPECIAL_ROOM_IDS.has(roomId);
+  }
+
+  function transitStepForGatewayRoom(roomId){
+    if(roomId === RESIDUE_ROOM_ID) return 2;
+    if(roomId === HYGIENE_ROOM_ID) return 3;
+    return 1;
+  }
+
+  function locationStatusForGatewayRoom(roomId){
+    return isSpecialRoomId(roomId) ? 'transit' : 'in_room';
+  }
+
+  function isRecentReading(reading, maxAgeMs = ROOM_READING_RECENT_MS){
+    const ts = readingTimestampMs(reading);
+    return ts !== null && Date.now() - ts <= maxAgeMs;
+  }
+
+  function hasValidRoomReading(reading){
+    const distance = finiteNumberOrNull(reading?.distanceMm);
+    return distance !== null && distance < INVALID_SENSOR_DISTANCE_MM;
+  }
+
+  function isStrongRecentRoomReading(reading, rssi){
+    return isRecentReading(reading) && hasValidRoomReading(reading) && rssi !== null && rssi >= ROOM_SWITCH_RSSI_MIN;
+  }
+
+  function cartLastCommunicationMs(cart){
+    const timestamps = [cart?.lastCommunicationAt, cart?.lastReadingAt]
+      .map(value => new Date(value || '').getTime())
+      .filter(Number.isFinite);
+    return timestamps.length ? Math.max(...timestamps) : null;
+  }
+
+  function cartMeetsCriticalFill(cart){
+    return cartVisualFill(cart) >= cartRedPercent(cart);
+  }
+
+  function shouldLeaveRoomForExchange(cart, nowMs){
+    if(!cart || cart.locationStatus === 'transit') return false;
+    if(!cartMeetsCriticalFill(cart)) return false;
+    const lastMs = cartLastCommunicationMs(cart);
+    if(lastMs === null) return false;
+    return nowMs - lastMs >= CART_ROOM_EXIT_GRACE_MS;
+  }
+
+  function applyRoomExchangeFromCurrentReadings(state, readingContextsByMac){
+    const nowMs = Date.now();
+    let changed = false;
+    const freshCartsByRoom = new Map();
+
+    state.carts.forEach(cart => {
+      const context = readingContextsByMac.get(cleanMac(cart.mac));
+      if(!context || !context.gatewayRoomId || isSpecialRoomId(context.gatewayRoomId)) return;
+      if(!context.strongRoomReading) return;
+      const list = freshCartsByRoom.get(context.gatewayRoomId) || [];
+      list.push({ cart, context });
+      freshCartsByRoom.set(context.gatewayRoomId, list);
+    });
+
+    freshCartsByRoom.forEach((freshItems, roomId) => {
+      if(!freshItems.length) return;
+      const newest = freshItems
+        .slice()
+        .sort((a, b) => (b.context.readingAtMs || 0) - (a.context.readingAtMs || 0))[0];
+      const room = state.rooms.find(item => item.id === roomId);
+      const roomName = room?.name || 'Sala';
+
+      state.carts
+        .filter(cart => cart.roomId === roomId && cart.id !== newest.cart.id)
+        .filter(cart => shouldLeaveRoomForExchange(cart, nowMs))
+        .forEach(oldCart => {
+          const ts = newest.context.readingAt || new Date().toISOString();
+          if(setCartLocation(oldCart, 'transit', 1)) changed = true;
+          if(oldCart.transitStartedAt !== ts){
+            oldCart.transitStartedAt = ts;
+            changed = true;
+          }
+          if(oldCart.exchangeCandidateCartId !== newest.cart.id){
+            oldCart.exchangeCandidateCartId = newest.cart.id;
+            changed = true;
+          }
+          if(appendTelemetryEvent(state, {
+            key:`exchange-detected|${oldCart.id}|${newest.cart.id}|${roomId}|${ts}`,
+            type:'exchange',
+            roomId,
+            cartId:oldCart.id,
+            cartName:cartDisplayName(oldCart),
+            ts,
+            fill:cartVisualFill(oldCart),
+            distanceMm:oldCart.distanceMm,
+            title:'Troca de carrinho registrada',
+            detail:`${cartDisplayName(oldCart)} saiu da ${roomName}; ${cartDisplayName(newest.cart)} entrou com leitura forte.`
+          })) changed = true;
+        });
+    });
+
+    return changed;
+  }
+
   function applyGatewayRoomToCart(cart, gatewayRoomId, rssi, reading){
     if(!gatewayRoomId) return false;
+    if(!isRecentReading(reading)) return false;
+
+    const nextLocationStatus = locationStatusForGatewayRoom(gatewayRoomId);
+    const nextTransitStep = nextLocationStatus === 'transit' ? transitStepForGatewayRoom(gatewayRoomId) : 0;
 
     if(cart.roomId === gatewayRoomId){
       const cleared = clearPendingRoom(cart);
-      const located = setCartLocation(cart, 'in_room', 0);
+      const located = setCartLocation(cart, nextLocationStatus, nextTransitStep);
       return cleared || located;
     }
 
-    const strongEnough = rssi !== null && rssi >= ROOM_SWITCH_RSSI_MIN;
-    if(!strongEnough){
+    if(!isStrongRecentRoomReading(reading, rssi)){
       return clearPendingRoom(cart);
     }
 
@@ -10270,7 +10383,7 @@ if(false){(function(){
       cart.roomId = gatewayRoomId;
       changed = true;
       const cleared = clearPendingRoom(cart);
-      const located = setCartLocation(cart, 'in_room', 0);
+      const located = setCartLocation(cart, nextLocationStatus, nextTransitStep);
       return cleared || located || changed;
     }
 
@@ -10284,12 +10397,28 @@ if(false){(function(){
       cleanMac(reading.mac || reading.bleSensorId),
       reading
     ]).filter(([mac]) => mac.length === 12));
+    const readingContextsByMac = new Map();
+    readingsByMac.forEach((reading, mac) => {
+      const rssi = finiteNumberOrNull(reading.rssiBle);
+      const gatewayRoomId = gatewayRoomIdForReading(state, reading);
+      const readingAtMs = readingTimestampMs(reading);
+      readingContextsByMac.set(mac, {
+        reading,
+        gatewayRoomId,
+        rssi,
+        readingAtMs,
+        readingAt:reading.createdAt || reading.receivedAt || '',
+        strongRoomReading:isStrongRecentRoomReading(reading, rssi)
+      });
+    });
 
     let changed = false;
 
     state.carts.forEach(cart => {
-      const reading = readingsByMac.get(cleanMac(cart.mac));
+      const cartMac = cleanMac(cart.mac);
+      const reading = readingsByMac.get(cartMac);
       if(!reading) return;
+      const readingContext = readingContextsByMac.get(cartMac) || {};
 
       const previous = {
         roomId:cart.roomId || '',
@@ -10306,7 +10435,7 @@ if(false){(function(){
       const lidOpenReads = finiteNumberOrNull(reading.consecutiveLidOpenReadings);
       const lidClosedReads = finiteNumberOrNull(reading.consecutiveLidClosedReadings);
       const candidateLevelReads = finiteNumberOrNull(reading.candidateLevelReadings);
-      const gatewayRoomId = state.rooms.find(room => gatewayMatchesRoom(room.gatewayDeviceId, reading.lorawanDeviceId))?.id;
+      const gatewayRoomId = readingContext.gatewayRoomId;
       const rawStatus = String(reading.status || '').toLowerCase();
       const officialReading = isOfficialCartReading(reading);
       const confirmedLidState = String(reading.confirmedLidState || '').toLowerCase();
@@ -10418,7 +10547,12 @@ if(false){(function(){
           }
         }
       }
-      if(applyGatewayRoomToCart(cart, gatewayRoomId, rssi, reading)) changed = true;
+      if(rawStatus === 'offline' && cart.locationStatus !== 'transit'){
+        if(setCartLocation(cart, 'offline', 0)) changed = true;
+        if(clearPendingRoom(cart)) changed = true;
+      }else if(applyGatewayRoomToCart(cart, gatewayRoomId, rssi, reading)){
+        changed = true;
+      }
 
       const eventRoomId = cart.roomId || gatewayRoomId || previous.roomId || '';
       const nextTone = fillTone(cart);
@@ -10462,6 +10596,8 @@ if(false){(function(){
       if(processCartAlerts(state, cart, previous, eventBase, rawStatus)) changed = true;
     });
 
+    if(applyRoomExchangeFromCurrentReadings(state, readingContextsByMac)) changed = true;
+
     return changed;
   }
 
@@ -10477,10 +10613,18 @@ if(false){(function(){
     if(readingsInFlight) return;
     readingsInFlight = true;
     try{
-      const response = await fetch('/api/cart-tracking/readings', { cache:'no-store' });
+      const state = readState();
+      const macFilters = Array.from(new Set(
+        state.carts
+          .map(cart => cleanMac(cart.mac))
+          .filter(mac => mac.length === 12)
+      ));
+      const query = macFilters.length
+        ? `?mac=${encodeURIComponent(macFilters.join(','))}&limit=${Math.max(20, macFilters.length * 20)}`
+        : '';
+      const response = await fetch(`/api/cart-tracking/readings${query}`, { cache:'no-store' });
       const payload = await response.json();
       const readings = payload?.data?.readings || [];
-      const state = readState();
       if(applyReadingsToState(state, readings)){
         saveState(state);
         renderRooms();
@@ -12517,12 +12661,50 @@ if(false){(function(){
     setCalibrationMode('');
   }
 
-  async function latestReadingForCart(cart){
+  function readingTimestampMs(reading){
+    const timestamps = [reading?.createdAt, reading?.receivedAt]
+      .map(value => new Date(value || '').getTime())
+      .filter(Number.isFinite);
+    return timestamps.length ? Math.max(...timestamps) : null;
+  }
+
+  function hasValidCalibrationReading(reading){
+    const distance = finiteNumberOrNull(reading?.distanceMm);
+    return distance !== null && distance < INVALID_SENSOR_DISTANCE_MM;
+  }
+
+  async function readingsForCart(cart, limit = 20){
     const mac = cleanMac(cart?.mac);
-    if(mac.length !== 12) return null;
-    const response = await fetch(`/api/cart-tracking/readings?mac=${encodeURIComponent(mac)}&limit=20`, { cache:'no-store' });
+    if(mac.length !== 12) return [];
+    const response = await fetch(`/api/cart-tracking/readings?mac=${encodeURIComponent(mac)}&limit=${limit}`, { cache:'no-store' });
     const payload = await response.json();
-    return payload?.data?.readings?.[0] || null;
+    return Array.isArray(payload?.data?.readings) ? payload.data.readings : [];
+  }
+
+  async function latestReadingForCart(cart){
+    const readings = await readingsForCart(cart, 20);
+    return readings[0] || null;
+  }
+
+  async function freshCalibrationReadingForCart(cart, seenKeys, minTimestampMs, timeoutAtMs){
+    while(Date.now() <= timeoutAtMs){
+      const readings = await readingsForCart(cart, 30);
+      const fresh = readings.find(reading => {
+        const key = readingIdentity(reading);
+        const ts = readingTimestampMs(reading);
+        return key
+          && !seenKeys.has(key)
+          && ts !== null
+          && ts >= minTimestampMs
+          && hasValidCalibrationReading(reading);
+      });
+      if(fresh){
+        seenKeys.add(readingIdentity(fresh));
+        return fresh;
+      }
+      await wait(CALIBRATION_FRESH_POLL_MS);
+    }
+    return null;
   }
 
   async function saveCartCalibrationToBackend(cart, calibration){
@@ -12576,16 +12758,24 @@ if(false){(function(){
     const overlay = document.getElementById('cartDetailOverlay');
     const startBtn = document.getElementById('cartCalibrationStartBtn');
     const samples = [];
+    const calibrationStartedAt = Date.now();
+    const calibrationTimeoutAt = calibrationStartedAt + CALIBRATION_FRESH_TIMEOUT_MS;
+    const seenReadingKeys = new Set();
     if(startBtn) startBtn.disabled = true;
-    setCalibrationNewStatus('Coletando leitura 1 de 3...', 'info');
+    setCalibrationNewStatus('Aguardando nova leitura do sensor...', 'info');
     renderCalibrationSamples(samples, 0);
 
     try{
       for(let index = 0; index < CALIBRATION_SAMPLE_COUNT; index += 1){
-        if(index > 0) await wait(CALIBRATION_SAMPLE_DELAY_MS);
-        setCalibrationNewStatus(`Coletando leitura ${index + 1} de ${CALIBRATION_SAMPLE_COUNT}...`, 'info');
+        if(index > 0) await wait(Math.min(CALIBRATION_SAMPLE_DELAY_MS, 1000));
+        setCalibrationNewStatus(`Aguardando nova leitura ${index + 1} de ${CALIBRATION_SAMPLE_COUNT}...`, 'info');
         renderCalibrationSamples(samples, index);
-        const reading = await latestReadingForCart(cart);
+        const reading = await freshCalibrationReadingForCart(cart, seenReadingKeys, calibrationStartedAt, calibrationTimeoutAt);
+        if(!reading){
+          setCalibrationNewStatus('Nenhuma leitura nova chegou do sensor. Verifique o gateway e tente novamente.', 'error');
+          renderCalibrationSamples(samples);
+          return;
+        }
         const distance = finiteNumberOrNull(reading?.distanceMm);
         if(distance === null || distance >= INVALID_SENSOR_DISTANCE_MM){
           setCalibrationNewStatus('Leitura inválida. Reposicione o sensor e tente novamente.', 'error');

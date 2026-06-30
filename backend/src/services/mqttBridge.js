@@ -142,7 +142,7 @@ function readPacket(buffer) {
     encodedByte = buffer[offset++];
     remainingLength += (encodedByte & 127) * multiplier;
     multiplier *= 128;
-    if (multiplier > 128 * 128 * 128) throw new Error('MQTT remaining length invalido.');
+    if (multiplier > 128 * 128 * 128) throw new Error('MQTT remaining length inválido.');
   } while ((encodedByte & 128) !== 0);
 
   const end = offset + remainingLength;
@@ -403,13 +403,14 @@ function startMqttBridge({ storePayload }) {
         status.connected = false;
         status.lastError = error.message;
         console.error(`[mqtt] Falha ao processar mensagem: ${error.message}`);
+        if (socket && !socket.destroyed) socket.destroy();
       }
     });
 
     socket.on('error', (error) => {
       status.connected = false;
       status.lastError = error.message;
-      console.error(`[mqtt] Erro de conexao: ${error.message}`);
+      console.error(`[mqtt] Erro de conexão: ${error.message}`);
     });
 
     socket.on('close', () => {

@@ -1,0 +1,26 @@
+{
+  "end_device_ids": {
+    "device_id": "moko-ble-lora-01",
+    "dev_eui": "0000000000000001"
+  },
+  "uplink_message": {
+    "f_port": 2,
+    "frm_payload": "AABBCCDDEEFF",
+    "decoded_payload": {
+      "ble_sensor_id": "DE00DBF47311",
+      "distance_mm": 180,
+      "battery": 92,
+      "rssi_ble": -64
+    },
+    "rx_metadata": [
+      {
+        "gateway_ids": {
+          "gateway_id": "gw-lora-01"
+        },
+        "rssi": -70,
+        "snr": 8.5
+      }
+    ]
+  },
+  "received_at": "2026-06-17T12:30:00Z"
+}

@@ -11,6 +11,7 @@
     "serve:panel": "node tools/serve-panel.js",
     "backend": "node backend/src/server.js",
     "seed": "node backend/src/scripts/seed.js",
+    "test:ttn": "node backend/src/scripts/test-ttn.js",
     "mobile:start": "powershell -ExecutionPolicy Bypass -File ./tools/start-mobile-expo.ps1"
   },
   "dependencies": {

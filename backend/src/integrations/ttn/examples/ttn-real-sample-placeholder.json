@@ -1,0 +1,124 @@
+{
+  "name": "as.up.data.forward",
+  "time": "2026-06-17T17:57:59.265887303Z",
+  "identifiers": [
+    {
+      "device_ids": {
+        "device_id": "8ec5",
+        "application_ids": {
+          "application_id": "gateway-beacon"
+        },
+        "dev_eui": "D27166FFFF8B8EC5",
+        "join_eui": "70B3D57ED0026B87",
+        "dev_addr": "01FCC713"
+      }
+    }
+  ],
+  "data": {
+    "@type": "type.googleapis.com/ttn.lorawan.v3.ApplicationUp",
+    "end_device_ids": {
+      "device_id": "8ec5",
+      "application_ids": {
+        "application_id": "gateway-beacon"
+      },
+      "dev_eui": "D27166FFFF8B8EC5",
+      "join_eui": "70B3D57ED0026B87",
+      "dev_addr": "01FCC713"
+    },
+    "correlation_ids": [
+      "gs:uplink:01KVBBQ644J4VWH0F92PAHHFRP",
+      "rpc:/ttn.lorawan.v3.GsNs/HandleUplink:01KVBBQ645BTK8T1KS8M5JXG0B",
+      "rpc:/ttn.lorawan.v3.NsAs/HandleUplink:01KVBBQ6AQBGJ5SM7FQ49YWTH2"
+    ],
+    "received_at": "2026-06-17T17:57:59.255645539Z",
+    "uplink_message": {
+      "session_key_id": "AZ7WspJgoHzfJCJlMfCpeA==",
+      "f_port": 5,
+      "f_cnt": 73,
+      "frm_payload": "Amoy4Cf6AUcFwLHUF57ksmoy39MAAAoOKwABAhALQmVhY29uWCBQcm8CAQYCCgASFqv+QAAKDisAAcCx1Bee5AIQDAlCZWFjb25YIFBybw==",
+      "decoded_payload": {
+        "beacon_number": 1,
+        "hex_format_payload": "026a32e027fa014705c0b1d4179ee4b26a32dfd300000a0e2b000102100b426561636f6e582050726f020106020a001216abfe40000a0e2b0001c0b1d4179ee402100c09426561636f6e582050726f",
+        "packet_sequence": 2,
+        "payload_reporting_timestamp": "2026-06-17 14:57:59",
+        "payload_reporting_timezone": "UTC-03:00",
+        "port": 5,
+        "scan_data": [
+          {
+            "adv_interval": "1000ms",
+            "adv_name": "BeaconX Pro",
+            "ambient_light_sensor_status": "Not equipped",
+            "ambient_light_switch_status": "Ambient light not detected",
+            "batt_vol": 3627,
+            "battery_voltage": "3627mV",
+            "beacon_type": "BXP-DeviceInfo",
+            "connectable_switch_status": "Connectable",
+            "current_time": "2026-06-17 14:56:35",
+            "firmware_version": "V0.2.16",
+            "mac": "c0b1d4179ee4",
+            "password_verification_status": "Enabled",
+            "ranging_data": "0dBm",
+            "raw_data": "020106020A001216ABFE40000A0E2B0001C0B1D4179EE402100C09426561636F6E582050726F",
+            "raw_data_length": 38,
+            "rssi": -78,
+            "timestamp": 1781718995,
+            "timezone": -3,
+            "tx_power": "0dBm",
+            "type_code": 4
+          }
+        ],
+        "time": "2026-06-17 17:57:59",
+        "timestamp": 1781719079
+      },
+      "rx_metadata": [
+        {
+          "gateway_ids": {
+            "gateway_id": "c0ba1ffffe02a98c",
+            "eui": "C0BA1FFFFE02A98C"
+          },
+          "time": "2026-06-17T17:57:59.245Z",
+          "timestamp": 1627641432,
+          "rssi": -63,
+          "channel_rssi": -63,
+          "snr": 13.8,
+          "frequency_offset": "369",
+          "uplink_token": "Ch4KHAoQYzBiYTFmZmZmZTAyYTk4YxIIwLof//4CqYwQ2KyPiAYaCwinwMvRBhCNp98UIMCP9bevr/cCKgsIp8DL0QYQwM7pdA==",
+          "channel_index": 2,
+          "gps_time": "2026-06-17T17:57:59.245Z",
+          "received_at": "2026-06-17T17:57:59.039647267Z"
+        }
+      ],
+      "settings": {
+        "data_rate": {
+          "lora": {
+            "bandwidth": 125000,
+            "spreading_factor": 7,
+            "coding_rate": "4/5"
+          }
+        },
+        "frequency": "915600000",
+        "timestamp": 1627641432,
+        "time": "2026-06-17T17:57:59.245Z"
+      },
+      "received_at": "2026-06-17T17:57:59.045241922Z",
+      "consumed_airtime": "0.158976s",
+      "packet_error_rate": 0.04761905,
+      "network_ids": {
+        "net_id": "000000"
+      }
+    }
+  },
+  "correlation_ids": [
+    "gs:uplink:01KVBBQ644J4VWH0F92PAHHFRP",
+    "rpc:/ttn.lorawan.v3.GsNs/HandleUplink:01KVBBQ645BTK8T1KS8M5JXG0B",
+    "rpc:/ttn.lorawan.v3.NsAs/HandleUplink:01KVBBQ6AQBGJ5SM7FQ49YWTH2"
+  ],
+  "origin": "7ced8eacab2e",
+  "context": {},
+  "visibility": {
+    "rights": [
+      "RIGHT_APPLICATION_TRAFFIC_READ"
+    ]
+  },
+  "unique_id": "01KVBBQ6B1E9NHWM9XJ83YX5E7"
+}

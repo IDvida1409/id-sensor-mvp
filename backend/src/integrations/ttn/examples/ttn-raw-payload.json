@@ -1,0 +1,17 @@
+{
+  "end_device_ids": {
+    "device_id": "moko-ble-lora-01"
+  },
+  "uplink_message": {
+    "f_port": 2,
+    "frm_payload": "AABBCCDDEEFF",
+    "rx_metadata": [
+      {
+        "gateway_ids": {
+          "gateway_id": "gw-lora-01"
+        }
+      }
+    ]
+  },
+  "received_at": "2026-06-17T12:30:00Z"
+}

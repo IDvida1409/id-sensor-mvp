@@ -1,0 +1,58 @@
+{
+  "name": "as.up.data.forward",
+  "time": "2026-06-18T11:52:03.590622718Z",
+  "data": {
+    "@type": "type.googleapis.com/ttn.lorawan.v3.ApplicationUp",
+    "end_device_ids": {
+      "device_id": "8ec5",
+      "application_ids": {
+        "application_id": "gateway-beacon"
+      },
+      "dev_eui": "D27166FFFF8B8EC5",
+      "join_eui": "70B3D57ED0026B87",
+      "dev_addr": "01E3F9B6"
+    },
+    "received_at": "2026-06-18T11:52:03.572842201Z",
+    "uplink_message": {
+      "f_port": 5,
+      "f_cnt": 2247,
+      "frm_payload": "AGoz2+P6ASMK3gjb9HMRw2oz28cAAgEGEv9ZAAdsVgv///81AP//ARFz/w==",
+      "decoded_payload": {
+        "beacon_number": 1,
+        "hex_format_payload": "006a33dbe3fa01230ade08dbf47311c36a33dbc70002010612ff5900076c560bffffff3500ffff011173ff",
+        "packet_sequence": 0,
+        "payload_reporting_timestamp": "2026-06-18 08:52:03",
+        "payload_reporting_timezone": "UTC-03:00",
+        "port": 5,
+        "scan_data": [
+          {
+            "beacon_type": "Unknown",
+            "current_time": "2026-06-18 08:51:35",
+            "mac": "de08dbf47311",
+            "raw_data": "02010612FF5900076C560BFFFFFF3500FFFF011173FF",
+            "raw_data_length": 22,
+            "rssi": -61,
+            "timestamp": 1781783495,
+            "timezone": -3,
+            "type_code": 10
+          }
+        ],
+        "time": "2026-06-18 11:52:03",
+        "timestamp": 1781783523
+      },
+      "rx_metadata": [
+        {
+          "gateway_ids": {
+            "gateway_id": "c0ba1ffffe02a98c",
+            "eui": "C0BA1FFFFE02A98C"
+          },
+          "time": "2026-06-18T11:52:03.577Z",
+          "rssi": -57,
+          "channel_rssi": -57,
+          "snr": 14.2
+        }
+      ],
+      "received_at": "2026-06-18T11:52:03.365431706Z"
+    }
+  }
+}

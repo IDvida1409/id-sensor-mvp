@@ -316,7 +316,7 @@ function verifyPanelSessionToken(req) {
 function requirePanelMaster(req, res) {
   const session = verifyPanelSessionToken(req);
   if (!session || session.role !== 'master') {
-    fail(res, 403, 'Acesso restrito ao usuario master.');
+    fail(res, 403, 'Acesso restrito ao usuário master.');
     return null;
   }
   return session;
@@ -606,7 +606,7 @@ function isCollectorReadingBeforeCalibration(row, calibration) {
 function saveCollectorCalibration(db, bleSensorId, calibration) {
   const sensorId = compactBleSensorId(bleSensorId);
   if (!sensorId) {
-    const error = new Error('MAC do sensor invalido.');
+    const error = new Error('MAC do sensor inválido.');
     error.statusCode = 400;
     throw error;
   }
@@ -1186,6 +1186,20 @@ function saveCollectorReading(db, normalizedReading) {
 function latestCollectorReadings(db, options = {}) {
   const limit = Math.max(1, Math.min(500, Number(options.limit || 200)));
   const macFilters = Array.isArray(options.macFilters) ? options.macFilters.filter(Boolean) : [];
+
+  if (macFilters.length) {
+    return macFilters
+      .map((sensorId) => db.prepare(`
+        SELECT *
+        FROM collector_readings
+        WHERE ble_sensor_id = ?
+        ORDER BY created_at DESC
+        LIMIT 1
+      `).get(sensorId))
+      .filter(Boolean)
+      .map((row) => serializeCollectorReading(row, collectorCalibrationForSensor(db, row.ble_sensor_id)));
+  }
+
   const rows = db.prepare(`
     SELECT *
     FROM collector_readings
@@ -1211,6 +1225,22 @@ function latestCollectorReadings(db, options = {}) {
 function collectorReadingsHistory(db, options = {}) {
   const limit = Math.max(1, Math.min(500, Number(options.limit || 100)));
   const macFilters = Array.isArray(options.macFilters) ? options.macFilters.filter(Boolean) : [];
+
+  if (macFilters.length) {
+    const perSensorLimit = Math.max(1, Math.ceil(limit / macFilters.length));
+    return macFilters
+      .flatMap((sensorId) => db.prepare(`
+        SELECT *
+        FROM collector_readings
+        WHERE ble_sensor_id = ?
+        ORDER BY created_at DESC
+        LIMIT ?
+      `).all(sensorId, perSensorLimit))
+      .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
+      .slice(0, limit)
+      .map((row) => serializeCollectorReading(row, collectorCalibrationForSensor(db, row.ble_sensor_id)));
+  }
+
   const rows = db.prepare(`
     SELECT *
     FROM collector_readings
@@ -2066,11 +2096,11 @@ addRoute('POST', '/api/panel/users', async ({ body, req, res }) => {
   ensureDefaultPanelUsers(db);
   const clientId = String(body?.clientId || body?.cliente_id || '').trim();
   const client = getPanelClient(db, clientId);
-  if (!client) return fail(res, 400, 'Cliente nao encontrado.');
+  if (!client) return fail(res, 400, 'Cliente não encontrado.');
 
   const displayName = String(body?.displayName || body?.name || '').trim();
   const password = String(body?.password || '');
-  if (!displayName) return fail(res, 400, 'Informe o nome do usuario.');
+  if (!displayName) return fail(res, 400, 'Informe o nome do usuário.');
   if (password.length < 6) return fail(res, 400, 'A senha precisa ter pelo menos 6 caracteres.');
 
   const defaults = panelClientDefaults(client);
@@ -2080,7 +2110,7 @@ addRoute('POST', '/api/panel/users', async ({ body, req, res }) => {
   const timestamp = nowIso();
 
   if (existing?.ativo) {
-    return fail(res, 409, 'Ja existe um usuario ativo com esse nome para este cliente.');
+    return fail(res, 409, 'Já existe um usuário ativo com esse nome para este cliente.');
   }
 
   if (existing) {
@@ -2138,7 +2168,7 @@ addRoute('POST', '/api/panel/users/:id/reset-password', async ({ params, body, r
   const db = getDb();
   ensureDefaultPanelUsers(db);
   const row = db.prepare('SELECT * FROM panel_users WHERE id = ? AND ativo = 1').get(params.id);
-  if (!row) return fail(res, 404, 'Usuario nao encontrado.');
+  if (!row) return fail(res, 404, 'Usuário não encontrado.');
   const hashed = panelPasswordHash(password);
   db.prepare('UPDATE panel_users SET password_hash = ?, password_salt = ?, atualizado_em = ? WHERE id = ?')
     .run(hashed.hash, hashed.salt, nowIso(), params.id);
@@ -2150,7 +2180,7 @@ addRoute('POST', '/api/panel/users/:id/delete', async ({ params, req, res }) => 
   const db = getDb();
   ensureDefaultPanelUsers(db);
   const row = db.prepare('SELECT * FROM panel_users WHERE id = ? AND ativo = 1').get(params.id);
-  if (!row) return fail(res, 404, 'Usuario nao encontrado.');
+  if (!row) return fail(res, 404, 'Usuário não encontrado.');
   db.prepare('UPDATE panel_users SET ativo = 0, atualizado_em = ? WHERE id = ?').run(nowIso(), params.id);
   ok(res, { id: params.id, deleted: true });
 });
@@ -2311,7 +2341,7 @@ addRoute('GET', '/api/cart-tracking/readings', async ({ query, res }) => {
 
 addRoute('GET', '/api/cart-tracking/calibration/:mac', async ({ params, res }) => {
   const sensorId = compactBleSensorId(params.mac);
-  if (!sensorId) return fail(res, 400, 'MAC do sensor invalido.');
+  if (!sensorId) return fail(res, 400, 'MAC do sensor inválido.');
 
   ok(res, {
     mac: formatBleSensorId(sensorId),
@@ -2327,7 +2357,7 @@ addRoute('POST', '/api/cart-tracking/calibration/:mac', async ({ params, body, r
       calibration
     });
   } catch (error) {
-    return fail(res, error.statusCode || 500, error.message || 'Erro ao salvar calibracao.');
+    return fail(res, error.statusCode || 500, error.message || 'Erro ao salvar calibração.');
   }
 });
 

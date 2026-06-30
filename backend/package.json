@@ -7,7 +7,8 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node src/server.js",
-    "seed": "node src/scripts/seed.js"
+    "seed": "node src/scripts/seed.js",
+    "test:ttn": "node src/scripts/test-ttn.js"
   },
   "dependencies": {},
   "devDependencies": {}

@@ -1,0 +1,11 @@
+{
+  "uplink_message": {
+    "f_port": "invalid",
+    "decoded_payload": {
+      "distance_mm": "not-a-number",
+      "battery_percent": null,
+      "rssiBle": ""
+    },
+    "rx_metadata": []
+  }
+}
