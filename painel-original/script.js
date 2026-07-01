@@ -9532,6 +9532,7 @@ if(false){(function(){
   let lastGeneratedCartAlertId = '';
   let cartBackendOperationalActive = false;
   let cartConfigBackendLoaded = false;
+  let cartConfigBackendLoadPromise = null;
   let cartConfigSaving = false;
   let cartConfigSaveTimer = null;
   const CART_SETTINGS_PARENT_VIEW = {
@@ -9749,6 +9750,16 @@ if(false){(function(){
   function saveState(state){
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     scheduleCartConfigBackendSave(state);
+  }
+
+  function hasCartConfigurationData(state){
+    return Boolean(
+      state &&
+      Array.isArray(state.rooms) &&
+      state.rooms.length > 0 &&
+      Array.isArray(state.carts) &&
+      state.carts.length > 0
+    );
   }
 
   function cartConfigPayloadFromState(state){
@@ -10783,7 +10794,13 @@ if(false){(function(){
     if(readingsInFlight) return;
     readingsInFlight = true;
     try{
-      const state = readState();
+      const state = cartConfigBackendLoaded
+        ? readState()
+        : await loadCartConfigFromBackend(true);
+      if(!hasCartConfigurationData(state)){
+        renderRooms();
+        return;
+      }
       const macFilters = Array.from(new Set(
         state.carts
           .map(cart => cleanMac(cart.mac))
@@ -13457,6 +13474,19 @@ if(false){(function(){
     const grid = document.getElementById('cartRoomGrid');
     if(!grid) return;
 
+    if(window.activePanelSession?.token && !cartConfigBackendLoaded){
+      grid.innerHTML = '<div class="cart-room-empty cart-room-empty-wide">Carregando CR...</div>';
+      refreshCartConfigFromBackend().catch(error => {
+        console.warn('Nao foi possivel carregar configuracao C.R. antes da renderizacao.', error);
+        grid.innerHTML = '<div class="cart-room-empty cart-room-empty-wide">Nenhum CR encontrado.</div>';
+      });
+      return;
+    }
+
+    if(activeRoomFilter && !state.rooms.some(room => room.id === activeRoomFilter)){
+      activeRoomFilter = '';
+    }
+
     const query = normalizeCartSearch(cartSearchTerm);
     const canManage = canManageCartSettings();
     const settingsToggle = document.getElementById('cartSettingsToggle');
@@ -13939,16 +13969,26 @@ if(false){(function(){
     if(!window.activePanelSession?.token){
       return readState();
     }
+    if(cartConfigBackendLoadPromise){
+      return cartConfigBackendLoadPromise;
+    }
+    cartConfigBackendLoadPromise = (async () => {
     try{
       const data = await panelApi('/api/cart-tracking/config');
       const currentState = readState();
+      const payloadState = data?.state || {};
       const backendState = ensureSeedData({
         ...currentState,
-        ...(data?.state || {}),
+        ...payloadState,
         telemetryEvents:currentState.telemetryEvents || [],
         backendChartSamples:currentState.backendChartSamples || [],
         alerts:currentState.alerts || []
       }).state;
+      if(hasCartConfigurationData(currentState) && !hasCartConfigurationData(backendState)){
+        cartConfigBackendLoaded = true;
+        console.warn('Configuracao C.R. vazia ignorada para preservar carrinhos carregados.');
+        return currentState;
+      }
       cartConfigBackendLoaded = true;
       localStorage.setItem(STORAGE_KEY, JSON.stringify(backendState));
       return backendState;
@@ -13956,12 +13996,24 @@ if(false){(function(){
       cartConfigBackendLoaded = false;
       console.warn('Usando cache local do C.R.; backend nao retornou configuracao.', err);
       return readState();
+    }finally{
+      cartConfigBackendLoadPromise = null;
     }
+    })();
+    return cartConfigBackendLoadPromise;
   }
 
   async function refreshCartConfigFromBackend(){
     const state = await loadCartConfigFromBackend(true);
-    renderRooms();
+    if(cartConfigBackendLoaded || !window.activePanelSession?.token){
+      renderRooms();
+    }else{
+      renderSummary(state);
+      const grid = document.getElementById('cartRoomGrid');
+      if(grid){
+        grid.innerHTML = '<div class="cart-room-empty cart-room-empty-wide">Nao foi possivel carregar os CRs do servidor.</div>';
+      }
+    }
     return state;
   }
   window.refreshCartConfigFromBackend = refreshCartConfigFromBackend;
