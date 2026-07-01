@@ -5655,6 +5655,7 @@ document.getElementById('infoMacOverlay')?.addEventListener('click', ()=> openIn
     document.body.classList.add('auth-pending');
     document.body.classList.remove('auth-ready');
     delete document.body.dataset.authRole;
+    if(typeof window.resetCartTrackingBackendConfigCache === 'function') window.resetCartTrackingBackendConfigCache();
     if(typeof window.closeCartTrackingView === 'function') window.closeCartTrackingView();
     if(typeof window.hideCartAlertsOutsideContext === 'function') window.hideCartAlertsOutsideContext();
     if(loginShell) loginShell.hidden = false;
@@ -5666,7 +5667,7 @@ document.getElementById('infoMacOverlay')?.addEventListener('click', ()=> openIn
 
   function applySession(session){
     if(!session || !session.role) return showLogin();
-    if(session.role === 'master' && !session.token) return showLogin();
+    if(!session.token) return showLogin();
     window.activePanelSession = session;
     try {
       localStorage.setItem(SESSION_KEY, JSON.stringify(session));
@@ -5682,6 +5683,13 @@ document.getElementById('infoMacOverlay')?.addEventListener('click', ()=> openIn
       window.applyPanelRole(session.role);
     } else {
       syncPanelRoleChrome(session.role);
+    }
+    if(typeof window.resetCartTrackingBackendConfigCache === 'function') window.resetCartTrackingBackendConfigCache();
+    if(typeof window.hideCartAlertsOutsideContext === 'function') window.hideCartAlertsOutsideContext();
+    if(session.role === 'cart' && typeof window.refreshCartConfigFromBackend === 'function'){
+      window.refreshCartConfigFromBackend().catch(error => {
+        console.warn('Nao foi possivel carregar a configuracao C.R. apos o login.', error);
+      });
     }
   }
 
@@ -9599,8 +9607,13 @@ if(false){(function(){
     document.querySelectorAll('[data-cart-alerts-modal] b').forEach(badge => badge.remove());
   }
 
+  function resetCartTrackingBackendConfigCache(){
+    cartConfigBackendLoaded = false;
+  }
+
   window.isEinsteinCartAlertContext = isEinsteinCartAlertContext;
   window.hideCartAlertsOutsideContext = hideCartAlertsOutsideContext;
+  window.resetCartTrackingBackendConfigCache = resetCartTrackingBackendConfigCache;
 
   function clone(value){
     return JSON.parse(JSON.stringify(value));
@@ -12887,11 +12900,12 @@ if(false){(function(){
   async function calibrationBaseReadingForCart(cart){
     const readings = await readingsForCart(cart, 30);
     const official = readings.find(reading => isOfficialCartReading(reading) && hasValidCalibrationReading(reading));
-    if(official){
+    const base = official || readings.find(reading => hasValidCalibrationReading(reading));
+    if(base){
       return {
-        distance:Math.round(finiteNumberOrNull(official.distanceMm)),
-        key:readingIdentity(official),
-        ts:readingTimestampMs(official)
+        distance:Math.round(finiteNumberOrNull(base.distanceMm)),
+        key:readingIdentity(base),
+        ts:readingTimestampMs(base)
       };
     }
     const distance = finiteNumberOrNull(cart?.distanceMm);
@@ -13913,6 +13927,9 @@ if(false){(function(){
 
   async function loadCartConfigFromBackend(){
     if(cartConfigBackendLoaded) return readState();
+    if(!window.activePanelSession?.token){
+      return readState();
+    }
     try{
       const data = await panelApi('/api/cart-tracking/config');
       const currentState = readState();
@@ -13927,7 +13944,7 @@ if(false){(function(){
       localStorage.setItem(STORAGE_KEY, JSON.stringify(backendState));
       return backendState;
     }catch(err){
-      cartConfigBackendLoaded = true;
+      cartConfigBackendLoaded = false;
       console.warn('Usando cache local do C.R.; backend nao retornou configuracao.', err);
       return readState();
     }
@@ -13938,6 +13955,7 @@ if(false){(function(){
     renderRooms();
     return state;
   }
+  window.refreshCartConfigFromBackend = refreshCartConfigFromBackend;
 
   async function loadPanelClientsForSettings(){
     if(cartPanelSettingsLoading) return;
