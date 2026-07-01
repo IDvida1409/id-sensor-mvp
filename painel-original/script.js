@@ -14974,6 +14974,25 @@ if(false){(function(){
   window.openCartTrackingView = openCartTrackingView;
   window.closeCartTrackingView = closeCartTrackingView;
   window.openCartAlertInbox = openCartAlertInbox;
+
+  function bootstrapCartTrackingAfterModuleReady(){
+    const session = window.activePanelSession || {};
+    if(session.role === 'cart' && document.body.classList.contains('auth-ready')){
+      openCartTrackingView({ profileMode:true });
+      return;
+    }
+    if(
+      window.activePanelSession?.token &&
+      document.body.classList.contains('cart-tracking-open') &&
+      document.getElementById('cartTrackingView')?.hidden !== true
+    ){
+      refreshCartConfigFromBackend().catch(error => {
+        console.warn('Nao foi possivel sincronizar configuracao C.R. apos iniciar o modulo.', error);
+      });
+    }
+  }
+
+  bootstrapCartTrackingAfterModuleReady();
 })();
 
 /* ===== SCRIPT BLOCK 46 | cart-alert-stability-guard ===== */
