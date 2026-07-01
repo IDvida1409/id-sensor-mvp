@@ -13480,8 +13480,8 @@ if(false){(function(){
     `;
   }
 
-  function renderRooms(){
-    const state = readState();
+  function renderRooms(stateOverride){
+    const state = stateOverride || readState();
     renderSummary(state);
 
     const grid = document.getElementById('cartRoomGrid');
@@ -14019,7 +14019,7 @@ if(false){(function(){
   async function refreshCartConfigFromBackend(){
     const state = await loadCartConfigFromBackend(true);
     if(cartConfigBackendLoaded || !window.activePanelSession?.token){
-      renderRooms();
+      renderRooms(state);
     }else{
       renderSummary(state);
       const grid = document.getElementById('cartRoomGrid');
