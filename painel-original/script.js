@@ -9467,18 +9467,18 @@ if(false){(function(){
     redPercent:50,
     openMarginPercent:30,
     openMarginMinMm:250,
-    confirmationReadings:4,
+    confirmationReadings:2,
     lidDetectionEnabled:false,
     samples:[]
   };
-  const CALIBRATION_SAMPLE_COUNT = 3;
+  const CALIBRATION_SAMPLE_COUNT = 2;
   const CALIBRATION_SAMPLE_DELAY_MS = 1200;
-  const CALIBRATION_FRESH_TIMEOUT_MS = 60 * 1000;
+  const CALIBRATION_FRESH_TIMEOUT_MS = 5 * 60 * 1000;
   const CALIBRATION_FRESH_POLL_MS = 5000;
-  const CALIBRATION_STABILITY_MIN_MM = 20;
-  const CALIBRATION_STABILITY_PERCENT = 5;
+  const CALIBRATION_STABILITY_MIN_MM = 50;
+  const CALIBRATION_STABILITY_PERCENT = 8;
   const INVALID_SENSOR_DISTANCE_MM = 60000;
-  const CART_EMPTY_DEADBAND_MM = 40;
+  const CART_EMPTY_DEADBAND_MM = 50;
   const CART_EMPTY_DEADBAND_PERCENT = 8;
   const CART_STABLE_EMPTY_PERCENT = 10;
   const CART_SUSPICIOUS_JUMP_PERCENT = 75;
@@ -9875,6 +9875,16 @@ if(false){(function(){
     if(fill === null || fill < 0) return null;
     const normalized = clampNumber(fill, 0, 100);
     return normalized <= CART_EMPTY_DEADBAND_PERCENT ? 0 : normalized;
+  }
+
+  function bucketCartFillPercentage(fillPercentage){
+    const fill = normalizeCartFillPercentage(fillPercentage);
+    if(fill === null) return null;
+    if(fill <= 12) return 0;
+    if(fill <= 37) return 25;
+    if(fill <= 62) return 50;
+    if(fill <= 87) return 75;
+    return 100;
   }
 
   function clearPendingFullReading(cart){
@@ -10284,7 +10294,7 @@ if(false){(function(){
   }
 
   function cartMeetsCriticalFill(cart){
-    return cartVisualFill(cart) >= cartRedPercent(cart);
+    return cartOperationalFill(cart) >= cartRedPercent(cart);
   }
 
   function shouldLeaveRoomForExchange(cart, nowMs){
@@ -10465,7 +10475,7 @@ if(false){(function(){
         ? fillPercentageForDistance(cartCalibration(cart), distance)
         : null;
       const nextFill = backendFill !== null ? backendFill : calibratedFill;
-      const nextDisplayFill = nextFill;
+      const nextDisplayFill = bucketCartFillPercentage(nextFill);
 
       if(nextFill !== null && Math.round(nextFill) !== Math.round(Number(cart.fillPercentage || 0))){
         cart.fillPercentage = Math.round(nextFill);
@@ -10710,13 +10720,19 @@ if(false){(function(){
     return Math.max(0, Math.min(100, Number(displayFill ?? confirmedFill ?? 0)));
   }
 
+  function cartOperationalFill(cart){
+    const confirmedFill = finiteNumberOrNull(cart?.fillPercentage);
+    const displayFill = finiteNumberOrNull(cart?.displayFillPercentage);
+    return Math.max(0, Math.min(100, Number(confirmedFill ?? displayFill ?? 0)));
+  }
+
   function fillTone(cart){
     const rawStatus = String(cart?.collectorStatus || '').toLowerCase();
     if(isLostCart(cart)) return 'lost';
     if(rawStatus === 'uncalibrated' || rawStatus === 'calibration_pending') return 'pending';
     if(rawStatus === 'sensor_removed') return 'sensor';
     if(rawStatus === 'sensor_obstructed') return 'obstruction';
-    const fill = cartVisualFill(cart);
+    const fill = cartOperationalFill(cart);
     if(fill >= cartRedPercent(cart)) return 'full';
     return 'empty';
   }
@@ -10842,8 +10858,7 @@ if(false){(function(){
   function renderCartUnderMeta(cart){
     const battery = cartBatteryPercent(cart);
     const batteryWidth = battery === null ? 8 : Math.max(8, Math.min(100, battery));
-    const communicationSeen = cart.lastCommunicationSeen || cart.lastSeen || 'sem comunicação';
-    const validReadingSeen = cart.lastSeen || 'sem leitura válida';
+    const lastValidatedReading = cart.lastSeen || 'aguardando validacao';
     return `
       <div class="cart-under-meta" aria-label="Comunicação e bateria de ${escapeHtml(cartDisplayName(cart))}">
         <span class="cart-under-row cart-under-battery">
@@ -10853,11 +10868,7 @@ if(false){(function(){
         </span>
         <span class="cart-under-row cart-under-reading">
           <small>&Uacute;ltima leitura</small>
-          <span>${escapeHtml(communicationSeen)}</span>
-        </span>
-        <span class="cart-under-row cart-under-reading">
-          <small>&Uacute;ltima leitura v&aacute;lida</small>
-          <span>${escapeHtml(validReadingSeen)}</span>
+          <span>${escapeHtml(lastValidatedReading)}</span>
         </span>
       </div>
     `;
@@ -12463,7 +12474,7 @@ if(false){(function(){
 
   function calibrationPercentChoices(calibration, selectedValue){
     const selected = Math.round(Number(selectedValue || calibration.redPercent || DEFAULT_CART_CALIBRATION.redPercent));
-    const values = new Set([40, 50, 60, 70, 80, 90, 100, selected]);
+    const values = new Set([20, 25, 50, 75, 100, selected]);
     return Array.from(values)
       .filter(value => value >= 1 && value <= 100)
       .sort((a, b) => a - b)
