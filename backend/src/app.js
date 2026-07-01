@@ -85,6 +85,7 @@ const COLLECTOR_EMPTY_LEVEL_STATUS = 'empty';
 const COLLECTOR_NORMAL_LEVEL_STATUS = 'normal';
 const COLLECTOR_ATTENTION_LEVEL_STATUS = 'attention';
 const COLLECTOR_CRITICAL_LEVEL_STATUS = 'critical';
+const COLLECTOR_CRITICAL_PERCENT_CHOICES = [25, 50, 75, 100];
 const DEFAULT_COLLECTOR_CALIBRATION = {
   emptyDistanceMm: CART_EMPTY_DISTANCE_MM,
   fullDistanceMm: CART_FULL_DISTANCE_MM,
@@ -99,7 +100,7 @@ const KNOWN_COLLECTOR_CALIBRATIONS = {
   de08dbf47311: {
     emptyDistanceMm: 719,
     fullDistanceMm: 140,
-    redPercent: 40,
+    redPercent: 50,
     openMarginPercent: CART_LID_OPEN_MARGIN_PERCENT,
     openMarginMinMm: CART_LID_OPEN_MARGIN_MM,
     confirmationReadings: CART_LEVEL_CONFIRM_READINGS,
@@ -120,6 +121,18 @@ const KNOWN_COLLECTOR_CALIBRATIONS = {
   }
 };
 // C01/C02 are vertical ToF sensors. A stable distance far beyond calibration means the lid is open.
+
+function normalizeCollectorCriticalPercent(value, fallback = DEFAULT_COLLECTOR_CALIBRATION.redPercent) {
+  const number = finiteNumberOrNull(value);
+  const target = number !== null ? clampNumber(Math.round(number), 1, 100) : fallback;
+  return COLLECTOR_CRITICAL_PERCENT_CHOICES.reduce((best, option) => {
+    const bestDistance = Math.abs(best - target);
+    const optionDistance = Math.abs(option - target);
+    if (optionDistance < bestDistance) return option;
+    if (optionDistance === bestDistance && option > best) return option;
+    return best;
+  }, COLLECTOR_CRITICAL_PERCENT_CHOICES[0]);
+}
 
 const ACTIVATION_CODE_TTL_MS = 24 * 60 * 60 * 1000;
 const PANEL_AUTH_USERS = {
@@ -558,9 +571,7 @@ function normalizeCollectorCalibration(value = {}) {
   return {
     emptyDistanceMm: normalizedEmpty,
     fullDistanceMm: normalizedFull,
-    redPercent: redPercent !== null
-      ? clampNumber(Math.round(redPercent), 1, 100)
-      : DEFAULT_COLLECTOR_CALIBRATION.redPercent,
+    redPercent: normalizeCollectorCriticalPercent(redPercent),
     openMarginPercent: openMarginPercent !== null
       ? clampNumber(openMarginPercent, 1, 200)
       : DEFAULT_COLLECTOR_CALIBRATION.openMarginPercent,

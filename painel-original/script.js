@@ -9471,6 +9471,7 @@ if(false){(function(){
     lidDetectionEnabled:false,
     samples:[]
   };
+  const CART_CRITICAL_PERCENT_CHOICES = [25, 50, 75, 100];
   const CALIBRATION_SAMPLE_COUNT = 2;
   const CALIBRATION_SAMPLE_DELAY_MS = 1200;
   const CALIBRATION_FRESH_TIMEOUT_MS = 5 * 60 * 1000;
@@ -9834,7 +9835,7 @@ if(false){(function(){
       emptyDistanceMm: emptyDistance !== null && emptyDistance > 0 ? Math.round(emptyDistance) : DEFAULT_CART_CALIBRATION.emptyDistanceMm,
       fullDistanceMm: fullDistance !== null && fullDistance >= 0 ? Math.round(fullDistance) : DEFAULT_CART_CALIBRATION.fullDistanceMm,
       redMode: 'percent',
-      redPercent: redPercent !== null ? clampNumber(Math.round(redPercent), 1, 100) : DEFAULT_CART_CALIBRATION.redPercent,
+      redPercent: normalizeCartCriticalPercent(redPercent),
       redDistanceMm: redDistance !== null && redDistance > 0 ? Math.round(redDistance) : null,
       openMarginPercent: openMarginPercent !== null ? clampNumber(openMarginPercent, 1, 200) : DEFAULT_CART_CALIBRATION.openMarginPercent,
       openMarginMinMm: openMarginMin !== null ? Math.max(1, Math.round(openMarginMin)) : DEFAULT_CART_CALIBRATION.openMarginMinMm,
@@ -9875,6 +9876,18 @@ if(false){(function(){
     if(fill === null || fill < 0) return null;
     const normalized = clampNumber(fill, 0, 100);
     return normalized <= CART_EMPTY_DEADBAND_PERCENT ? 0 : normalized;
+  }
+
+  function normalizeCartCriticalPercent(value, fallback = DEFAULT_CART_CALIBRATION.redPercent){
+    const number = finiteNumberOrNull(value);
+    const target = number !== null ? clampNumber(Math.round(number), 1, 100) : fallback;
+    return CART_CRITICAL_PERCENT_CHOICES.reduce((best, option) => {
+      const bestDistance = Math.abs(best - target);
+      const optionDistance = Math.abs(option - target);
+      if(optionDistance < bestDistance) return option;
+      if(optionDistance === bestDistance && option > best) return option;
+      return best;
+    }, CART_CRITICAL_PERCENT_CHOICES[0]);
   }
 
   function bucketCartFillPercentage(fillPercentage){
@@ -12473,8 +12486,8 @@ if(false){(function(){
   }
 
   function calibrationPercentChoices(calibration, selectedValue){
-    const selected = Math.round(Number(selectedValue || calibration.redPercent || DEFAULT_CART_CALIBRATION.redPercent));
-    const values = new Set([20, 25, 50, 75, 100, selected]);
+    const selected = normalizeCartCriticalPercent(selectedValue || calibration.redPercent || DEFAULT_CART_CALIBRATION.redPercent);
+    const values = new Set(CART_CRITICAL_PERCENT_CHOICES);
     return Array.from(values)
       .filter(value => value >= 1 && value <= 100)
       .sort((a, b) => a - b)
