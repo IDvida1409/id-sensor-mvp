@@ -9462,7 +9462,6 @@ if(false){(function(){
   const CART_CRITICAL_PERCENT_CHOICES = [25, 50, 75, 100];
   const CALIBRATION_SAMPLE_COUNT = 2;
   const CALIBRATION_SAMPLE_DELAY_MS = 1200;
-  const CALIBRATION_FRESH_TIMEOUT_MS = 5 * 60 * 1000;
   const CALIBRATION_FRESH_POLL_MS = 5000;
   const CALIBRATION_STABILITY_MIN_MM = 50;
   const CALIBRATION_STABILITY_PERCENT = 8;
@@ -12876,8 +12875,38 @@ if(false){(function(){
     return readings[0] || null;
   }
 
-  async function freshCalibrationReadingForCart(cart, seenKeys, minTimestampMs, timeoutAtMs){
-    while(Date.now() <= timeoutAtMs){
+  function isCalibrationFlowActive(cart){
+    const overlay = document.getElementById('cartDetailOverlay');
+    const flow = document.getElementById('cartCalibrationNewFlow');
+    return !!overlay
+      && overlay.dataset.cartId === cart?.id
+      && flow
+      && flow.hidden !== true;
+  }
+
+  async function calibrationBaseReadingForCart(cart){
+    const readings = await readingsForCart(cart, 30);
+    const official = readings.find(reading => isOfficialCartReading(reading) && hasValidCalibrationReading(reading));
+    if(official){
+      return {
+        distance:Math.round(finiteNumberOrNull(official.distanceMm)),
+        key:readingIdentity(official),
+        ts:readingTimestampMs(official)
+      };
+    }
+    const distance = finiteNumberOrNull(cart?.distanceMm);
+    if(distance !== null && distance < INVALID_SENSOR_DISTANCE_MM && cart?.lastReadingAt){
+      return {
+        distance:Math.round(distance),
+        key:`cart|${cart.id}|${cart.lastReadingAt}|${distance}`,
+        ts:new Date(cart.lastReadingAt).getTime()
+      };
+    }
+    return null;
+  }
+
+  async function freshCalibrationReadingForCart(cart, seenKeys, minTimestampMs){
+    while(isCalibrationFlowActive(cart)){
       const readings = await readingsForCart(cart, 30);
       const fresh = readings.find(reading => {
         const key = readingIdentity(reading);
@@ -12962,32 +12991,38 @@ if(false){(function(){
     const startBtn = document.getElementById('cartCalibrationStartBtn');
     const samples = [];
     const calibrationStartedAt = Date.now();
-    const calibrationTimeoutAt = calibrationStartedAt + CALIBRATION_FRESH_TIMEOUT_MS;
     const seenReadingKeys = new Set();
     if(startBtn) startBtn.disabled = true;
     setCalibrationNewStatus('Aguardando nova leitura do sensor...', 'info');
     renderCalibrationSamples(samples, 0);
 
     try{
-      for(let index = 0; index < CALIBRATION_SAMPLE_COUNT; index += 1){
-        if(index > 0) await wait(Math.min(CALIBRATION_SAMPLE_DELAY_MS, 1000));
-        setCalibrationNewStatus(`Aguardando nova leitura ${index + 1} de ${CALIBRATION_SAMPLE_COUNT}...`, 'info');
-        renderCalibrationSamples(samples, index);
-        const reading = await freshCalibrationReadingForCart(cart, seenReadingKeys, calibrationStartedAt, calibrationTimeoutAt);
-        if(!reading){
-          setCalibrationNewStatus('Nenhuma leitura nova chegou do sensor. Verifique o gateway e tente novamente.', 'error');
-          renderCalibrationSamples(samples);
-          return;
-        }
-        const distance = finiteNumberOrNull(reading?.distanceMm);
-        if(distance === null || distance >= INVALID_SENSOR_DISTANCE_MM){
-          setCalibrationNewStatus('Leitura inválida. Reposicione o sensor e tente novamente.', 'error');
-          renderCalibrationSamples(samples);
-          return;
-        }
-        samples.push(Math.round(distance));
-        renderCalibrationSamples(samples, index);
+      const baseReading = await calibrationBaseReadingForCart(cart);
+      if(!baseReading){
+        setCalibrationNewStatus('Ainda nao existe leitura valida para usar como base. Aguarde o primeiro ciclo oficial do sensor.', 'info');
+        renderCalibrationSamples(samples);
+        return;
       }
+      samples.push(baseReading.distance);
+      if(baseReading.key) seenReadingKeys.add(baseReading.key);
+      renderCalibrationSamples(samples, 1);
+
+      await wait(Math.min(CALIBRATION_SAMPLE_DELAY_MS, 1000));
+      setCalibrationNewStatus('Primeira leitura valida encontrada. Aguardando a proxima leitura nova do sensor...', 'info');
+      const reading = await freshCalibrationReadingForCart(cart, seenReadingKeys, calibrationStartedAt);
+      if(!reading){
+        setCalibrationNewStatus('Busca de nova leitura interrompida.', 'info');
+        renderCalibrationSamples(samples);
+        return;
+      }
+      const distance = finiteNumberOrNull(reading?.distanceMm);
+      if(distance === null || distance >= INVALID_SENSOR_DISTANCE_MM){
+        setCalibrationNewStatus('Leitura invalida. Reposicione o sensor e tente novamente.', 'error');
+        renderCalibrationSamples(samples);
+        return;
+      }
+      samples.push(Math.round(distance));
+      renderCalibrationSamples(samples, 1);
 
       const min = Math.min(...samples);
       const max = Math.max(...samples);
