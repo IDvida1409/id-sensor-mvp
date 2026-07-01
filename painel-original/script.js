@@ -9221,10 +9221,15 @@ if(false){(function(){
       <div class="cart-room-grid" id="cartRoomGrid"></div>
     `;
 
-    const layoutNode = document.getElementById('layout');
+    const layoutNode = document.getElementById('layout') || document.querySelector('.layout');
     const toolbarNode = document.querySelector('.toolbar-filters') || document.querySelector('.toolbar');
-    const parent = layoutNode?.parentNode || toolbarNode?.parentNode || document.body;
-    parent.insertBefore(view, layoutNode || toolbarNode?.nextSibling || parent.firstChild);
+    const appNode = document.querySelector('.app') || layoutNode?.parentNode || toolbarNode?.parentNode || document.body;
+    const anchorNode = layoutNode || toolbarNode || null;
+    if(anchorNode && anchorNode.parentNode === appNode){
+      appNode.insertBefore(view, anchorNode);
+    }else{
+      appNode.appendChild(view);
+    }
 
     document.getElementById('cartBackBtn')?.addEventListener('click', closeCartTrackingView);
     document.getElementById('cartSaveRoomBtn')?.addEventListener('click', saveRoomFromForm);
@@ -9438,6 +9443,7 @@ if(false){(function(){
     previousSubtitle = subtitle?.textContent || previousSubtitle;
     if(subtitle) subtitle.textContent = 'Carrinhos por sala';
     view.hidden = false;
+    view.style.display = '';
     document.body.classList.add('cart-tracking-open');
     renderCartTracking();
   }
@@ -13568,6 +13574,23 @@ if(false){(function(){
     toggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
   }
 
+  function mountCartTrackingView(view){
+    if(!view) return;
+    const layoutNode = document.getElementById('layout') || document.querySelector('.layout');
+    const toolbarNode = document.querySelector('.toolbar-filters') || document.querySelector('.toolbar');
+    const appNode = document.querySelector('.app') || layoutNode?.parentNode || toolbarNode?.parentNode || document.body;
+    const anchorNode = layoutNode || toolbarNode || null;
+    const hiddenParent = view.closest?.('.layout,.toolbar');
+    const wrongParent = view.parentNode && appNode && view.parentNode !== appNode;
+    if(!view.isConnected || hiddenParent || wrongParent){
+      if(anchorNode && anchorNode.parentNode === appNode){
+        appNode.insertBefore(view, anchorNode);
+      }else{
+        appNode.appendChild(view);
+      }
+    }
+  }
+
   function ensureCartTrackingUi(){
     const oldView = document.getElementById('cartTrackingView');
     if(oldView) oldView.remove();
@@ -14929,6 +14952,7 @@ if(false){(function(){
     ensureCartTrackingUi();
     const view = document.getElementById('cartTrackingView');
     if(!view) return;
+    mountCartTrackingView(view);
     const title = document.querySelector('.brand .title');
     const subtitle = document.getElementById('pageSubtitle');
     if(!document.body.classList.contains('cart-tracking-open')){
