@@ -2236,7 +2236,20 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  function isCartTrackingSessionActive(){
+    const role = window.activePanelSession?.role || document.body.dataset.authRole || '';
+    return role === 'cart' || document.body.classList.contains('cart-tracking-open');
+  }
+
+  function shouldLoadLegacyPanelDevices(){
+    if(isCartTrackingSessionActive()) return false;
+    if(document.body.classList.contains('auth-pending')) return false;
+    if(!document.body.classList.contains('auth-ready') && !window.activePanelSession?.token) return false;
+    return true;
+  }
+
   async function loadPanelDevicesFromBackend(){
+    if(!shouldLoadLegacyPanelDevices()) return devices;
     const baseUrl = getPanelApiBaseUrl().replace(/\/+$/, '');
     const response = await fetch(`${baseUrl}/devices`, { cache:'no-store' });
     if(!response.ok) throw new Error(`GET /devices falhou: ${response.status}`);
@@ -2259,18 +2272,23 @@ document.addEventListener("DOMContentLoaded", () => {
     return devices;
   }
 
-  function startBackendPolling(){
+  function pollLegacyPanelDevices(){
+    if(!shouldLoadLegacyPanelDevices()) return;
     loadPanelDevicesFromBackend().catch(() => {
       window.panelDataSource = 'mock-fallback';
       window.devices = devices;
     });
+  }
 
-    window.__panelBackendPollTimer = setInterval(() => {
-      loadPanelDevicesFromBackend().catch(() => {});
-    }, POLL_INTERVAL_MS);
+  function startBackendPolling(){
+    if(window.__panelBackendPollTimer) return;
+    pollLegacyPanelDevices();
+
+    window.__panelBackendPollTimer = setInterval(pollLegacyPanelDevices, POLL_INTERVAL_MS);
   }
 
   window.loadPanelDevicesFromBackend = loadPanelDevicesFromBackend;
+  window.startPanelDevicesBackendPolling = startBackendPolling;
   window.getPanelApiBaseUrl = getPanelApiBaseUrl;
   window.refreshNocLiveFromDevices = refreshNocLiveFromDevices;
 
@@ -5692,9 +5710,10 @@ document.getElementById('infoMacOverlay')?.addEventListener('click', ()=> openIn
     if(typeof window.resetCartTrackingBackendConfigCache === 'function') window.resetCartTrackingBackendConfigCache();
     if(typeof window.hideCartAlertsOutsideContext === 'function') window.hideCartAlertsOutsideContext();
     if(session.role === 'cart'){
-      if(typeof window.openCartTrackingView !== 'function'){
-        window.__pendingCartTrackingOpen = true;
-      }
+      window.__pendingCartTrackingOpen = true;
+      window.setTimeout(() => {
+        if(typeof window.openCartTrackingView === 'function') window.openCartTrackingView();
+      }, 0);
       if(typeof window.refreshCartConfigFromBackend === 'function'){
         window.refreshCartConfigFromBackend().catch(error => {
           console.warn('Nao foi possivel carregar a configuracao C.R. apos o login.', error);
@@ -5702,6 +5721,7 @@ document.getElementById('infoMacOverlay')?.addEventListener('click', ()=> openIn
       }
     }else{
       window.__pendingCartTrackingOpen = false;
+      if(typeof window.startPanelDevicesBackendPolling === 'function') window.startPanelDevicesBackendPolling();
     }
   }
 
