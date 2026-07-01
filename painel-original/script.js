@@ -9779,6 +9779,31 @@ if(false){(function(){
     }, 250);
   }
 
+  async function saveCartConfigBackendNow(state){
+    if(!canManageCartSettings()) return state;
+    window.clearTimeout(cartConfigSaveTimer);
+    const payload = cartConfigPayloadFromState(state);
+    cartConfigSaving = true;
+    try{
+      const saved = await panelApi('/api/cart-tracking/config', {
+        method:'PUT',
+        body:JSON.stringify({ state:payload })
+      });
+      const backendState = ensureSeedData({
+        ...readState(),
+        ...(saved?.state || payload),
+        telemetryEvents:state.telemetryEvents || [],
+        backendChartSamples:state.backendChartSamples || [],
+        alerts:state.alerts || []
+      }).state;
+      cartConfigBackendLoaded = true;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(backendState));
+      return backendState;
+    }finally{
+      cartConfigSaving = false;
+    }
+  }
+
   window.__saveCartTrackingConfigToBackend = scheduleCartConfigBackendSave;
   window.__readCartTrackingState = readState;
 
@@ -14670,7 +14695,7 @@ if(false){(function(){
     if(overlay) overlay.hidden = true;
   }
 
-  function saveCartDetail(){
+  async function saveCartDetail(){
     if(!canManageCartSettings()) return;
     const overlay = document.getElementById('cartDetailOverlay');
     const state = readState();
@@ -14678,6 +14703,7 @@ if(false){(function(){
     const roomId = overlay?.dataset.roomId || defaultNewCartRoomId(state);
     const name = document.getElementById('cartDetailName')?.value.trim();
     const mac = formatMac(document.getElementById('cartDetailMac')?.value);
+    const saveBtn = document.getElementById('cartDetailSaveBtn');
 
     if(!name || cleanMac(mac).length !== 12){
       alert('Informe nome e MAC completo do sensor.');
@@ -14692,12 +14718,11 @@ if(false){(function(){
 
     let cart = state.carts.find(item => item.id === cartId);
     if(cart){
-      closeCartDetail();
-      renderRooms();
-      return;
-    }
-
-    if(!cart){
+      cart.name = name;
+      cart.mac = mac;
+      if(roomId) cart.roomId = roomId;
+      if(roomId && !cart.locationStatus) cart.locationStatus = 'in_room';
+    }else{
       cart = {
         id:`cart-${cleanMac(mac).toLowerCase()}`,
         name,
@@ -14716,11 +14741,24 @@ if(false){(function(){
       state.carts.push(cart);
     }
 
-    cart.name = name;
-    cart.mac = mac;
-    saveState(state);
-    closeCartDetail();
-    renderRooms();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    if(saveBtn){
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Salvando...';
+    }
+    try{
+      const savedState = await saveCartConfigBackendNow(state);
+      closeCartDetail();
+      renderRooms(savedState);
+    }catch(error){
+      console.warn('Nao foi possivel salvar o carrinho no backend.', error);
+      alert(error.message || 'Nao foi possivel salvar o carrinho. Tente novamente.');
+    }finally{
+      if(saveBtn){
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Salvar';
+      }
+    }
   }
 
   function openCartTrackingView(){
