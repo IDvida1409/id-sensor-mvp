@@ -9773,7 +9773,12 @@ if(false){(function(){
     };
   }
 
+  function hasCartConfigStateShape(state){
+    return Boolean(state && Array.isArray(state.rooms) && Array.isArray(state.carts));
+  }
+
   function scheduleCartConfigBackendSave(state){
+    if(!hasCartConfigStateShape(state)) return;
     if(!cartConfigBackendLoaded || cartConfigSaving || !canManageCartSettings()) return;
     window.clearTimeout(cartConfigSaveTimer);
     const payload = cartConfigPayloadFromState(state);
@@ -9794,6 +9799,10 @@ if(false){(function(){
 
   async function saveCartConfigBackendNow(state){
     if(!canManageCartSettings()) return state;
+    if(!hasCartConfigStateShape(state)){
+      console.warn('Configuracao C.R. incompleta ignorada para evitar sobrescrever salas e carrinhos.');
+      return readState();
+    }
     window.clearTimeout(cartConfigSaveTimer);
     const payload = cartConfigPayloadFromState(state);
     cartConfigSaving = true;
@@ -13925,8 +13934,8 @@ if(false){(function(){
     return payload.data;
   }
 
-  async function loadCartConfigFromBackend(){
-    if(cartConfigBackendLoaded) return readState();
+  async function loadCartConfigFromBackend(force = false){
+    if(cartConfigBackendLoaded && !force) return readState();
     if(!window.activePanelSession?.token){
       return readState();
     }
@@ -13951,7 +13960,7 @@ if(false){(function(){
   }
 
   async function refreshCartConfigFromBackend(){
-    const state = await loadCartConfigFromBackend();
+    const state = await loadCartConfigFromBackend(true);
     renderRooms();
     return state;
   }
@@ -14864,10 +14873,14 @@ if(false){(function(){
     if(subtitle) subtitle.textContent = 'Carrinhos de resíduo';
     view.hidden = false;
     document.body.classList.add('cart-tracking-open');
-    renderRooms();
-    refreshCartConfigFromBackend().catch(error => {
-      console.warn('Nao foi possivel atualizar configuracao C.R. do backend.', error);
-    });
+    if(window.activePanelSession?.token){
+      refreshCartConfigFromBackend().catch(error => {
+        console.warn('Nao foi possivel atualizar configuracao C.R. do backend.', error);
+        renderRooms();
+      });
+    }else{
+      renderRooms();
+    }
     startReadingsPolling();
   }
 
@@ -14973,12 +14986,24 @@ if(false){(function(){
     }
   }
 
+  function mergeStableAlertState(state){
+    const current = readStableAlertState();
+    const incoming = state && typeof state === 'object' ? state : {};
+    const merged = { ...current, ...incoming };
+    ['rooms', 'carts', 'telemetryEvents', 'backendChartSamples', 'alerts'].forEach(key => {
+      if(!Array.isArray(incoming[key]) && Array.isArray(current[key])){
+        merged[key] = current[key];
+      }
+    });
+    if(!incoming.alertSettings && current.alertSettings){
+      merged.alertSettings = current.alertSettings;
+    }
+    return merged;
+  }
+
   function saveStableAlertState(state){
     try{
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state || {}));
-      if(typeof window.__saveCartTrackingConfigToBackend === 'function'){
-        window.__saveCartTrackingConfigToBackend(state || {});
-      }
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(mergeStableAlertState(state)));
     }catch(error){
       console.warn('Não foi possível salvar o estado dos alertas.', error);
     }
