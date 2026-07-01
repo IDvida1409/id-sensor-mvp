@@ -5415,7 +5415,11 @@ document.getElementById('infoMacOverlay')?.addEventListener('click', ()=> openIn
       if(subtitleEl) subtitleEl.textContent = 'Hospital Einstein · Carrinhos de resíduo';
       if(typeof selectedArea !== 'undefined') selectedArea = 'Carrinhos de resíduo';
       if(typeof selectedClient !== 'undefined') selectedClient = 'Hospital Einstein';
-      if(typeof window.openCartTrackingView === 'function') window.openCartTrackingView({ profileMode:true });
+      if(typeof window.openCartTrackingView === 'function'){
+        window.openCartTrackingView({ profileMode:true });
+      }else{
+        window.__pendingCartTrackingOpen = true;
+      }
     }
 
     if(typeof renderGrid === 'function') renderGrid();
@@ -5655,6 +5659,7 @@ document.getElementById('infoMacOverlay')?.addEventListener('click', ()=> openIn
     document.body.classList.add('auth-pending');
     document.body.classList.remove('auth-ready');
     delete document.body.dataset.authRole;
+    window.__pendingCartTrackingOpen = false;
     if(typeof window.resetCartTrackingBackendConfigCache === 'function') window.resetCartTrackingBackendConfigCache();
     if(typeof window.closeCartTrackingView === 'function') window.closeCartTrackingView();
     if(typeof window.hideCartAlertsOutsideContext === 'function') window.hideCartAlertsOutsideContext();
@@ -5686,10 +5691,17 @@ document.getElementById('infoMacOverlay')?.addEventListener('click', ()=> openIn
     }
     if(typeof window.resetCartTrackingBackendConfigCache === 'function') window.resetCartTrackingBackendConfigCache();
     if(typeof window.hideCartAlertsOutsideContext === 'function') window.hideCartAlertsOutsideContext();
-    if(session.role === 'cart' && typeof window.refreshCartConfigFromBackend === 'function'){
-      window.refreshCartConfigFromBackend().catch(error => {
-        console.warn('Nao foi possivel carregar a configuracao C.R. apos o login.', error);
-      });
+    if(session.role === 'cart'){
+      if(typeof window.openCartTrackingView !== 'function'){
+        window.__pendingCartTrackingOpen = true;
+      }
+      if(typeof window.refreshCartConfigFromBackend === 'function'){
+        window.refreshCartConfigFromBackend().catch(error => {
+          console.warn('Nao foi possivel carregar a configuracao C.R. apos o login.', error);
+        });
+      }
+    }else{
+      window.__pendingCartTrackingOpen = false;
     }
   }
 
@@ -9418,6 +9430,7 @@ if(false){(function(){
   }
 
   function openCartTrackingView(){
+    window.__pendingCartTrackingOpen = false;
     ensureCartTrackingUi();
     const view = document.getElementById('cartTrackingView');
     if(!view) return;
@@ -14912,6 +14925,7 @@ if(false){(function(){
   }
 
   function openCartTrackingView(){
+    window.__pendingCartTrackingOpen = false;
     ensureCartTrackingUi();
     const view = document.getElementById('cartTrackingView');
     if(!view) return;
@@ -14977,8 +14991,16 @@ if(false){(function(){
 
   function bootstrapCartTrackingAfterModuleReady(){
     const session = window.activePanelSession || {};
-    if(session.role === 'cart' && document.body.classList.contains('auth-ready')){
-      openCartTrackingView({ profileMode:true });
+    const role = String(document.body?.dataset?.panelRole || window.currentRole || session.role || '').toLowerCase();
+    const loginNode = document.getElementById('loginShell');
+    const loginVisible = loginNode && loginNode.hidden !== true;
+    const shouldOpenCartView = document.body.classList.contains('auth-ready') &&
+      !document.body.classList.contains('auth-pending') &&
+      !loginVisible &&
+      (window.__pendingCartTrackingOpen === true || role === 'cart');
+
+    if(shouldOpenCartView){
+      window.setTimeout(() => openCartTrackingView({ profileMode:true }), 0);
       return;
     }
     if(
