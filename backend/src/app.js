@@ -96,31 +96,6 @@ const DEFAULT_COLLECTOR_CALIBRATION = {
   lidDetectionEnabled: false,
   samples: []
 };
-const KNOWN_COLLECTOR_CALIBRATIONS = {
-  de08dbf47311: {
-    emptyDistanceMm: 719,
-    fullDistanceMm: 140,
-    redPercent: 50,
-    openMarginPercent: CART_LID_OPEN_MARGIN_PERCENT,
-    openMarginMinMm: CART_LID_OPEN_MARGIN_MM,
-    confirmationReadings: CART_LEVEL_CONFIRM_READINGS,
-    lidDetectionEnabled: false,
-    samples: [719, 719, 719],
-    updatedAt: 'known-c01-default'
-  },
-  c4894994a485: {
-    emptyDistanceMm: 708,
-    fullDistanceMm: 20,
-    redPercent: 50,
-    openMarginPercent: CART_LID_OPEN_MARGIN_PERCENT,
-    openMarginMinMm: CART_LID_OPEN_MARGIN_MM,
-    confirmationReadings: CART_LEVEL_CONFIRM_READINGS,
-    lidDetectionEnabled: false,
-    samples: [708, 708, 708],
-    updatedAt: 'known-c02-default'
-  }
-};
-
 const EINSTEIN_CART_CLIENT_ID = 'einstein';
 const EINSTEIN_CART_ROOM_ID = 'sala-bloco-b1';
 const EINSTEIN_CART_ROOM_NAME = 'SALA BLOCO B1';
@@ -192,6 +167,7 @@ function normalizeCartTrackingCart(cart) {
     lastCommunicationAt: String(cart?.lastCommunicationAt || '').trim(),
     lastCommunicationSeen: String(cart?.lastCommunicationSeen || '').trim(),
     lastSeen: String(cart?.lastSeen || '').trim(),
+    registeredAt: String(cart?.registeredAt || cart?.registered_at || '').trim(),
     transitStep: finiteNumberOrNull(cart?.transitStep) ?? 0
   };
 }
@@ -738,7 +714,7 @@ function collectorCalibrationForSensor(db, bleSensorId) {
     WHERE ble_sensor_id = ?
   `).get(sensorId);
 
-  return normalizeCollectorCalibration(row || KNOWN_COLLECTOR_CALIBRATIONS[sensorId] || {});
+  return normalizeCollectorCalibration(row || {});
 }
 
 function isCollectorOperationalCalibration(calibration) {
@@ -847,6 +823,17 @@ function isCollectorLidOpenDistance(distanceMm, calibration) {
   const openLimit = collectorOpenDistanceLimit(normalized);
   if (distance === null || openLimit === null) return false;
   return distance > openLimit;
+}
+
+function deleteCollectorCalibration(db, bleSensorId) {
+  const sensorId = compactBleSensorId(bleSensorId);
+  if (!sensorId) {
+    const error = new Error('MAC do sensor invÃ¡lido.');
+    error.statusCode = 400;
+    throw error;
+  }
+  db.prepare('DELETE FROM collector_calibrations WHERE ble_sensor_id = ?').run(sensorId);
+  return normalizeCollectorCalibration();
 }
 
 function isCollectorSensorRemovedDistance(distanceMm, calibration) {
@@ -2908,6 +2895,18 @@ addRoute('POST', '/api/cart-tracking/calibration/:mac', async ({ params, body, r
     });
   } catch (error) {
     return fail(res, error.statusCode || 500, error.message || 'Erro ao salvar calibração.');
+  }
+});
+
+addRoute('DELETE', '/api/cart-tracking/calibration/:mac', async ({ params, res }) => {
+  try {
+    const calibration = deleteCollectorCalibration(getDb(), params.mac);
+    ok(res, {
+      mac: formatBleSensorId(params.mac),
+      calibration
+    });
+  } catch (error) {
+    return fail(res, error.statusCode || 500, error.message || 'Erro ao limpar calibracao.');
   }
 });
 

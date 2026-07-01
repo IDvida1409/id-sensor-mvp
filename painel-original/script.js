@@ -9754,7 +9754,8 @@ if(false){(function(){
         roomId:cart.roomId || '',
         locationStatus:cart.locationStatus || 'in_room',
         fillPercentage:Number(cart.fillPercentage || 0),
-        calibration:normalizeCartCalibration(cart.calibration)
+        calibration:normalizeCartCalibration(cart.calibration),
+        registeredAt:cart.registeredAt || ''
       })) : [],
       alertSettings:normalizeCartAlertSettings(source.alertSettings)
     };
@@ -10512,7 +10513,12 @@ if(false){(function(){
           'tampa aberta'
         ].includes(rawStatus) || confirmedLidState === 'open' || reading.lidOpen === true);
       const backendFill = normalizeCartFillPercentage(fill);
+      const backendCalibrationMs = new Date(readingCalibration?.updatedAt || '').getTime();
+      const registeredAtMs = new Date(cart.registeredAt || '').getTime();
+      const backendCalibrationBelongsToRegistration = Number.isFinite(backendCalibrationMs)
+        && (!Number.isFinite(registeredAtMs) || backendCalibrationMs >= registeredAtMs);
       const shouldUseBackendCalibration = readingCalibration
+        && backendCalibrationBelongsToRegistration
         && (readingCalibration.updatedAt || !currentCalibration.updatedAt);
       if(shouldUseBackendCalibration && JSON.stringify(cart.calibration || null) !== JSON.stringify(readingCalibration)){
         cart.calibration = readingCalibration;
@@ -12906,6 +12912,19 @@ if(false){(function(){
     return normalizeCartCalibration(payload?.data?.calibration || calibration);
   }
 
+  async function clearCartCalibrationFromBackend(macValue){
+    const mac = cleanMac(macValue);
+    if(mac.length !== 12) throw new Error('MAC do sensor invalido.');
+    const response = await fetch(`/api/cart-tracking/calibration/${encodeURIComponent(mac)}`, {
+      method:'DELETE'
+    });
+    const payload = await response.json().catch(() => null);
+    if(!response.ok || payload?.ok === false){
+      throw new Error(payload?.message || 'Falha ao limpar calibracao anterior.');
+    }
+    return normalizeCartCalibration(payload?.data?.calibration || DEFAULT_CART_CALIBRATION);
+  }
+
   function resetCartOperationalCycleAfterCalibration(cart){
     if(!cart) return;
     cart.collectorStatus = 'calibration_pending';
@@ -14717,11 +14736,22 @@ if(false){(function(){
     }
 
     let cart = state.carts.find(item => item.id === cartId);
+    const previousMac = cart ? cleanMac(cart.mac) : '';
+    const isNewCart = !cart;
+    const macChanged = Boolean(cart && previousMac !== cleanMac(mac));
     if(cart){
       cart.name = name;
       cart.mac = mac;
       if(roomId) cart.roomId = roomId;
       if(roomId && !cart.locationStatus) cart.locationStatus = 'in_room';
+      if(macChanged){
+        cart.calibration = clone(DEFAULT_CART_CALIBRATION);
+        cart.fillPercentage = 0;
+        cart.collectorStatus = 'uncalibrated';
+        cart.levelStatus = '';
+        cart.lastSeen = 'aguardando calibracao';
+        cart.registeredAt = new Date().toISOString();
+      }
     }else{
       cart = {
         id:`cart-${cleanMac(mac).toLowerCase()}`,
@@ -14735,7 +14765,10 @@ if(false){(function(){
         rssi:null,
         lastCommunicationAt:'',
         lastCommunicationSeen:'cadastro manual',
-        lastSeen:'cadastro manual',
+        lastSeen:'aguardando calibracao',
+        collectorStatus:'uncalibrated',
+        levelStatus:'',
+        registeredAt:new Date().toISOString(),
         transitStep:0
       };
       state.carts.push(cart);
@@ -14747,6 +14780,9 @@ if(false){(function(){
       saveBtn.textContent = 'Salvando...';
     }
     try{
+      if(isNewCart || macChanged){
+        cart.calibration = await clearCartCalibrationFromBackend(mac);
+      }
       const savedState = await saveCartConfigBackendNow(state);
       closeCartDetail();
       renderRooms(savedState);
