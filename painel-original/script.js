@@ -9547,6 +9547,7 @@ if(false){(function(){
       }
     ],
     telemetryEvents:[],
+    backendChartSamples:[],
     alerts:[],
     alertSettings:clone(DEFAULT_CART_ALERT_SETTINGS)
   };
@@ -9565,6 +9566,7 @@ if(false){(function(){
   let panelUsersView = 'clients';
   let cartAlertModalView = 'list';
   let lastGeneratedCartAlertId = '';
+  let cartBackendOperationalActive = false;
   const CART_SETTINGS_PARENT_VIEW = {
     rooms:'home',
     devices:'home',
@@ -9685,7 +9687,9 @@ if(false){(function(){
       rooms: Array.isArray(state?.rooms) ? state.rooms : [],
       carts: Array.isArray(state?.carts) ? state.carts : [],
       telemetryEvents: Array.isArray(state?.telemetryEvents) ? state.telemetryEvents : [],
+      backendChartSamples: Array.isArray(state?.backendChartSamples) ? state.backendChartSamples : [],
       alerts: Array.isArray(state?.alerts) ? state.alerts : [],
+      backendOperationalMode: state?.backendOperationalMode === true,
       alertSettings: normalizeCartAlertSettings(state?.alertSettings)
     };
 
@@ -10104,6 +10108,7 @@ if(false){(function(){
   }
 
   function processCartAlerts(state, cart, previous, eventBase, rawStatus){
+    if(cartBackendOperationalActive || state?.backendOperationalMode) return false;
     const alertState = ensureCartAlertState(cart);
     const ts = eventBase.ts || new Date().toISOString();
     const nowMs = new Date(ts).getTime();
@@ -10624,6 +10629,92 @@ if(false){(function(){
     return changed;
   }
 
+  function backendOperationalQuery(macFilters){
+    const params = new URLSearchParams();
+    if(Array.isArray(macFilters) && macFilters.length){
+      params.set('mac', macFilters.join(','));
+    }
+    params.set('limit', '3000');
+    params.set('alertLimit', String(CART_ALERT_LIMIT));
+    params.set('telemetryLimit', '260');
+    params.set('sampleLimit', '900');
+    return `?${params.toString()}`;
+  }
+
+  async function fetchBackendOperationalState(macFilters){
+    const response = await fetch(`/api/cart-tracking/operational${backendOperationalQuery(macFilters)}`, { cache:'no-store' });
+    if(!response.ok) throw new Error(`Falha operacional ${response.status}`);
+    const payload = await response.json();
+    return payload?.data || null;
+  }
+
+  function mergeBackendAlerts(existingAlerts, backendAlerts){
+    const previousByKey = new Map((existingAlerts || []).map(alert => [alert.key || alert.id, alert]));
+    return (backendAlerts || [])
+      .filter(alert => alert && (alert.key || alert.id))
+      .map(alert => {
+        const previous = previousByKey.get(alert.key || alert.id) || {};
+        return {
+          ...alert,
+          read:previous.read === true || previous.acknowledgedAt ? true : alert.read === true,
+          acknowledgedAt:previous.acknowledgedAt || alert.acknowledgedAt || null
+        };
+      })
+      .sort((a, b) => new Date(a.ts || 0) - new Date(b.ts || 0))
+      .slice(-CART_ALERT_LIMIT);
+  }
+
+  function mergeBackendOperationalState(state, operational){
+    if(!state || !operational || operational.clientId !== 'einstein') return false;
+    let changed = false;
+    const currentAlertsSignature = JSON.stringify((state.alerts || []).map(alert => [
+      alert.key || alert.id,
+      alert.ts,
+      alert.type,
+      alert.read === true,
+      alert.acknowledgedAt || ''
+    ]));
+    const nextAlerts = mergeBackendAlerts(state.alerts, operational.alerts || []);
+    const nextAlertsSignature = JSON.stringify(nextAlerts.map(alert => [
+      alert.key || alert.id,
+      alert.ts,
+      alert.type,
+      alert.read === true,
+      alert.acknowledgedAt || ''
+    ]));
+    if(currentAlertsSignature !== nextAlertsSignature){
+      state.alerts = nextAlerts;
+      changed = true;
+    }
+
+    const backendTelemetry = Array.isArray(operational.telemetryEvents) ? operational.telemetryEvents : [];
+    const nextTelemetry = backendTelemetry
+      .filter(event => event && (event.key || event.id))
+      .sort((a, b) => new Date(a.ts || 0) - new Date(b.ts || 0))
+      .slice(-260);
+    const telemetrySignature = JSON.stringify((state.telemetryEvents || []).map(event => [event.key || event.id, event.ts, event.type]));
+    const nextTelemetrySignature = JSON.stringify(nextTelemetry.map(event => [event.key || event.id, event.ts, event.type]));
+    if(telemetrySignature !== nextTelemetrySignature){
+      state.telemetryEvents = nextTelemetry;
+      changed = true;
+    }
+
+    const nextSamples = Array.isArray(operational.chart?.samples) ? operational.chart.samples : [];
+    const sampleSignature = JSON.stringify((state.backendChartSamples || []).map(sample => [sample.ts, sample.cartId, sample.fill, sample.status]));
+    const nextSampleSignature = JSON.stringify(nextSamples.map(sample => [sample.ts, sample.cartId, sample.fill, sample.status]));
+    if(sampleSignature !== nextSampleSignature){
+      state.backendChartSamples = nextSamples;
+      changed = true;
+    }
+
+    if(state.backendOperationalMode !== true){
+      state.backendOperationalMode = true;
+      changed = true;
+    }
+    cartBackendOperationalActive = true;
+    return changed;
+  }
+
   let readingsTimer = null;
   let readingsInFlight = false;
 
@@ -10648,7 +10739,26 @@ if(false){(function(){
       const response = await fetch(`/api/cart-tracking/readings${query}`, { cache:'no-store' });
       const payload = await response.json();
       const readings = payload?.data?.readings || [];
+      let changed = false;
+      let operational = null;
+      try{
+        operational = await fetchBackendOperationalState(macFilters);
+        if(operational && operational.clientId === 'einstein'){
+          cartBackendOperationalActive = true;
+          state.backendOperationalMode = true;
+        }
+      }catch(operationalError){
+        cartBackendOperationalActive = false;
+        state.backendOperationalMode = false;
+        console.warn('Falha ao buscar operação dos carrinhos', operationalError);
+      }
       if(applyReadingsToState(state, readings)){
+        changed = true;
+      }
+      if(operational && mergeBackendOperationalState(state, operational)){
+        changed = true;
+      }
+      if(changed){
         saveState(state);
         renderRooms();
         if(lastGeneratedCartAlertId){
@@ -11627,9 +11737,25 @@ if(false){(function(){
 
   function roomChartSamples(state, room){
     const roomCartIds = new Set(state.carts.filter(cart => cart.roomId === room.id).map(cart => cart.id));
+    const backendSamples = (state.backendChartSamples || [])
+      .filter(sample => sample.roomId === room.id || roomCartIds.has(sample.cartId))
+      .filter(sample => finiteNumberOrNull(sample.fill) !== null)
+      .map(sample => ({
+        time:new Date(sample.ts || 0).getTime(),
+        value:clampNumber(finiteNumberOrNull(sample.fill), 0, 100),
+        ts:sample.ts,
+        source:{ ...sample, type:sample.status === 'critical' ? 'critical' : 'reading' },
+        tone:sample.status === 'critical' ? 'critical' : 'free',
+        cartName:sample.cartName || ''
+      }))
+      .filter(sample => Number.isFinite(sample.time))
+      .sort((a, b) => a.time - b.time);
     const events = roomChronologicalEvents(state, room)
       .filter(event => !isObstructionEvent(event))
       .filter(event => event.roomId === room.id || roomCartIds.has(event.cartId));
+    if(backendSamples.length){
+      return { events, samples:backendSamples };
+    }
     const eventSamples = events
       .filter(event => finiteNumberOrNull(event.fill) !== null)
       .map(event => ({

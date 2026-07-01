@@ -120,6 +120,16 @@ const KNOWN_COLLECTOR_CALIBRATIONS = {
     updatedAt: 'known-c02-default'
   }
 };
+
+const EINSTEIN_CART_CLIENT_ID = 'einstein';
+const EINSTEIN_CART_ROOM_ID = 'sala-bloco-b1';
+const EINSTEIN_CART_ROOM_NAME = 'SALA BLOCO B1';
+const EINSTEIN_CART_ALERT_RECURRENCE_MS = Number(process.env.EINSTEIN_CART_ALERT_RECURRENCE_MS || 30 * 60 * 1000);
+const EINSTEIN_CART_SENSORS = [
+  { id: 'c01', name: 'C01', sensorId: 'de08dbf47311', roomId: EINSTEIN_CART_ROOM_ID, roomName: EINSTEIN_CART_ROOM_NAME },
+  { id: 'c02', name: 'C02', sensorId: 'c4894994a485', roomId: EINSTEIN_CART_ROOM_ID, roomName: EINSTEIN_CART_ROOM_NAME }
+];
+const EINSTEIN_CART_SENSOR_BY_ID = new Map(EINSTEIN_CART_SENSORS.map((sensor) => [sensor.sensorId, sensor]));
 // C01/C02 are vertical ToF sensors. A stable distance far beyond calibration means the lid is open.
 
 function normalizeCollectorCriticalPercent(value, fallback = DEFAULT_COLLECTOR_CALIBRATION.redPercent) {
@@ -1265,6 +1275,312 @@ function collectorReadingsHistory(db, options = {}) {
     .map((row) => serializeCollectorReading(row, collectorCalibrationForSensor(db, row.ble_sensor_id)));
 }
 
+function operationalReadingsHistory(db, options = {}) {
+  const limit = Math.max(1, Math.min(10000, Number(options.limit || 2000)));
+  const macFilters = Array.isArray(options.macFilters) && options.macFilters.length
+    ? options.macFilters.filter(Boolean)
+    : EINSTEIN_CART_SENSORS.map((sensor) => sensor.sensorId);
+  const perSensorLimit = Math.max(1, Math.ceil(limit / Math.max(1, macFilters.length)));
+
+  return macFilters
+    .flatMap((sensorId) => db.prepare(`
+      SELECT *
+      FROM collector_readings
+      WHERE ble_sensor_id = ?
+      ORDER BY created_at DESC
+      LIMIT ?
+    `).all(sensorId, perSensorLimit))
+    .sort((a, b) => new Date(a.created_at || 0) - new Date(b.created_at || 0))
+    .map((row) => serializeCollectorReading(row, collectorCalibrationForSensor(db, row.ble_sensor_id)));
+}
+
+function readingTimeIso(reading) {
+  return reading?.createdAt || reading?.receivedAt || nowIso();
+}
+
+function minutesBetween(startIso, endIso) {
+  const start = new Date(startIso || '').getTime();
+  const end = new Date(endIso || '').getTime();
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return null;
+  return Math.round((end - start) / 60000);
+}
+
+function durationLabelFromMinutes(minutes) {
+  const value = Number(minutes);
+  if (!Number.isFinite(value) || value < 0) return 'agora';
+  if (value < 1) return '<1 min';
+  if (value < 60) return `${Math.round(value)} min`;
+  const hours = Math.floor(value / 60);
+  const rest = Math.round(value % 60);
+  return rest ? `${hours}h ${String(rest).padStart(2, '0')}` : `${hours}h`;
+}
+
+function operationalEventId(parts) {
+  return crypto
+    .createHash('sha1')
+    .update(parts.filter(Boolean).join('|'))
+    .digest('hex')
+    .slice(0, 16);
+}
+
+function createOperationalTelemetryEvent(event) {
+  const ts = event.ts || nowIso();
+  const key = event.key || [event.type, event.roomId, event.cartId, ts].join('|');
+  return {
+    id: `evt-${operationalEventId([key])}`,
+    key,
+    source: 'backend',
+    clientId: EINSTEIN_CART_CLIENT_ID,
+    ts,
+    type: event.type || 'reading',
+    roomId: event.roomId || EINSTEIN_CART_ROOM_ID,
+    roomName: event.roomName || EINSTEIN_CART_ROOM_NAME,
+    cartId: event.cartId || '',
+    cartName: event.cartName || '',
+    title: event.title || 'Leitura validada',
+    detail: event.detail || '',
+    fill: finiteNumberOrNull(event.fill),
+    distanceMm: finiteNumberOrNull(event.distanceMm)
+  };
+}
+
+function createOperationalAlert(alert) {
+  const ts = alert.ts || nowIso();
+  const type = alert.type || 'critical';
+  const key = alert.key || [type, alert.roomId, alert.cartId, ts].join('|');
+  return {
+    id: `alert-${operationalEventId([key])}`,
+    key,
+    source: 'backend',
+    clientId: EINSTEIN_CART_CLIENT_ID,
+    ts,
+    type,
+    roomId: alert.roomId || EINSTEIN_CART_ROOM_ID,
+    roomName: alert.roomName || EINSTEIN_CART_ROOM_NAME,
+    cartId: alert.cartId || '',
+    cartName: alert.cartName || '',
+    title: alert.title || 'Alerta do painel',
+    message: alert.message || '',
+    detail: alert.detail || '',
+    read: false,
+    acknowledgedAt: null
+  };
+}
+
+function isOfficialOperationalReading(reading) {
+  return reading?.officialReading === true || reading?.officialReading === 1;
+}
+
+function isCriticalOperationalReading(reading, calibration) {
+  const fill = finiteNumberOrNull(reading?.fillPercentage);
+  const redPercent = finiteNumberOrNull(calibration?.redPercent) ?? 50;
+  return fill !== null && fill >= redPercent;
+}
+
+function technicalAlertTypeForReading(reading) {
+  const status = String(reading?.status || '').toLowerCase();
+  if (status === COLLECTOR_SENSOR_OBSTRUCTED_STATUS) return 'obstruction';
+  if (status === COLLECTOR_SENSOR_REMOVED_STATUS) return 'sensor';
+  return '';
+}
+
+function technicalTitleForAlert(type, cartName) {
+  if (type === 'obstruction') return `${cartName}: obstrução provável`;
+  if (type === 'sensor') return `${cartName}: sensor fora da calibração`;
+  return `${cartName}: evento técnico`;
+}
+
+function technicalMessageForAlert(type, roomName, cartName) {
+  if (type === 'obstruction') return `${roomName}: possível obstrução no ${cartName}.`;
+  if (type === 'sensor') return `${roomName}: sensor do ${cartName} fora da faixa esperada.`;
+  return `${roomName}: evento técnico no ${cartName}.`;
+}
+
+function buildEinsteinCartOperationalDataset(db, options = {}) {
+  const requestedSensors = Array.isArray(options.macFilters) && options.macFilters.length
+    ? options.macFilters.filter((sensorId) => EINSTEIN_CART_SENSOR_BY_ID.has(sensorId))
+    : EINSTEIN_CART_SENSORS.map((sensor) => sensor.sensorId);
+  const readings = operationalReadingsHistory(db, {
+    limit: options.limit || 2000,
+    macFilters: requestedSensors
+  });
+  const telemetryEvents = [];
+  const alerts = [];
+  const samples = [];
+  const sensorState = new Map();
+
+  const appendTelemetry = (event) => telemetryEvents.push(createOperationalTelemetryEvent(event));
+  const appendAlert = (alert) => {
+    const nextAlert = createOperationalAlert(alert);
+    if (!alerts.some((item) => item.key === nextAlert.key)) alerts.push(nextAlert);
+    appendTelemetry({
+      key: `alert-telemetry|${nextAlert.key}`,
+      type: nextAlert.type === 'exchange' ? 'exchange' : 'alert',
+      roomId: nextAlert.roomId,
+      roomName: nextAlert.roomName,
+      cartId: nextAlert.cartId,
+      cartName: nextAlert.cartName,
+      ts: nextAlert.ts,
+      title: nextAlert.title,
+      detail: nextAlert.message || nextAlert.detail,
+      fill: alert.fill,
+      distanceMm: alert.distanceMm
+    });
+  };
+
+  for (const reading of readings) {
+    const sensorId = compactBleSensorId(reading?.bleSensorId || reading?.mac);
+    const sensor = EINSTEIN_CART_SENSOR_BY_ID.get(sensorId);
+    if (!sensor) continue;
+
+    const ts = readingTimeIso(reading);
+    const calibration = normalizeCollectorCalibration(reading.calibration || collectorCalibrationForSensor(db, sensorId));
+    const fill = normalizeCollectorFillPercentage(reading.fillPercentage);
+    const distanceMm = finiteNumberOrNull(reading.distanceMm);
+    const state = sensorState.get(sensorId) || {
+      critical: false,
+      criticalStartedAt: '',
+      lastCriticalAlertAt: '',
+      lastTechnicalType: ''
+    };
+    const technicalType = technicalAlertTypeForReading(reading);
+
+    if (technicalType && technicalType !== state.lastTechnicalType) {
+      appendAlert({
+        key: `${technicalType}|${sensor.id}|${ts}`,
+        type: technicalType,
+        roomId: sensor.roomId,
+        roomName: sensor.roomName,
+        cartId: sensor.id,
+        cartName: sensor.name,
+        ts,
+        title: technicalTitleForAlert(technicalType, sensor.name),
+        message: technicalMessageForAlert(technicalType, sensor.roomName, sensor.name),
+        detail: technicalType === 'obstruction'
+          ? 'Salto de leitura detectado pelo sensor.'
+          : 'Verifique a fixação lateral e a calibração.',
+        fill,
+        distanceMm
+      });
+    }
+    state.lastTechnicalType = technicalType;
+
+    if (!isOfficialOperationalReading(reading) || fill === null) {
+      sensorState.set(sensorId, state);
+      continue;
+    }
+
+    const critical = isCriticalOperationalReading(reading, calibration);
+    samples.push({
+      source: 'backend',
+      clientId: EINSTEIN_CART_CLIENT_ID,
+      ts,
+      roomId: sensor.roomId,
+      roomName: sensor.roomName,
+      cartId: sensor.id,
+      cartName: sensor.name,
+      fill: Math.round(fill),
+      distanceMm,
+      criticalPercent: calibration.redPercent,
+      status: critical ? 'critical' : 'free'
+    });
+    appendTelemetry({
+      key: `reading|${sensor.id}|${ts}`,
+      type: critical ? 'critical' : 'reading',
+      roomId: sensor.roomId,
+      roomName: sensor.roomName,
+      cartId: sensor.id,
+      cartName: sensor.name,
+      ts,
+      title: `${sensor.name} - ${critical ? 'Crítico' : 'Livre'}`,
+      detail: `Leitura validada: ${Math.round(fill)}%${distanceMm !== null ? ` - ${Math.round(distanceMm)} mm` : ''}.`,
+      fill,
+      distanceMm
+    });
+
+    if (critical) {
+      if (!state.critical) {
+        state.critical = true;
+        state.criticalStartedAt = ts;
+        state.lastCriticalAlertAt = ts;
+        appendAlert({
+          key: `critical|${sensor.id}|${ts}`,
+          type: 'critical',
+          roomId: sensor.roomId,
+          roomName: sensor.roomName,
+          cartId: sensor.id,
+          cartName: sensor.name,
+          ts,
+          title: `${sensor.name} crítico`,
+          message: `${sensor.roomName}: ${sensor.name} atingiu o limite crítico.`,
+          detail: `Leitura ${Math.round(fill)}%${distanceMm !== null ? ` - ${Math.round(distanceMm)} mm` : ''}.`,
+          fill,
+          distanceMm
+        });
+      } else {
+        const elapsedSinceAlert = minutesBetween(state.lastCriticalAlertAt, ts);
+        if (elapsedSinceAlert !== null && elapsedSinceAlert * 60000 >= EINSTEIN_CART_ALERT_RECURRENCE_MS) {
+          const elapsed = durationLabelFromMinutes(minutesBetween(state.criticalStartedAt, ts));
+          state.lastCriticalAlertAt = ts;
+          appendAlert({
+            key: `recurrence|${sensor.id}|${state.criticalStartedAt}|${ts}`,
+            type: 'recurrence',
+            roomId: sensor.roomId,
+            roomName: sensor.roomName,
+            cartId: sensor.id,
+            cartName: sensor.name,
+            ts,
+            title: `${sensor.name} segue crítico`,
+            message: `${sensor.roomName}: ${sensor.name} está crítico há ${elapsed}.`,
+            detail: `Leitura ${Math.round(fill)}%${distanceMm !== null ? ` - ${Math.round(distanceMm)} mm` : ''}.`,
+            fill,
+            distanceMm
+          });
+        }
+      }
+    } else if (state.critical) {
+      const elapsed = durationLabelFromMinutes(minutesBetween(state.criticalStartedAt, ts));
+      appendAlert({
+        key: `exchange|${sensor.id}|${state.criticalStartedAt}|${ts}`,
+        type: 'exchange',
+        roomId: sensor.roomId,
+        roomName: sensor.roomName,
+        cartId: sensor.id,
+        cartName: sensor.name,
+        ts,
+        title: 'Troca de carrinho registrada',
+        message: `${sensor.roomName}: ${sensor.name} voltou para livre.`,
+        detail: `Tempo desde o alerta: ${elapsed}.`,
+        fill,
+        distanceMm
+      });
+      state.critical = false;
+      state.criticalStartedAt = '';
+      state.lastCriticalAlertAt = '';
+    }
+
+    sensorState.set(sensorId, state);
+  }
+
+  const latestReadings = latestCollectorReadings(db, { macFilters: requestedSensors, limit: requestedSensors.length || 2 });
+
+  return {
+    clientId: EINSTEIN_CART_CLIENT_ID,
+    generatedAt: nowIso(),
+    room: { id: EINSTEIN_CART_ROOM_ID, name: EINSTEIN_CART_ROOM_NAME },
+    latestReadings,
+    alerts: alerts
+      .sort((a, b) => new Date(b.ts || 0) - new Date(a.ts || 0))
+      .slice(0, Math.max(1, Math.min(500, Number(options.alertLimit || 120)))),
+    telemetryEvents: telemetryEvents
+      .sort((a, b) => new Date(a.ts || 0) - new Date(b.ts || 0))
+      .slice(-Math.max(1, Math.min(1000, Number(options.telemetryLimit || 240)))),
+    chart: {
+      samples: samples.slice(-Math.max(1, Math.min(2000, Number(options.sampleLimit || 500))))
+    }
+  };
+}
+
 function storeBleGatewayPayload(payload, options = {}) {
   const db = getDb();
   const normalizedReadings = normalizeBleGatewayPayloads(payload);
@@ -2345,6 +2661,77 @@ addRoute('GET', '/api/cart-tracking/readings', async ({ query, res }) => {
       limit: query.limit || 200,
       macFilters
     })
+  });
+});
+
+addRoute('GET', '/api/cart-tracking/operational', async ({ query, res }) => {
+  const macFilters = String(query.mac || '')
+    .split(',')
+    .map(compactBleSensorId)
+    .filter(Boolean);
+
+  ok(res, buildEinsteinCartOperationalDataset(getDb(), {
+    macFilters,
+    limit: query.limit || 2000,
+    alertLimit: query.alertLimit || 120,
+    telemetryLimit: query.telemetryLimit || 240,
+    sampleLimit: query.sampleLimit || 500
+  }));
+});
+
+addRoute('GET', '/api/cart-tracking/alerts', async ({ query, res }) => {
+  const macFilters = String(query.mac || '')
+    .split(',')
+    .map(compactBleSensorId)
+    .filter(Boolean);
+  const dataset = buildEinsteinCartOperationalDataset(getDb(), {
+    macFilters,
+    limit: query.limit || 2000,
+    alertLimit: query.alertLimit || 120
+  });
+
+  ok(res, {
+    clientId: dataset.clientId,
+    generatedAt: dataset.generatedAt,
+    alerts: dataset.alerts
+  });
+});
+
+addRoute('GET', '/api/cart-tracking/telemetry', async ({ query, res }) => {
+  const macFilters = String(query.mac || '')
+    .split(',')
+    .map(compactBleSensorId)
+    .filter(Boolean);
+  const dataset = buildEinsteinCartOperationalDataset(getDb(), {
+    macFilters,
+    limit: query.limit || 2000,
+    telemetryLimit: query.telemetryLimit || 240
+  });
+
+  ok(res, {
+    clientId: dataset.clientId,
+    generatedAt: dataset.generatedAt,
+    room: dataset.room,
+    telemetryEvents: dataset.telemetryEvents
+  });
+});
+
+addRoute('GET', '/api/cart-tracking/chart', async ({ query, res }) => {
+  const macFilters = String(query.mac || '')
+    .split(',')
+    .map(compactBleSensorId)
+    .filter(Boolean);
+  const dataset = buildEinsteinCartOperationalDataset(getDb(), {
+    macFilters,
+    limit: query.limit || 2000,
+    sampleLimit: query.sampleLimit || 500
+  });
+
+  ok(res, {
+    clientId: dataset.clientId,
+    generatedAt: dataset.generatedAt,
+    room: dataset.room,
+    chart: dataset.chart
   });
 });
 
