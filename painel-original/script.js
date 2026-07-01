@@ -355,7 +355,19 @@ function buildDetail(d){
   `;
 }
 
+function isCartTrackingRoleActive(){
+  const role = String(
+    window.activePanelSession?.role ||
+    document.body?.dataset?.authRole ||
+    document.body?.dataset?.panelRole ||
+    window.currentRole ||
+    ''
+  ).toLowerCase();
+  return role === 'cart' || document.body.classList.contains('cart-tracking-open');
+}
+
 function renderGrid(){
+  if(isCartTrackingRoleActive()) return;
   grid.innerHTML = '';
   const filtered = devices.filter(d => {
     const matchesFilter = !activeFilter || (activeFilter === 'offline' ? d.online === false && d.state !== 'maint' : d.state === activeFilter);
@@ -5438,6 +5450,10 @@ document.getElementById('infoMacOverlay')?.addEventListener('click', ()=> openIn
       }else{
         window.__pendingCartTrackingOpen = true;
       }
+      if(typeof syncCloneButtonVisibility === 'function') syncCloneButtonVisibility();
+      if(typeof window.updateScheduledCollectionVisibility === 'function') window.updateScheduledCollectionVisibility();
+      if(typeof window.updateBindDeviceVisibility === 'function') window.updateBindDeviceVisibility();
+      return;
     }
 
     if(typeof renderGrid === 'function') renderGrid();
