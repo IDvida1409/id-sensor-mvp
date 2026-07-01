@@ -9060,19 +9060,7 @@ if(false){(function(){
         expectedTotal: 16
       }
     ],
-    carts: [
-      {
-        id: 'cart-de08dbf47311',
-        name: 'Carrinho teste',
-        mac: 'DE:08:DB:F4:73:11',
-        roomId: 'sala-bloco-b1',
-        locationStatus: 'in_room',
-        fillPercentage: 26,
-        consecutiveCriticalReadings: 0,
-        rssi: -39,
-        lastSeen: 'agora'
-      }
-    ]
+    carts: []
   };
 
   let previousSubtitle = '';
@@ -9448,7 +9436,7 @@ if(false){(function(){
 
 /* ===== SCRIPT BLOCK 45 | cart-tracking-room-cards-redesign ===== */
 (function(){
-  const STORAGE_KEY = 'idsensor.cartTracking.v8';
+  const STORAGE_KEY = 'idsensor.cartTracking.v9';
   const ROOM_SWITCH_RSSI_MIN = -70;
   const ROOM_SWITCH_CONFIRM_READINGS = 2;
   const ROOM_READING_RECENT_MS = 30 * 60 * 1000;
@@ -9514,38 +9502,7 @@ if(false){(function(){
       { id:'sala-residuos', name:'SALA DE RESÍDUOS', gatewayDeviceId:'' },
       { id:'sala-higienizacao', name:'SALA DE HIGIENIZAÇÃO', gatewayDeviceId:'' }
     ],
-    carts: [
-      {
-        id:'cart-de08dbf47311',
-        name:'C01',
-        mac:'DE:08:DB:F4:73:11',
-        roomId:'sala-bloco-b1',
-        locationStatus:'in_room',
-        fillPercentage:0,
-        consecutiveCriticalReadings:0,
-        calibration:clone(DEFAULT_CART_CALIBRATION),
-        rssi:null,
-        lastCommunicationAt:'',
-        lastCommunicationSeen:'aguardando comunicação',
-        lastSeen:'aguardando leitura',
-        transitStep:0
-      },
-      {
-        id:'cart-c4894994a485',
-        name:'C02',
-        mac:'C4:89:49:94:A4:85',
-        roomId:'sala-bloco-b1',
-        locationStatus:'in_room',
-        fillPercentage:0,
-        consecutiveCriticalReadings:0,
-        calibration:clone(DEFAULT_CART_CALIBRATION),
-        rssi:null,
-        lastCommunicationAt:'',
-        lastCommunicationSeen:'sem comunicação',
-        lastSeen:'sem leitura',
-        transitStep:0
-      }
-    ],
+    carts: [],
     telemetryEvents:[],
     backendChartSamples:[],
     alerts:[],
@@ -9567,6 +9524,9 @@ if(false){(function(){
   let cartAlertModalView = 'list';
   let lastGeneratedCartAlertId = '';
   let cartBackendOperationalActive = false;
+  let cartConfigBackendLoaded = false;
+  let cartConfigSaving = false;
+  let cartConfigSaveTimer = null;
   const CART_SETTINGS_PARENT_VIEW = {
     rooms:'home',
     devices:'home',
@@ -9776,7 +9736,51 @@ if(false){(function(){
 
   function saveState(state){
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    scheduleCartConfigBackendSave(state);
   }
+
+  function cartConfigPayloadFromState(state){
+    const source = state || {};
+    return {
+      rooms:Array.isArray(source.rooms) ? source.rooms.map(room => ({
+        id:room.id,
+        name:room.name,
+        gatewayDeviceId:room.gatewayDeviceId || ''
+      })) : [],
+      carts:Array.isArray(source.carts) ? source.carts.map(cart => ({
+        id:cart.id,
+        name:cart.name,
+        mac:cart.mac,
+        roomId:cart.roomId || '',
+        locationStatus:cart.locationStatus || 'in_room',
+        fillPercentage:Number(cart.fillPercentage || 0),
+        calibration:normalizeCartCalibration(cart.calibration)
+      })) : [],
+      alertSettings:normalizeCartAlertSettings(source.alertSettings)
+    };
+  }
+
+  function scheduleCartConfigBackendSave(state){
+    if(!cartConfigBackendLoaded || cartConfigSaving || !canManageCartSettings()) return;
+    window.clearTimeout(cartConfigSaveTimer);
+    const payload = cartConfigPayloadFromState(state);
+    cartConfigSaveTimer = window.setTimeout(async () => {
+      try{
+        cartConfigSaving = true;
+        await panelApi('/api/cart-tracking/config', {
+          method:'PUT',
+          body:JSON.stringify({ state:payload })
+        });
+      }catch(err){
+        console.warn('Falha ao salvar configuracao C.R. no backend', err);
+      }finally{
+        cartConfigSaving = false;
+      }
+    }, 250);
+  }
+
+  window.__saveCartTrackingConfigToBackend = scheduleCartConfigBackendSave;
+  window.__readCartTrackingState = readState;
 
   function cleanMac(value){
     return String(value || '').toUpperCase().replace(/[^0-9A-F]/g, '').slice(0, 12);
@@ -13828,6 +13832,34 @@ if(false){(function(){
     return payload.data;
   }
 
+  async function loadCartConfigFromBackend(){
+    if(cartConfigBackendLoaded) return readState();
+    try{
+      const data = await panelApi('/api/cart-tracking/config');
+      const currentState = readState();
+      const backendState = ensureSeedData({
+        ...currentState,
+        ...(data?.state || {}),
+        telemetryEvents:currentState.telemetryEvents || [],
+        backendChartSamples:currentState.backendChartSamples || [],
+        alerts:currentState.alerts || []
+      }).state;
+      cartConfigBackendLoaded = true;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(backendState));
+      return backendState;
+    }catch(err){
+      cartConfigBackendLoaded = true;
+      console.warn('Usando cache local do C.R.; backend nao retornou configuracao.', err);
+      return readState();
+    }
+  }
+
+  async function refreshCartConfigFromBackend(){
+    const state = await loadCartConfigFromBackend();
+    renderRooms();
+    return state;
+  }
+
   async function loadPanelClientsForSettings(){
     if(cartPanelSettingsLoading) return;
     cartPanelSettingsLoading = true;
@@ -14706,6 +14738,9 @@ if(false){(function(){
     view.hidden = false;
     document.body.classList.add('cart-tracking-open');
     renderRooms();
+    refreshCartConfigFromBackend().catch(error => {
+      console.warn('Nao foi possivel atualizar configuracao C.R. do backend.', error);
+    });
     startReadingsPolling();
   }
 
@@ -14751,7 +14786,7 @@ if(false){(function(){
 
 /* ===== SCRIPT BLOCK 46 | cart-alert-stability-guard ===== */
 (function(){
-  const STORAGE_KEY = 'idsensor.cartTracking.v8';
+  const STORAGE_KEY = 'idsensor.cartTracking.v9';
   const LAST_POPUP_KEY = 'idsensor.cartAlert.lastPopupId';
   const LAST_SOUND_KEY = 'idsensor.cartAlert.lastSoundId';
   const STABLE_OVERLAY_ID = 'cartAlertStableOverlay';
@@ -14814,6 +14849,9 @@ if(false){(function(){
   function saveStableAlertState(state){
     try{
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state || {}));
+      if(typeof window.__saveCartTrackingConfigToBackend === 'function'){
+        window.__saveCartTrackingConfigToBackend(state || {});
+      }
     }catch(error){
       console.warn('Não foi possível salvar o estado dos alertas.', error);
     }

@@ -207,6 +207,13 @@ function initDb() {
       updated_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS cart_tracking_config (
+      client_id TEXT PRIMARY KEY,
+      state_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS simulation_state (
       id TEXT PRIMARY KEY,
       enabled INTEGER NOT NULL DEFAULT 0,

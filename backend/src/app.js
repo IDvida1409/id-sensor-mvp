@@ -130,6 +130,27 @@ const EINSTEIN_CART_SENSORS = [
   { id: 'c02', name: 'C02', sensorId: 'c4894994a485', roomId: EINSTEIN_CART_ROOM_ID, roomName: EINSTEIN_CART_ROOM_NAME }
 ];
 const EINSTEIN_CART_SENSOR_BY_ID = new Map(EINSTEIN_CART_SENSORS.map((sensor) => [sensor.sensorId, sensor]));
+const EINSTEIN_CART_GATEWAY_ID = 'e6a69dbb6d2d';
+const EINSTEIN_CART_CONFIG_DEFAULT = {
+  rooms: [
+    { id: EINSTEIN_CART_ROOM_ID, name: EINSTEIN_CART_ROOM_NAME, gatewayDeviceId: EINSTEIN_CART_GATEWAY_ID },
+    { id: 'sala-residuos', name: 'SALA DE RES\u00cdDUOS', gatewayDeviceId: '' },
+    { id: 'sala-higienizacao', name: 'SALA DE HIGIENIZA\u00c7\u00c3O', gatewayDeviceId: '' }
+  ],
+  carts: [],
+  alertSettings: {
+    popupEnabled: true,
+    soundEnabled: true,
+    recurrenceMinutes: 30,
+    enabledTypes: {
+      critical: true,
+      recurrence: true,
+      obstruction: true,
+      sensor: true,
+      exchange: true
+    }
+  }
+};
 // C01/C02 are vertical ToF sensors. A stable distance far beyond calibration means the lid is open.
 
 function normalizeCollectorCriticalPercent(value, fallback = DEFAULT_COLLECTOR_CALIBRATION.redPercent) {
@@ -142,6 +163,105 @@ function normalizeCollectorCriticalPercent(value, fallback = DEFAULT_COLLECTOR_C
     if (optionDistance === bestDistance && option > best) return option;
     return best;
   }, COLLECTOR_CRITICAL_PERCENT_CHOICES[0]);
+}
+
+function cloneJson(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+function normalizeCartTrackingRoom(room) {
+  return {
+    id: String(room?.id || '').trim() || normalizePanelSlug(room?.name || 'sala').replace(/\./g, '-'),
+    name: String(room?.name || 'SALA').trim().toUpperCase(),
+    gatewayDeviceId: String(room?.gatewayDeviceId || room?.gateway_device_id || '').trim()
+  };
+}
+
+function normalizeCartTrackingCart(cart) {
+  const mac = compactBleSensorId(cart?.mac || cart?.sensorId || cart?.ble_sensor_id);
+  const idValue = String(cart?.id || '').trim() || (mac ? `cart-${mac}` : id('cart'));
+  return {
+    id: idValue,
+    name: String(cart?.name || cart?.nome || '').trim() || idValue,
+    mac: formatBleSensorId(mac),
+    roomId: String(cart?.roomId || cart?.room_id || EINSTEIN_CART_ROOM_ID).trim(),
+    locationStatus: String(cart?.locationStatus || cart?.location_status || 'in_room').trim(),
+    fillPercentage: finiteNumberOrNull(cart?.fillPercentage ?? cart?.fill_percentage) ?? 0,
+    calibration: normalizeCollectorCalibration(cart?.calibration || {}),
+    rssi: finiteNumberOrNull(cart?.rssi),
+    lastCommunicationAt: String(cart?.lastCommunicationAt || '').trim(),
+    lastCommunicationSeen: String(cart?.lastCommunicationSeen || '').trim(),
+    lastSeen: String(cart?.lastSeen || '').trim(),
+    transitStep: finiteNumberOrNull(cart?.transitStep) ?? 0
+  };
+}
+
+function normalizeCartTrackingAlertSettings(settings = {}) {
+  const defaults = EINSTEIN_CART_CONFIG_DEFAULT.alertSettings;
+  const sourceTypes = settings?.enabledTypes && typeof settings.enabledTypes === 'object' ? settings.enabledTypes : {};
+  const enabledTypes = {};
+  for (const key of Object.keys(defaults.enabledTypes)) {
+    enabledTypes[key] = sourceTypes[key] !== false;
+  }
+  const recurrence = finiteNumberOrNull(settings?.recurrenceMinutes);
+  return {
+    popupEnabled: settings?.popupEnabled !== false,
+    soundEnabled: settings?.soundEnabled !== false,
+    recurrenceMinutes: recurrence !== null && recurrence >= 0 ? recurrence : defaults.recurrenceMinutes,
+    enabledTypes
+  };
+}
+
+function normalizeCartTrackingConfigState(input = {}) {
+  const base = cloneJson(EINSTEIN_CART_CONFIG_DEFAULT);
+  const rooms = Array.isArray(input.rooms) ? input.rooms.map(normalizeCartTrackingRoom) : base.rooms;
+  const carts = Array.isArray(input.carts)
+    ? input.carts.map(normalizeCartTrackingCart).filter((cart) => compactBleSensorId(cart.mac))
+    : base.carts;
+  return {
+    rooms,
+    carts,
+    alertSettings: normalizeCartTrackingAlertSettings(input.alertSettings)
+  };
+}
+
+function cartTrackingConfigForClient(db, clientId = EINSTEIN_CART_CLIENT_ID) {
+  const row = db.prepare('SELECT state_json FROM cart_tracking_config WHERE client_id = ?').get(clientId);
+  if (!row?.state_json) return normalizeCartTrackingConfigState();
+  try {
+    return normalizeCartTrackingConfigState(JSON.parse(row.state_json));
+  } catch {
+    return normalizeCartTrackingConfigState();
+  }
+}
+
+function saveCartTrackingConfigForClient(db, state, clientId = EINSTEIN_CART_CLIENT_ID) {
+  const normalized = normalizeCartTrackingConfigState(state);
+  const now = nowIso();
+  db.prepare(`
+    INSERT INTO cart_tracking_config (client_id, state_json, created_at, updated_at)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT (client_id) DO UPDATE SET
+      state_json = excluded.state_json,
+      updated_at = excluded.updated_at
+  `).run(clientId, JSON.stringify(normalized), now, now);
+  return normalized;
+}
+
+function resetCartTrackingHistory(db, { clientId = EINSTEIN_CART_CLIENT_ID, resetConfig = false } = {}) {
+  const sensorIds = cartTrackingConfigForClient(db, clientId).carts
+    .map((cart) => compactBleSensorId(cart.mac))
+    .filter(Boolean);
+  const knownSensors = Array.from(new Set([...EINSTEIN_CART_SENSORS.map((sensor) => sensor.sensorId), ...sensorIds]));
+  let deletedReadings = 0;
+  if (knownSensors.length) {
+    const placeholders = knownSensors.map(() => '?').join(',');
+    deletedReadings = db.prepare(`DELETE FROM collector_readings WHERE ble_sensor_id IN (${placeholders})`).run(...knownSensors).changes || 0;
+  }
+  if (resetConfig) {
+    saveCartTrackingConfigForClient(db, normalizeCartTrackingConfigState(), clientId);
+  }
+  return { deletedReadings, resetConfig };
 }
 
 const ACTIVATION_CODE_TTL_MS = 24 * 60 * 60 * 1000;
@@ -340,6 +460,15 @@ function requirePanelMaster(req, res) {
   const session = verifyPanelSessionToken(req);
   if (!session || session.role !== 'master') {
     fail(res, 403, 'Acesso restrito ao usuário master.');
+    return null;
+  }
+  return session;
+}
+
+function requirePanelSession(req, res) {
+  const session = verifyPanelSessionToken(req);
+  if (!session) {
+    fail(res, 401, 'Sessao do painel invalida ou expirada.');
     return null;
   }
   return session;
@@ -2646,6 +2775,31 @@ addRoute('POST', '/api/ttn/uplink', async ({ body, res }) => {
 
 addRoute('POST', '/api/ble/uplink', async ({ body, res }) => {
   ok(res, storeBleGatewayPayload(body));
+});
+
+addRoute('GET', '/api/cart-tracking/config', async ({ req, res }) => {
+  const session = requirePanelSession(req, res);
+  if (!session) return;
+  ok(res, {
+    clientId: EINSTEIN_CART_CLIENT_ID,
+    state: cartTrackingConfigForClient(getDb(), EINSTEIN_CART_CLIENT_ID)
+  });
+});
+
+addRoute('PUT', '/api/cart-tracking/config', async ({ req, body, res }) => {
+  if (!requirePanelMaster(req, res)) return;
+  ok(res, {
+    clientId: EINSTEIN_CART_CLIENT_ID,
+    state: saveCartTrackingConfigForClient(getDb(), body?.state || body, EINSTEIN_CART_CLIENT_ID)
+  });
+});
+
+addRoute('POST', '/api/cart-tracking/reset-history', async ({ req, body, res }) => {
+  if (!requirePanelMaster(req, res)) return;
+  ok(res, resetCartTrackingHistory(getDb(), {
+    clientId: EINSTEIN_CART_CLIENT_ID,
+    resetConfig: body?.resetConfig === true
+  }));
 });
 
 addRoute('GET', '/api/cart-tracking/readings', async ({ query, res }) => {
