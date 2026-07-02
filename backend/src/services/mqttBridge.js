@@ -43,6 +43,43 @@ function getMqttBridgeStatus() {
   return { ...status };
 }
 
+function numberOrNull(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const match = String(value).match(/-?\d+(?:\.\d+)?/);
+  if (!match) return null;
+  const number = Number(match[0]);
+  return Number.isFinite(number) ? number : null;
+}
+
+function clampNumber(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function gatewayBatteryPercentFromVoltage(voltageMv) {
+  const voltage = numberOrNull(voltageMv);
+  if (voltage === null) return null;
+  return Math.round(clampNumber(((voltage - 3300) / 900) * 100, 0, 100));
+}
+
+function gatewayStatusSummary(deviceStatus) {
+  if (!deviceStatus || typeof deviceStatus !== 'object') return null;
+  const voltageMv = numberOrNull(deviceStatus.battVoltage ?? deviceStatus.batteryVoltageMv ?? deviceStatus.battery_voltage_mv);
+  const timestamp = numberOrNull(deviceStatus.timestamp);
+  const timestampIso = timestamp !== null
+    ? new Date((timestamp > 1000000000000 ? timestamp : timestamp * 1000)).toISOString()
+    : null;
+
+  return {
+    timestamp: timestampIso,
+    networkType: deviceStatus.networkType || deviceStatus.netwrokType || null,
+    csq: numberOrNull(deviceStatus.csq),
+    batteryVoltageMv: voltageMv,
+    batteryPercent: gatewayBatteryPercentFromVoltage(voltageMv),
+    accStatus: numberOrNull(deviceStatus.accStatus),
+    imei: deviceStatus.imei || null
+  };
+}
+
 function payloadSummary(payload, result) {
   const deviceArray = Array.isArray(payload?.deviceArray) ? payload.deviceArray : null;
   const firstDevice = deviceArray?.[0] || null;
@@ -57,6 +94,7 @@ function payloadSummary(payload, result) {
     keys: payload && typeof payload === 'object' ? Object.keys(payload).slice(0, 12) : [],
     deviceCount: deviceArray ? deviceArray.length : null,
     gatewayMac: payload?.gatewayMac || null,
+    gatewayStatus: gatewayStatusSummary(payload?.deviceStatus),
     firstMac: firstDevice?.mac || payload?.mac || null,
     firstDistance: firstDistance ?? null,
     rawPrefix: rawData ? rawData.slice(0, 160) : null,

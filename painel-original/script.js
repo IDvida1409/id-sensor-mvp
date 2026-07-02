@@ -9641,6 +9641,7 @@ if(false){(function(){
   let cartAlertModalView = 'list';
   let lastGeneratedCartAlertId = '';
   let cartBackendOperationalActive = false;
+  let cartGatewayStatus = null;
   let cartConfigBackendLoaded = false;
   let cartConfigBackendLoadPromise = null;
   let cartConfigSaving = false;
@@ -10835,6 +10836,22 @@ if(false){(function(){
     return payload?.data || null;
   }
 
+  async function refreshGatewayStatusFromBackend(){
+    try{
+      const response = await fetch('/api/mqtt/status', { cache:'no-store' });
+      const payload = await response.json().catch(() => null);
+      if(!response.ok || payload?.ok === false) return false;
+      const nextStatus = payload?.data || null;
+      const previousSignature = JSON.stringify(cartGatewayStatus?.lastPayload || null);
+      const nextSignature = JSON.stringify(nextStatus?.lastPayload || null);
+      cartGatewayStatus = nextStatus;
+      return previousSignature !== nextSignature;
+    }catch(err){
+      console.warn('Nao foi possivel carregar status do gateway.', err);
+      return false;
+    }
+  }
+
   function mergeBackendAlerts(existingAlerts, backendAlerts){
     const previousByKey = new Map((existingAlerts || []).map(alert => [alert.key || alert.id, alert]));
     return (backendAlerts || [])
@@ -10944,6 +10961,9 @@ if(false){(function(){
         cartBackendOperationalActive = false;
         state.backendOperationalMode = false;
         console.warn('Falha ao buscar operação dos carrinhos', operationalError);
+      }
+      if(await refreshGatewayStatusFromBackend()){
+        changed = true;
       }
       if(applyReadingsToState(state, readings)){
         changed = true;
@@ -11102,12 +11122,64 @@ if(false){(function(){
     return 'good';
   }
 
+  function batteryToneFromPercent(battery){
+    const value = finiteNumberOrNull(battery);
+    if(value === null) return 'unknown';
+    if(value < 20) return 'critical';
+    if(value <= 35) return 'warning';
+    return 'good';
+  }
+
   function cartBatteryPercent(cart){
     const battery = finiteNumberOrNull(cart?.battery);
     if(battery !== null) return clampNumber(battery, 0, 100);
     const voltage = finiteNumberOrNull(cart?.batteryVoltageMv);
     if(voltage === null) return null;
     return clampNumber(((voltage - 2200) / 900) * 100, 0, 100);
+  }
+
+  function batteryIconHtml(percent, tone = 'good', className = ''){
+    const value = finiteNumberOrNull(percent);
+    const fill = value === null ? 8 : Math.max(8, Math.min(100, value));
+    return `<i class="cart-battery-mini ${escapeHtml(tone)} ${escapeHtml(className)}" aria-hidden="true"><em style="width:${fill}%"></em></i>`;
+  }
+
+  function gatewayStatusMatchesRoom(status, room){
+    const gatewayId = normalizeGatewayId(room?.gatewayDeviceId);
+    const statusGatewayId = normalizeGatewayId(status?.gatewayMac || status?.lastPayload?.gatewayMac);
+    return Boolean(gatewayId && statusGatewayId && gatewayId === statusGatewayId);
+  }
+
+  function gatewayBatteryStatusForRoom(room){
+    if(!gatewayStatusMatchesRoom(cartGatewayStatus, room)) return null;
+    const payloadStatus = cartGatewayStatus?.lastPayload?.gatewayStatus || cartGatewayStatus?.gatewayStatus || null;
+    const percent = finiteNumberOrNull(payloadStatus?.batteryPercent);
+    if(percent === null) return null;
+    return {
+      percent:clampNumber(percent, 0, 100),
+      voltageMv:finiteNumberOrNull(payloadStatus?.batteryVoltageMv),
+      networkType:payloadStatus?.networkType || '',
+      csq:finiteNumberOrNull(payloadStatus?.csq),
+      timestamp:payloadStatus?.timestamp || cartGatewayStatus?.lastMessageAt || ''
+    };
+  }
+
+  function gatewayBatteryHtml(room){
+    const status = gatewayBatteryStatusForRoom(room);
+    if(!status) return '';
+    const tone = batteryToneFromPercent(status.percent);
+    const titleParts = [
+      `Bateria do gateway: ${Math.round(status.percent)}%`,
+      status.voltageMv !== null ? `${Math.round(status.voltageMv)} mV` : '',
+      status.networkType ? `Rede ${status.networkType}` : '',
+      status.csq !== null ? `CSQ ${status.csq}` : ''
+    ].filter(Boolean);
+    return `
+      <span class="cart-gateway-battery ${tone}" title="${escapeHtml(titleParts.join(' · '))}">
+        ${batteryIconHtml(status.percent, tone, 'gateway')}
+        <b>${Math.round(status.percent)}%</b>
+      </span>
+    `;
   }
 
   function cartLevelLabel(cart){
@@ -11173,12 +11245,11 @@ if(false){(function(){
 
   function renderCartUnderMeta(cart){
     const battery = cartBatteryPercent(cart);
-    const batteryWidth = battery === null ? 8 : Math.max(8, Math.min(100, battery));
     const lastValidatedReading = cart.lastSeen || 'aguardando validação';
     return `
       <div class="cart-under-meta" aria-label="Comunicação e bateria de ${escapeHtml(cartDisplayName(cart))}">
         <span class="cart-under-row cart-under-battery">
-          <i class="cart-battery-mini ${cartBatteryTone(cart)}" aria-hidden="true"><em style="width:${batteryWidth}%"></em></i>
+          ${batteryIconHtml(battery, cartBatteryTone(cart), 'sensor')}
           <small>Bateria</small>
           <span>${escapeHtml(cartBatteryLabel(cart))}</span>
         </span>
@@ -13659,7 +13730,11 @@ if(false){(function(){
             <div class="cart-room-title-block">
               <span class="cart-room-kicker">Sala atual</span>
               <h2>${escapeHtml(room.name)}</h2>
-              <span class="cart-room-gateway readonly">Gateway: ${escapeHtml(formatGatewayShort(room.gatewayDeviceId))} <i class="cart-room-online-dot" aria-hidden="true"></i></span>
+              <span class="cart-room-gateway readonly">
+                <span>Gateway: ${escapeHtml(formatGatewayShort(room.gatewayDeviceId))}</span>
+                <i class="cart-room-online-dot" aria-hidden="true"></i>
+                ${gatewayBatteryHtml(room)}
+              </span>
             </div>
             <div class="cart-room-header-actions">
               <button type="button" class="cart-room-action-btn" data-room-insight="${escapeHtml(room.id)}" data-room-insight-mode="chart">Gráfico</button>

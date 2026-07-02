@@ -15117,6 +15117,30 @@ body.analytic-report-open{overflow:hidden}
   gap:6px;
 }
 
+.cart-gateway-battery{
+  align-items:center;
+  color:#425673;
+  display:inline-flex;
+  gap:5px;
+  margin-left:4px;
+  white-space:nowrap;
+}
+
+.cart-gateway-battery b{
+  color:#344766;
+  font-size:11px;
+  font-weight:900;
+  line-height:1;
+}
+
+.cart-gateway-battery.warning b{color:#a16207;}
+.cart-gateway-battery.critical b{color:#be123c;}
+
+.cart-battery-mini.gateway{
+  height:10px;
+  width:21px;
+}
+
 .cart-room-online-dot{
   background:#16a34a;
   border:2px solid #dcfce7;
@@ -15249,29 +15273,31 @@ body.analytic-report-open{overflow:hidden}
 .cart-side-dot.online{background:#16a34a;}
 
 .cart-battery-mini{
-  border:1.5px solid #8aa0ba;
-  border-radius:3px;
+  background:linear-gradient(180deg,#ffffff 0%,#eef6ff 100%);
+  border:1.6px solid #6f86a4;
+  border-radius:5px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.9),0 1px 2px rgba(15,23,42,.08);
   display:inline-block;
   flex:0 0 auto;
-  height:9px;
+  height:10px;
   position:relative;
-  width:18px;
+  width:20px;
 }
 
 .cart-battery-mini:after{
-  background:#8aa0ba;
-  border-radius:1px;
+  background:#6f86a4;
+  border-radius:0 2px 2px 0;
   content:"";
-  height:4px;
+  height:5px;
   position:absolute;
-  right:-4px;
+  right:-3.5px;
   top:2px;
   width:2px;
 }
 
 .cart-battery-mini em{
-  background:#16a34a;
-  border-radius:1px;
+  background:linear-gradient(90deg,#25c476,#0ea86a);
+  border-radius:2.5px;
   bottom:2px;
   display:block;
   left:2px;
@@ -15279,9 +15305,9 @@ body.analytic-report-open{overflow:hidden}
   top:2px;
 }
 
-.cart-battery-mini.warning em{background:#f59e0b;}
-.cart-battery-mini.critical em{background:#ef334e;}
-.cart-battery-mini.unknown em{background:#94a3b8;}
+.cart-battery-mini.warning em{background:linear-gradient(90deg,#fbbf24,#f59e0b);}
+.cart-battery-mini.critical em{background:linear-gradient(90deg,#fb7185,#ef334e);}
+.cart-battery-mini.unknown em{background:linear-gradient(90deg,#cbd5e1,#94a3b8);}
 
 .cart-room-insight-overlay[data-mode="info"] .cart-room-insight-modal,
 .cart-room-insight-overlay[data-mode="telemetry"] .cart-room-insight-modal{
@@ -16693,14 +16719,14 @@ body.analytic-report-open{overflow:hidden}
 }
 
 .cart-under-row .cart-battery-mini{
-  height:8px;
-  width:16px;
+  height:9px;
+  width:18px;
 }
 
 .cart-under-row .cart-battery-mini:after{
   height:4px;
-  right:-4px;
-  top:1.5px;
+  right:-3.5px;
+  top:2px;
 }
 
 @media (max-width:640px){
