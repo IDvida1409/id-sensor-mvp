@@ -224,6 +224,14 @@ function saveCartTrackingConfigForClient(db, state, clientId = EINSTEIN_CART_CLI
   return normalized;
 }
 
+function saveCartTrackingAlertSettingsForClient(db, alertSettings, clientId = EINSTEIN_CART_CLIENT_ID) {
+  const current = cartTrackingConfigForClient(db, clientId);
+  return saveCartTrackingConfigForClient(db, {
+    ...current,
+    alertSettings: normalizeCartTrackingAlertSettings(alertSettings)
+  }, clientId);
+}
+
 function resetCartTrackingHistory(db, { clientId = EINSTEIN_CART_CLIENT_ID, resetConfig = false } = {}) {
   const sensorIds = cartTrackingConfigForClient(db, clientId).carts
     .map((cart) => compactBleSensorId(cart.mac))
@@ -445,6 +453,16 @@ function requirePanelSession(req, res) {
   const session = verifyPanelSessionToken(req);
   if (!session) {
     fail(res, 401, 'Sessao do painel invalida ou expirada.');
+    return null;
+  }
+  return session;
+}
+
+function requirePanelCartSession(req, res) {
+  const session = requirePanelSession(req, res);
+  if (!session) return null;
+  if (session.role !== 'master' && session.role !== 'cart') {
+    fail(res, 403, 'Acesso restrito ao painel de carrinhos.');
     return null;
   }
   return session;
@@ -1743,7 +1761,7 @@ function json(res, status, payload) {
   res.writeHead(status, {
     'Content-Type': 'application/json; charset=utf-8',
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET,POST,PATCH,DELETE,OPTIONS',
+    'Access-Control-Allow-Methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Content-Length': Buffer.byteLength(body)
   });
@@ -2773,6 +2791,17 @@ addRoute('GET', '/api/cart-tracking/config', async ({ req, res }) => {
   });
 });
 
+addRoute('PUT', '/api/cart-tracking/alert-settings', async ({ req, body, res }) => {
+  const session = requirePanelCartSession(req, res);
+  if (!session) return;
+  const state = saveCartTrackingAlertSettingsForClient(getDb(), body?.alertSettings || body, EINSTEIN_CART_CLIENT_ID);
+  ok(res, {
+    clientId: EINSTEIN_CART_CLIENT_ID,
+    alertSettings: state.alertSettings,
+    state
+  });
+});
+
 addRoute('PUT', '/api/cart-tracking/config', async ({ req, body, res }) => {
   if (!requirePanelMaster(req, res)) return;
   ok(res, {
@@ -3447,7 +3476,7 @@ addRoute('GET', '/notification-logs', async ({ res }) => {
 
 async function app(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PATCH,DELETE,OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
   if (req.method === 'OPTIONS') {

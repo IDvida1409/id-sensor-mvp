@@ -5463,6 +5463,25 @@ document.getElementById('infoMacOverlay')?.addEventListener('click', ()=> openIn
   }
 
   window.applyPanelRole = applyRole;
+  window.setPanelVisualRole = function(role){
+    currentRole = role;
+    window.currentRole = role;
+    syncGestaoCopy(role);
+    document.body.dataset.panelRole = role;
+    document.body.classList.toggle('cart-profile-mode', role === 'cart');
+    if(gestaoBtn) gestaoBtn.style.display = role === 'cart' || role === 'area' ? 'none' : '';
+    if(chipAreas) chipAreas.style.display = role === 'cart' || role === 'area' ? 'none' : '';
+    if(chipClients) chipClients.style.display = role === 'master' ? '' : 'none';
+    document.querySelectorAll('.auth-master-only').forEach((element) => {
+      element.hidden = role !== 'master';
+    });
+    if(typeof window.syncPanelRoleChrome === 'function'){
+      window.syncPanelRoleChrome(role);
+    }
+    if(typeof syncCloneButtonVisibility === 'function') syncCloneButtonVisibility();
+    if(typeof window.updateScheduledCollectionVisibility === 'function') window.updateScheduledCollectionVisibility();
+    if(typeof window.updateBindDeviceVisibility === 'function') window.updateBindDeviceVisibility();
+  };
 
   userSwitcher.addEventListener('click', function(e){
     e.stopPropagation();
@@ -5500,7 +5519,9 @@ document.getElementById('infoMacOverlay')?.addEventListener('click', ()=> openIn
     }
   }
 
-  applyRole('master');
+  if(!document.getElementById('loginShell')){
+    applyRole('master');
+  }
 })();
 
 /* ===== PANEL AUTH | login profiles ===== */
@@ -5748,6 +5769,7 @@ document.getElementById('infoMacOverlay')?.addEventListener('click', ()=> openIn
         });
       }
     }else if(restoreCartRoute){
+      if(typeof window.setPanelVisualRole === 'function') window.setPanelVisualRole('cart');
       window.__pendingCartTrackingOpen = true;
       if(typeof selectedArea !== 'undefined') selectedArea = 'Carrinhos de resíduo';
       if(typeof selectedClient !== 'undefined') selectedClient = 'Hospital Einstein';
@@ -12675,6 +12697,11 @@ if(false){(function(){
     });
     saveState(state);
     renderCartAlertModalContent();
+    if(typeof window.saveCartAlertSettingsToBackend === 'function'){
+      window.saveCartAlertSettingsToBackend(state.alertSettings).catch(error => {
+        console.warn('Nao foi possivel salvar as configuracoes de alerta no backend.', error);
+      });
+    }
   }
 
   function handleCartAlertModalClick(event){
@@ -14071,6 +14098,31 @@ if(false){(function(){
     return payload.data;
   }
 
+  async function saveCartAlertSettingsToBackend(settings){
+    const normalizedSettings = normalizeCartAlertSettings(settings);
+    if(!window.activePanelSession?.token){
+      return normalizedSettings;
+    }
+    const saved = await panelApi('/api/cart-tracking/alert-settings', {
+      method:'PUT',
+      body:JSON.stringify({ alertSettings:normalizedSettings })
+    });
+    const currentState = readState();
+    const backendState = ensureSeedData({
+      ...currentState,
+      ...(saved?.state || {}),
+      alertSettings:saved?.alertSettings || saved?.state?.alertSettings || normalizedSettings,
+      telemetryEvents:currentState.telemetryEvents || [],
+      backendChartSamples:currentState.backendChartSamples || [],
+      alerts:currentState.alerts || []
+    }).state;
+    cartConfigBackendLoaded = true;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(backendState));
+    return backendState.alertSettings;
+  }
+
+  window.saveCartAlertSettingsToBackend = saveCartAlertSettingsToBackend;
+
   async function loadCartConfigFromBackend(force = false){
     if(cartConfigBackendLoaded && !force) return readState();
     if(!window.activePanelSession?.token){
@@ -15021,6 +15073,13 @@ if(false){(function(){
   function openCartTrackingView(){
     window.__pendingCartTrackingOpen = false;
     rememberCartTrackingRoute(true);
+    if(typeof window.setPanelVisualRole === 'function'){
+      window.setPanelVisualRole('cart');
+    }else{
+      window.currentRole = 'cart';
+      document.body.dataset.panelRole = 'cart';
+      document.body.classList.add('cart-profile-mode');
+    }
     if(typeof selectedArea !== 'undefined') selectedArea = 'Carrinhos de resíduo';
     if(typeof selectedClient !== 'undefined') selectedClient = 'Hospital Einstein';
     const view = ensureCartTrackingUi() || document.getElementById('cartTrackingView');
@@ -15056,6 +15115,15 @@ if(false){(function(){
     if(subtitle && previousSubtitle) subtitle.textContent = previousSubtitle;
     if(view) view.hidden = true;
     document.body.classList.remove('cart-tracking-open');
+    if(window.activePanelSession?.role === 'master' && String(document.body.dataset.panelRole || window.currentRole || '').toLowerCase() === 'cart'){
+      if(typeof window.setPanelVisualRole === 'function'){
+        window.setPanelVisualRole('master');
+      }else{
+        window.currentRole = 'master';
+        document.body.dataset.panelRole = 'master';
+        document.body.classList.remove('cart-profile-mode');
+      }
+    }
     stopReadingsPolling();
     hideCartAlertsOutsideContext();
   }
@@ -15737,7 +15805,7 @@ if(false){(function(){
     if(changed) saveStableAlertState(state);
   }
 
-  function saveStableAlertSettings(){
+  async function saveStableAlertSettings(){
     const content = document.getElementById(STABLE_CONTENT_ID);
     if(!content) return;
     const state = readStableAlertState();
@@ -15747,14 +15815,28 @@ if(false){(function(){
       const input = content.querySelector(`[data-stable-cart-alert-type="${option.id}"]`);
       enabledTypes[option.id] = input ? input.checked : current.enabledTypes[option.id] !== false;
     });
-    state.alertSettings = normalizeStableAlertSettings({
+    const nextSettings = normalizeStableAlertSettings({
       popupEnabled: content.querySelector('[name="stable-cart-alert-popup"]')?.checked !== false,
       soundEnabled: content.querySelector('[name="stable-cart-alert-sound"]')?.checked !== false,
       recurrenceMinutes: Number(content.querySelector('[name="stable-cart-alert-recurrence"]')?.value || current.recurrenceMinutes),
       enabledTypes
     });
+    state.alertSettings = nextSettings;
     saveStableAlertState(state);
     openStableAlertSettings();
+    if(typeof window.saveCartAlertSettingsToBackend !== 'function') return;
+    try{
+      const savedSettings = await window.saveCartAlertSettingsToBackend(nextSettings);
+      if(savedSettings){
+        const latestState = readStableAlertState();
+        latestState.alertSettings = normalizeStableAlertSettings(savedSettings);
+        saveStableAlertState(latestState);
+        openStableAlertSettings();
+      }
+    }catch(error){
+      console.warn('Nao foi possivel salvar as configuracoes de alerta no backend.', error);
+      alert('Nao foi possivel salvar as configuracoes no servidor. Tente novamente antes de entregar o login.');
+    }
   }
 
   function updateStableAlertBadges(){
