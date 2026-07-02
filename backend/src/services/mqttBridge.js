@@ -274,6 +274,37 @@ function parseMokoTofSensor(bytes, startIndex) {
   return { sensor, nextOffset: offset };
 }
 
+function readUnsignedInteger(bytes) {
+  if (!bytes.length) return null;
+  if (bytes.length <= 6) return bytes.readUIntBE(0, bytes.length);
+  const value = bytes.readBigUInt64BE(0);
+  return value <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(value) : null;
+}
+
+function parseMokoGatewayStatus(bytes, startIndex) {
+  const deviceStatus = {};
+
+  for (let offset = startIndex; offset + 3 <= bytes.length;) {
+    const tag = bytes[offset];
+    const length = bytes.readUInt16BE(offset + 1);
+    const valueStart = offset + 3;
+    const valueEnd = valueStart + length;
+    if (!length || valueEnd > bytes.length) break;
+
+    const value = bytes.subarray(valueStart, valueEnd);
+    if (tag === 0x00) deviceStatus.timestamp = readUnsignedInteger(value);
+    if (tag === 0x01) deviceStatus.netwrokType = value.toString('utf8');
+    if (tag === 0x02) deviceStatus.csq = readUnsignedInteger(value);
+    if (tag === 0x03) deviceStatus.battVoltage = `${readUnsignedInteger(value)}mV`;
+    if (tag === 0x05) deviceStatus.accStatus = readUnsignedInteger(value);
+    if (tag === 0x06) deviceStatus.imei = value.toString('utf8');
+
+    offset = valueEnd;
+  }
+
+  return Object.keys(deviceStatus).length ? deviceStatus : null;
+}
+
 function parseMokoRawPayload(hex) {
   const bytes = Buffer.from(hex, 'hex');
   if (bytes.length < 13 || bytes[0] !== 0xef) return null;
@@ -287,6 +318,12 @@ function parseMokoRawPayload(hex) {
     length,
     raw_data: hex
   };
+
+  if (flag === '3004') {
+    const deviceStatus = parseMokoGatewayStatus(bytes, 11);
+    if (deviceStatus) parsed.deviceStatus = deviceStatus;
+    return parsed;
+  }
 
   if (flag !== '30a0') return parsed;
 
