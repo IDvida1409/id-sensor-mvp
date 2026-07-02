@@ -9753,7 +9753,8 @@ body.analytic-report-open{overflow:hidden}
   display:none !important;
 }
 
-.cart-tracking-open .app > #cartTrackingView:not([hidden]){
+.cart-tracking-open .app > #cartTrackingView:not([hidden]),
+.cart-tracking-open #cartTrackingView:not([hidden]){
   display:flex !important;
 }
 

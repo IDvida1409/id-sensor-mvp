@@ -5694,6 +5694,9 @@ document.getElementById('infoMacOverlay')?.addEventListener('click', ()=> openIn
     document.body.classList.remove('auth-ready');
     delete document.body.dataset.authRole;
     window.__pendingCartTrackingOpen = false;
+    try {
+      localStorage.removeItem('idsensor.cartTracking.activeRoute.v1');
+    } catch(e) {}
     if(typeof window.resetCartTrackingBackendConfigCache === 'function') window.resetCartTrackingBackendConfigCache();
     if(typeof window.closeCartTrackingView === 'function') window.closeCartTrackingView();
     if(typeof window.hideCartAlertsOutsideContext === 'function') window.hideCartAlertsOutsideContext();
@@ -5704,9 +5707,18 @@ document.getElementById('infoMacOverlay')?.addEventListener('click', ()=> openIn
     scheduleLoginDiagonalUpdate();
   }
 
+  function shouldRestoreCartRouteFromStorage(){
+    try {
+      return localStorage.getItem('idsensor.cartTracking.activeRoute.v1') === '1';
+    } catch(e) {
+      return false;
+    }
+  }
+
   function applySession(session){
     if(!session || !session.role) return showLogin();
     if(!session.token) return showLogin();
+    const restoreCartRoute = session.role !== 'cart' && shouldRestoreCartRouteFromStorage();
     window.activePanelSession = session;
     try {
       localStorage.setItem(SESSION_KEY, JSON.stringify(session));
@@ -5733,6 +5745,19 @@ document.getElementById('infoMacOverlay')?.addEventListener('click', ()=> openIn
       if(typeof window.refreshCartConfigFromBackend === 'function'){
         window.refreshCartConfigFromBackend().catch(error => {
           console.warn('Nao foi possivel carregar a configuracao C.R. apos o login.', error);
+        });
+      }
+    }else if(restoreCartRoute){
+      window.__pendingCartTrackingOpen = true;
+      if(typeof selectedArea !== 'undefined') selectedArea = 'Carrinhos de resíduo';
+      if(typeof selectedClient !== 'undefined') selectedClient = 'Hospital Einstein';
+      if(typeof subtitleEl !== 'undefined' && subtitleEl) subtitleEl.textContent = 'Hospital Einstein · Carrinhos de resíduo';
+      window.setTimeout(() => {
+        if(typeof window.openCartTrackingView === 'function') window.openCartTrackingView({ profileMode:true });
+      }, 0);
+      if(typeof window.refreshCartConfigFromBackend === 'function'){
+        window.refreshCartConfigFromBackend().catch(error => {
+          console.warn('Nao foi possivel carregar a configuracao C.R. apos restaurar a sessao.', error);
         });
       }
     }else{
@@ -9500,6 +9525,7 @@ if(false){(function(){
 /* ===== SCRIPT BLOCK 45 | cart-tracking-room-cards-redesign ===== */
 (function(){
   const STORAGE_KEY = 'idsensor.cartTracking.v9';
+  const CART_ROUTE_KEY = 'idsensor.cartTracking.activeRoute.v1';
   const ROOM_SWITCH_RSSI_MIN = -70;
   const ROOM_SWITCH_CONFIRM_READINGS = 2;
   const ROOM_READING_RECENT_MS = 30 * 60 * 1000;
@@ -9557,6 +9583,13 @@ if(false){(function(){
     { id:'exchange', label:'Troca registrada', detail:'Carrinho voltou para livre.' }
   ];
   const OBSOLETE_ROOM_IDS = new Set(['sala-bloco-a']);
+
+  function rememberCartTrackingRoute(active){
+    try {
+      if(active) localStorage.setItem(CART_ROUTE_KEY, '1');
+      else localStorage.removeItem(CART_ROUTE_KEY);
+    } catch(e) {}
+  }
 
   const defaultState = {
     rooms: [
@@ -13628,11 +13661,15 @@ if(false){(function(){
   }
 
   function ensureCartTrackingUi(){
-    const oldView = document.getElementById('cartTrackingView');
-    if(oldView) oldView.remove();
-
     const oldButton = document.getElementById('cartTrackingBtn');
     if(oldButton) oldButton.remove();
+
+    const existingView = document.getElementById('cartTrackingView');
+    if(existingView && existingView.classList.contains('cart-tracking-v2')){
+      mountCartTrackingView(existingView);
+      return existingView;
+    }
+    if(existingView) existingView.remove();
 
     const view = document.createElement('section');
     view.className = 'cart-tracking-view cart-tracking-v2';
@@ -13805,10 +13842,7 @@ if(false){(function(){
       </div>
     `;
 
-    const layoutNode = document.getElementById('layout');
-    const toolbarNode = document.querySelector('.toolbar-filters') || document.querySelector('.toolbar');
-    const parent = layoutNode?.parentNode || toolbarNode?.parentNode || document.body;
-    parent.insertBefore(view, layoutNode || toolbarNode?.nextSibling || parent.firstChild);
+    mountCartTrackingView(view);
 
     document.getElementById('cartTrackingSummary')?.addEventListener('click', handleCartFilterClick);
     document.getElementById('cartSearchToggle')?.addEventListener('click', () => {
@@ -13904,6 +13938,7 @@ if(false){(function(){
     document.getElementById('cartCalibrationNewCancelBtn')?.addEventListener('click', cancelCartCalibrationDraft);
 
     renderRooms();
+    return view;
   }
 
   function setCartFilter(filter){
@@ -14985,8 +15020,10 @@ if(false){(function(){
 
   function openCartTrackingView(){
     window.__pendingCartTrackingOpen = false;
-    ensureCartTrackingUi();
-    const view = document.getElementById('cartTrackingView');
+    rememberCartTrackingRoute(true);
+    if(typeof selectedArea !== 'undefined') selectedArea = 'Carrinhos de resíduo';
+    if(typeof selectedClient !== 'undefined') selectedClient = 'Hospital Einstein';
+    const view = ensureCartTrackingUi() || document.getElementById('cartTrackingView');
     if(!view) return;
     mountCartTrackingView(view);
     const title = document.querySelector('.brand .title');
@@ -15011,6 +15048,7 @@ if(false){(function(){
   }
 
   function closeCartTrackingView(){
+    rememberCartTrackingRoute(false);
     const view = document.getElementById('cartTrackingView');
     const title = document.querySelector('.brand .title');
     const subtitle = document.getElementById('pageSubtitle');
