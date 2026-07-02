@@ -525,6 +525,7 @@ function startMqttBridge({ storePayload, recordPayload } = {}) {
 }
 
 module.exports = {
+  gatewayStatusSummary,
   getMqttBridgeStatus,
   parseMokoRawPayload,
   startMqttBridge

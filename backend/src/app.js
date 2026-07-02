@@ -14,7 +14,7 @@ const { seedDatabase } = require('./db/seed');
 const { id, activationCode } = require('./utils/ids');
 const { buildDeviceCard } = require('./services/deviceCard');
 const { sendActivationEmail } = require('./services/emailService');
-const { getMqttBridgeStatus } = require('./services/mqttBridge');
+const { gatewayStatusSummary, getMqttBridgeStatus, parseMokoRawPayload } = require('./services/mqttBridge');
 const { sendExpoPush } = require('./services/pushService');
 const { alertMessageForAlert } = require('./services/alertText');
 const {
@@ -1097,6 +1097,14 @@ function gatewayMessageStatusFromRow(row, summary = {}) {
     ? summary.gatewayStatus
     : null;
   if (summaryStatus) return summaryStatus;
+
+  const storedPayload = safeJsonParse(row?.payload_json, null);
+  const rawData = typeof storedPayload?.raw_data === 'string' ? storedPayload.raw_data : null;
+  if (rawData) {
+    const parsed = parseMokoRawPayload(rawData);
+    const parsedStatus = gatewayStatusSummary(parsed?.deviceStatus);
+    if (parsedStatus) return parsedStatus;
+  }
 
   const batteryVoltageMv = finiteNumberOrNull(row?.battery_voltage_mv);
   const batteryPercent = finiteNumberOrNull(row?.battery_percent);
