@@ -10030,6 +10030,16 @@ if(false){(function(){
     return window.activePanelSession?.role === 'master';
   }
 
+  function canViewCartCalibration(){
+    const role = window.activePanelSession?.role;
+    return role === 'master' || role === 'cart';
+  }
+
+  function canEditCartCriticalLimit(){
+    const role = window.activePanelSession?.role;
+    return role === 'master' || role === 'cart';
+  }
+
   function distanceForFillPercentage(calibration, percentage){
     const empty = finiteNumberOrNull(calibration.emptyDistanceMm);
     const full = finiteNumberOrNull(calibration.fullDistanceMm);
@@ -12964,8 +12974,10 @@ if(false){(function(){
     const panel = document.getElementById('cartCalibrationPanel');
     if(!panel) return;
     const canManage = canManageCartSettings();
-    panel.hidden = !canManage;
-    if(!canManage) return;
+    const canView = canViewCartCalibration() && !!cart;
+    const canEditLimit = canEditCartCriticalLimit() && !!cart;
+    panel.hidden = !canView;
+    if(!canView) return;
 
     const overlay = document.getElementById('cartDetailOverlay');
     const calibration = cartCalibration(cart);
@@ -12977,6 +12989,10 @@ if(false){(function(){
     const startBtn = document.getElementById('cartCalibrationStartBtn');
     const confirmBtn = document.getElementById('cartCalibrationConfirmBtn');
     const lidToggleBtn = document.getElementById('cartCalibrationLidToggle');
+    const editBtn = document.getElementById('cartCalibrationEditBtn');
+    const newBtn = document.getElementById('cartCalibrationNewBtn');
+    const editPanel = document.getElementById('cartCalibrationEdit');
+    const newFlow = document.getElementById('cartCalibrationNewFlow');
     const redDistance = distanceForFillPercentage(calibration, calibration.redPercent);
 
     if(summaryEl) summaryEl.textContent = `${formatMm(calibration.emptyDistanceMm)} · ${calibration.redPercent}%`;
@@ -12985,22 +13001,34 @@ if(false){(function(){
     if(modeEl) modeEl.textContent = 'Por porcentagem';
     if(redEl) redEl.textContent = `${calibration.redPercent}% (${formatMm(redDistance)})`;
     if(lidToggleBtn){
+      lidToggleBtn.hidden = !canManage;
+      lidToggleBtn.disabled = !canManage;
       lidToggleBtn.textContent = calibration.lidDetectionEnabled ? 'Porta aberta ligada' : 'Leitura lateral ativa';
       lidToggleBtn.dataset.enabled = calibration.lidDetectionEnabled ? 'true' : 'false';
+    }
+    if(editBtn){
+      editBtn.hidden = !canEditLimit;
+      editBtn.disabled = !canEditLimit;
+    }
+    if(newBtn){
+      newBtn.hidden = !canManage;
+      newBtn.disabled = !canManage;
     }
     renderCalibrationPercentPicker('cartCalibrationRedPercent', calibration, calibration.redPercent);
     renderCalibrationPercentPicker('cartCalibrationNewRedPercent', calibration, calibration.redPercent);
 
-    if(startBtn) startBtn.disabled = !cart;
+    if(startBtn) startBtn.disabled = !cart || !canManage;
     if(confirmBtn) confirmBtn.disabled = true;
+    if(editPanel) editPanel.hidden = true;
+    if(newFlow) newFlow.hidden = true;
     if(overlay){
       delete overlay.dataset.calibrationDraftEmpty;
       delete overlay.dataset.calibrationDraftSamples;
     }
     renderCalibrationSamples([]);
     document.getElementById('cartCalibrationDraft')?.replaceChildren();
-    setCalibrationStatus('Escolha uma ação para alterar a calibração.', 'info');
-    setCalibrationNewStatus('A nova calibração substitui a calibração atual deste carrinho.', 'warn');
+    setCalibrationStatus(canEditLimit ? 'Ajuste apenas o limite crítico em porcentagem.' : 'Calibração técnica somente leitura.', 'info');
+    setCalibrationNewStatus(canManage ? 'A nova calibração substitui a calibração atual deste carrinho.' : '', canManage ? 'warn' : 'info');
     setCalibrationMode('');
   }
 
@@ -13084,29 +13112,33 @@ if(false){(function(){
   async function saveCartCalibrationToBackend(cart, calibration){
     const mac = cleanMac(cart?.mac);
     if(mac.length !== 12) throw new Error('MAC do sensor inválido.');
-    const response = await fetch(`/api/cart-tracking/calibration/${encodeURIComponent(mac)}`, {
+    const payload = await panelApi(`/api/cart-tracking/calibration/${encodeURIComponent(mac)}`, {
       method:'POST',
-      headers:{'Content-Type':'application/json'},
       body:JSON.stringify({ calibration })
     });
-    const payload = await response.json().catch(() => null);
-    if(!response.ok || payload?.ok === false){
-      throw new Error(payload?.message || 'Falha ao salvar calibração.');
-    }
-    return normalizeCartCalibration(payload?.data?.calibration || calibration);
+    return normalizeCartCalibration(payload?.calibration || calibration);
+  }
+
+  async function saveCartCriticalLimitToBackend(cart, redPercent){
+    const mac = cleanMac(cart?.mac);
+    if(mac.length !== 12) throw new Error('MAC do sensor inválido.');
+    const payload = await panelApi(`/api/cart-tracking/critical-limit/${encodeURIComponent(mac)}`, {
+      method:'PUT',
+      body:JSON.stringify({ redPercent })
+    });
+    return normalizeCartCalibration(payload?.calibration || {
+      ...cartCalibration(cart),
+      redPercent
+    });
   }
 
   async function clearCartCalibrationFromBackend(macValue){
     const mac = cleanMac(macValue);
     if(mac.length !== 12) throw new Error('MAC do sensor invalido.');
-    const response = await fetch(`/api/cart-tracking/calibration/${encodeURIComponent(mac)}`, {
+    const payload = await panelApi(`/api/cart-tracking/calibration/${encodeURIComponent(mac)}`, {
       method:'DELETE'
     });
-    const payload = await response.json().catch(() => null);
-    if(!response.ok || payload?.ok === false){
-      throw new Error(payload?.message || 'Falha ao limpar calibracao anterior.');
-    }
-    return normalizeCartCalibration(payload?.data?.calibration || DEFAULT_CART_CALIBRATION);
+    return normalizeCartCalibration(payload?.calibration || DEFAULT_CART_CALIBRATION);
   }
 
   function resetCartOperationalCycleAfterCalibration(cart){
@@ -13136,6 +13168,7 @@ if(false){(function(){
   }
 
   async function startCartCalibration(){
+    if(!canManageCartSettings()) return;
     const cart = currentDetailCart();
     if(!cart){
       alert('Salve o carrinho antes de calibrar.');
@@ -13211,8 +13244,7 @@ if(false){(function(){
   async function saveCartCalibrationLimit(){
     const overlay = document.getElementById('cartDetailOverlay');
     const cartId = overlay?.dataset.cartId;
-    if(!cartId){
-      alert('Salve o carrinho antes de calibrar.');
+    if(!cartId || !canEditCartCriticalLimit()){
       return;
     }
 
@@ -13229,9 +13261,8 @@ if(false){(function(){
     });
 
     try{
-      setCalibrationStatus('Salvando calibração no backend...', 'info');
-      cart.calibration = await saveCartCalibrationToBackend(cart, next);
-      resetCartOperationalCycleAfterCalibration(cart);
+      setCalibrationStatus('Salvando limite crítico no backend...', 'info');
+      cart.calibration = await saveCartCriticalLimitToBackend(cart, next.redPercent);
       saveState(state);
       renderCartCalibrationPanel(cart);
       renderRooms();
@@ -13276,6 +13307,7 @@ if(false){(function(){
   }
 
   async function confirmCartCalibration(){
+    if(!canManageCartSettings()) return;
     const overlay = document.getElementById('cartDetailOverlay');
     const cartId = overlay?.dataset.cartId;
     const draftEmpty = finiteNumberOrNull(overlay?.dataset.calibrationDraftEmpty);
@@ -13331,12 +13363,14 @@ if(false){(function(){
   }
 
   function openCartCalibrationEdit(){
+    if(!canEditCartCriticalLimit()) return;
     setCalibrationExpanded(true);
     setCalibrationMode('edit');
     setCalibrationStatus('Ajuste apenas o limite crítico em porcentagem.', 'info');
   }
 
   function openCartCalibrationNew(){
+    if(!canManageCartSettings()) return;
     setCalibrationExpanded(true);
     setCalibrationMode('new');
     renderCalibrationSamples([]);
@@ -14931,21 +14965,40 @@ if(false){(function(){
     }
   }
 
-  function openCartDetail(cartId, roomId){
-    const state = readState();
-    const cart = state.carts.find(item => item.id === cartId);
+  async function openCartDetail(cartId, roomId){
     const overlay = document.getElementById('cartDetailOverlay');
     if(!overlay) return;
+
+    const title = document.getElementById('cartDetailTitle');
+    const meta = document.getElementById('cartDetailMeta');
+    const summary = document.getElementById('cartDetailDeviceSummary');
+    if(window.activePanelSession?.token){
+      if(title) title.textContent = 'Carregando...';
+      if(meta) meta.textContent = 'Sincronizando configuração do servidor';
+      if(summary) summary.innerHTML = '<span><small>Status</small><strong>Atualizando dados</strong></span>';
+      renderCartCalibrationPanel(null);
+      overlay.hidden = false;
+    }
+
+    const state = window.activePanelSession?.token
+      ? await loadCartConfigFromBackend(true)
+      : readState();
+    if(window.activePanelSession?.token && !cartConfigBackendLoaded){
+      if(title) title.textContent = 'Não foi possível carregar';
+      if(meta) meta.textContent = 'A configuração do servidor não respondeu.';
+      if(summary) summary.innerHTML = '<span><small>Status</small><strong>Sincronização pendente</strong></span>';
+      renderCartCalibrationPanel(null);
+      return;
+    }
+    if(window.activePanelSession?.token) renderRooms(state);
+    const cart = state.carts.find(item => item.id === cartId);
 
     overlay.dataset.cartId = cart?.id || '';
     overlay.dataset.roomId = cart?.roomId || roomId || '';
 
-    const title = document.getElementById('cartDetailTitle');
-    const meta = document.getElementById('cartDetailMeta');
     const name = document.getElementById('cartDetailName');
     const mac = document.getElementById('cartDetailMac');
     const saveBtn = document.getElementById('cartDetailSaveBtn');
-    const summary = document.getElementById('cartDetailDeviceSummary');
     const canManage = canManageCartSettings();
     const isNewCart = !cart;
     const canEditIdentity = canManage && isNewCart;

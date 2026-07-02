@@ -232,6 +232,45 @@ function saveCartTrackingAlertSettingsForClient(db, alertSettings, clientId = EI
   }, clientId);
 }
 
+function saveCartTrackingCriticalPercentForClient(db, bleSensorId, redPercent, clientId = EINSTEIN_CART_CLIENT_ID) {
+  const sensorId = compactBleSensorId(bleSensorId);
+  if (!sensorId) {
+    const error = new Error('MAC do sensor inválido.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const current = cartTrackingConfigForClient(db, clientId);
+  const targetCart = current.carts.find((cart) => compactBleSensorId(cart.mac) === sensorId);
+  if (!targetCart) {
+    const error = new Error('Carrinho não encontrado para este cliente.');
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const calibration = saveCollectorCriticalPercent(db, sensorId, redPercent);
+  const nextState = {
+    ...current,
+    carts: current.carts.map((cart) => {
+      if (compactBleSensorId(cart.mac) !== sensorId) return cart;
+      return {
+        ...cart,
+        calibration: normalizeCollectorCalibration({
+          ...cart.calibration,
+          ...calibration,
+          redPercent: calibration.redPercent
+        })
+      };
+    })
+  };
+  const state = saveCartTrackingConfigForClient(db, nextState, clientId);
+  return {
+    redPercent: calibration.redPercent,
+    calibration,
+    state
+  };
+}
+
 function resetCartTrackingHistory(db, { clientId = EINSTEIN_CART_CLIENT_ID, resetConfig = false } = {}) {
   const sensorIds = cartTrackingConfigForClient(db, clientId).carts
     .map((cart) => compactBleSensorId(cart.mac))
@@ -774,6 +813,48 @@ function saveCollectorCalibration(db, bleSensorId, calibration) {
       lid_detection_enabled = excluded.lid_detection_enabled,
       samples_json = excluded.samples_json,
       updated_at = excluded.updated_at
+  `).run(
+    sensorId,
+    normalized.emptyDistanceMm,
+    normalized.fullDistanceMm,
+    normalized.redPercent,
+    normalized.openMarginPercent,
+    normalized.openMarginMinMm,
+    normalized.confirmationReadings,
+    normalized.lidDetectionEnabled ? 1 : 0,
+    safeJsonStringify(normalized.samples),
+    updatedAt
+  );
+
+  return {
+    ...normalized,
+    updatedAt
+  };
+}
+
+function saveCollectorCriticalPercent(db, bleSensorId, redPercent) {
+  const sensorId = compactBleSensorId(bleSensorId);
+  if (!sensorId) {
+    const error = new Error('MAC do sensor inválido.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const current = collectorCalibrationForSensor(db, sensorId);
+  const normalized = normalizeCollectorCalibration({
+    ...current,
+    redPercent
+  });
+  const updatedAt = current.updatedAt || nowIso();
+
+  db.prepare(`
+    INSERT INTO collector_calibrations (
+      ble_sensor_id, empty_distance_mm, full_distance_mm, red_percent,
+      open_margin_percent, open_margin_min_mm, confirmation_readings,
+      lid_detection_enabled, samples_json, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(ble_sensor_id) DO UPDATE SET
+      red_percent = excluded.red_percent
   `).run(
     sensorId,
     normalized.emptyDistanceMm,
@@ -2810,6 +2891,24 @@ addRoute('PUT', '/api/cart-tracking/config', async ({ req, body, res }) => {
   });
 });
 
+addRoute('PUT', '/api/cart-tracking/critical-limit/:mac', async ({ req, params, body, res }) => {
+  const session = requirePanelCartSession(req, res);
+  if (!session) return;
+  try {
+    ok(res, {
+      clientId: EINSTEIN_CART_CLIENT_ID,
+      ...saveCartTrackingCriticalPercentForClient(
+        getDb(),
+        params.mac,
+        body?.redPercent ?? body?.calibration?.redPercent,
+        EINSTEIN_CART_CLIENT_ID
+      )
+    });
+  } catch (error) {
+    return fail(res, error.statusCode || 500, error.message || 'Erro ao salvar limite crítico.');
+  }
+});
+
 addRoute('POST', '/api/cart-tracking/reset-history', async ({ req, body, res }) => {
   if (!requirePanelMaster(req, res)) return;
   ok(res, resetCartTrackingHistory(getDb(), {
@@ -2915,24 +3014,50 @@ addRoute('GET', '/api/cart-tracking/calibration/:mac', async ({ params, res }) =
   });
 });
 
-addRoute('POST', '/api/cart-tracking/calibration/:mac', async ({ params, body, res }) => {
+addRoute('POST', '/api/cart-tracking/calibration/:mac', async ({ req, params, body, res }) => {
+  if (!requirePanelMaster(req, res)) return;
   try {
-    const calibration = saveCollectorCalibration(getDb(), params.mac, body?.calibration || body);
+    const db = getDb();
+    const sensorId = compactBleSensorId(params.mac);
+    const calibration = saveCollectorCalibration(db, sensorId, body?.calibration || body);
+    const current = cartTrackingConfigForClient(db, EINSTEIN_CART_CLIENT_ID);
+    const nextState = {
+      ...current,
+      carts: current.carts.map((cart) => (
+        compactBleSensorId(cart.mac) === sensorId
+          ? { ...cart, calibration }
+          : cart
+      ))
+    };
     ok(res, {
-      mac: formatBleSensorId(params.mac),
-      calibration
+      mac: formatBleSensorId(sensorId),
+      calibration,
+      state: saveCartTrackingConfigForClient(db, nextState, EINSTEIN_CART_CLIENT_ID)
     });
   } catch (error) {
     return fail(res, error.statusCode || 500, error.message || 'Erro ao salvar calibração.');
   }
 });
 
-addRoute('DELETE', '/api/cart-tracking/calibration/:mac', async ({ params, res }) => {
+addRoute('DELETE', '/api/cart-tracking/calibration/:mac', async ({ req, params, res }) => {
+  if (!requirePanelMaster(req, res)) return;
   try {
-    const calibration = deleteCollectorCalibration(getDb(), params.mac);
+    const db = getDb();
+    const sensorId = compactBleSensorId(params.mac);
+    const calibration = deleteCollectorCalibration(db, sensorId);
+    const current = cartTrackingConfigForClient(db, EINSTEIN_CART_CLIENT_ID);
+    const nextState = {
+      ...current,
+      carts: current.carts.map((cart) => (
+        compactBleSensorId(cart.mac) === sensorId
+          ? { ...cart, calibration }
+          : cart
+      ))
+    };
     ok(res, {
-      mac: formatBleSensorId(params.mac),
-      calibration
+      mac: formatBleSensorId(sensorId),
+      calibration,
+      state: saveCartTrackingConfigForClient(db, nextState, EINSTEIN_CART_CLIENT_ID)
     });
   } catch (error) {
     return fail(res, error.statusCode || 500, error.message || 'Erro ao limpar calibracao.');
