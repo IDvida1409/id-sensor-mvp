@@ -11164,7 +11164,7 @@ if(false){(function(){
   function renderCartUnderMeta(cart){
     const battery = cartBatteryPercent(cart);
     const batteryWidth = battery === null ? 8 : Math.max(8, Math.min(100, battery));
-    const lastValidatedReading = cart.lastSeen || 'aguardando validacao';
+    const lastValidatedReading = cart.lastSeen || 'aguardando validação';
     return `
       <div class="cart-under-meta" aria-label="Comunicação e bateria de ${escapeHtml(cartDisplayName(cart))}">
         <span class="cart-under-row cart-under-battery">
