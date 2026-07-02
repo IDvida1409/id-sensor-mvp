@@ -2049,6 +2049,7 @@ function buildEinsteinCartHealth(db) {
   const warnings = [];
   const gatewayAgeMinutes = minutesSinceIso(gatewayLastAt);
 
+  if (mqtt.connected !== true) warnings.push('Bridge MQTT do backend desconectado.');
   if (!gatewayLastAt) warnings.push('Gateway ainda sem pacote persistido.');
   if (gatewayAgeMinutes !== null && gatewayAgeMinutes > 60) warnings.push('Gateway sem comunicação recente.');
   if (!config.carts.length) warnings.push('Nenhum carrinho configurado para o Einstein.');
