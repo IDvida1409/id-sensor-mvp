@@ -155,20 +155,21 @@ function normalizeCartTrackingRoom(room) {
 function normalizeCartTrackingCart(cart) {
   const mac = compactBleSensorId(cart?.mac || cart?.sensorId || cart?.ble_sensor_id);
   const idValue = String(cart?.id || '').trim() || (mac ? `cart-${mac}` : id('cart'));
+  const roomId = String(cart?.roomId || cart?.room_id || EINSTEIN_CART_ROOM_ID).trim();
   return {
     id: idValue,
     name: String(cart?.name || cart?.nome || '').trim() || idValue,
     mac: formatBleSensorId(mac),
-    roomId: String(cart?.roomId || cart?.room_id || EINSTEIN_CART_ROOM_ID).trim(),
-    locationStatus: String(cart?.locationStatus || cart?.location_status || 'in_room').trim(),
-    fillPercentage: finiteNumberOrNull(cart?.fillPercentage ?? cart?.fill_percentage) ?? 0,
+    roomId,
+    locationStatus: roomId ? 'in_room' : 'offline',
+    fillPercentage: 0,
     calibration: normalizeCollectorCalibration(cart?.calibration || {}),
-    rssi: finiteNumberOrNull(cart?.rssi),
-    lastCommunicationAt: String(cart?.lastCommunicationAt || '').trim(),
-    lastCommunicationSeen: String(cart?.lastCommunicationSeen || '').trim(),
-    lastSeen: String(cart?.lastSeen || '').trim(),
+    rssi: null,
+    lastCommunicationAt: '',
+    lastCommunicationSeen: '',
+    lastSeen: '',
     registeredAt: String(cart?.registeredAt || cart?.registered_at || '').trim(),
-    transitStep: finiteNumberOrNull(cart?.transitStep) ?? 0
+    transitStep: 0
   };
 }
 
@@ -2028,6 +2029,81 @@ function buildEinsteinCartOperationalDataset(db, options = {}) {
   };
 }
 
+function minutesSinceIso(value) {
+  const timestamp = new Date(value || '').getTime();
+  if (!Number.isFinite(timestamp)) return null;
+  return Math.max(0, Math.round((Date.now() - timestamp) / 60000));
+}
+
+function buildEinsteinCartHealth(db) {
+  const config = cartTrackingConfigForClient(db, EINSTEIN_CART_CLIENT_ID);
+  const mqtt = persistedMqttBridgeStatus();
+  const gatewayStatus = mqtt.gatewayStatus || mqtt.lastPayload?.gatewayStatus || null;
+  const gatewayLastAt = gatewayStatus?.timestamp || mqtt.lastGatewayStatusAt || mqtt.lastMessageAt || null;
+  const latestReadings = latestCollectorReadings(db, {
+    macFilters: EINSTEIN_CART_SENSORS.map((sensor) => sensor.sensorId),
+    limit: EINSTEIN_CART_SENSORS.length
+  });
+  const readingBySensor = new Map(latestReadings.map((reading) => [compactBleSensorId(reading.bleSensorId), reading]));
+  const cartsBySensor = new Map(config.carts.map((cart) => [compactBleSensorId(cart.mac), cart]));
+  const warnings = [];
+  const gatewayAgeMinutes = minutesSinceIso(gatewayLastAt);
+
+  if (!gatewayLastAt) warnings.push('Gateway ainda sem pacote persistido.');
+  if (gatewayAgeMinutes !== null && gatewayAgeMinutes > 60) warnings.push('Gateway sem comunicação recente.');
+  if (!config.carts.length) warnings.push('Nenhum carrinho configurado para o Einstein.');
+
+  const sensors = EINSTEIN_CART_SENSORS.map((sensor) => {
+    const cart = cartsBySensor.get(sensor.sensorId) || null;
+    const reading = readingBySensor.get(sensor.sensorId) || null;
+    const calibration = collectorCalibrationForSensor(db, sensor.sensorId);
+    const readingAt = reading?.createdAt || reading?.receivedAt || null;
+    const readingAgeMinutes = minutesSinceIso(readingAt);
+
+    if (!cart) warnings.push(`${sensor.name} não está no cadastro do Einstein.`);
+    if (!calibration.updatedAt) warnings.push(`${sensor.name} sem calibração técnica persistida.`);
+
+    return {
+      id: sensor.id,
+      name: sensor.name,
+      sensorId: sensor.sensorId,
+      configured: Boolean(cart),
+      calibrated: Boolean(calibration.updatedAt),
+      calibrationUpdatedAt: calibration.updatedAt || null,
+      lastReadingAt: readingAt,
+      lastReadingAgeMinutes: readingAgeMinutes,
+      lastStatus: reading?.status || null,
+      lastFillPercentage: reading?.fillPercentage ?? null,
+      batteryPercent: reading?.battery ?? null,
+      batteryVoltageMv: reading?.batteryVoltageMv ?? null
+    };
+  });
+
+  return {
+    clientId: EINSTEIN_CART_CLIENT_ID,
+    generatedAt: nowIso(),
+    readyForPoc: warnings.length === 0,
+    warnings,
+    gateway: {
+      id: EINSTEIN_CART_GATEWAY_ID,
+      connected: mqtt.connected === true,
+      lastCommunicationAt: gatewayLastAt,
+      lastCommunicationAgeMinutes: gatewayAgeMinutes,
+      batteryPercent: gatewayStatus?.batteryPercent ?? null,
+      batteryVoltageMv: gatewayStatus?.batteryVoltageMv ?? null,
+      networkType: gatewayStatus?.networkType || null,
+      csq: gatewayStatus?.csq ?? null,
+      persistenceError: mqtt.persistenceError || null
+    },
+    config: {
+      rooms: config.rooms.length,
+      carts: config.carts.length,
+      alertSettings: config.alertSettings
+    },
+    sensors
+  };
+}
+
 function storeBleGatewayPayload(payload, options = {}) {
   const db = getDb();
   const normalizedReadings = normalizeBleGatewayPayloads(payload);
@@ -3178,6 +3254,12 @@ addRoute('GET', '/api/cart-tracking/operational', async ({ query, res }) => {
     telemetryLimit: query.telemetryLimit || 240,
     sampleLimit: query.sampleLimit || 500
   }));
+});
+
+addRoute('GET', '/api/cart-tracking/health', async ({ req, res }) => {
+  const session = requirePanelCartSession(req, res);
+  if (!session) return;
+  ok(res, buildEinsteinCartHealth(getDb()));
 });
 
 addRoute('GET', '/api/cart-tracking/alerts', async ({ query, res }) => {

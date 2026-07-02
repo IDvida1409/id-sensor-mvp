@@ -9585,6 +9585,8 @@ if(false){(function(){
   const CART_READING_POLL_MS = 5000;
   const CART_ALERT_RECURRENCE_MS = 30 * 60 * 1000;
   const CART_ALERT_LIMIT = 80;
+  const GATEWAY_ONLINE_GRACE_MS = 60 * 60 * 1000;
+  const GATEWAY_STALE_GRACE_MS = 6 * 60 * 60 * 1000;
   const DEFAULT_CART_ALERT_SETTINGS = {
     popupEnabled:true,
     soundEnabled:true,
@@ -9858,9 +9860,9 @@ if(false){(function(){
     return clone(defaultState);
   }
 
-  function saveState(state){
+  function saveState(state, options = {}){
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    scheduleCartConfigBackendSave(state);
+    if(options.persistConfig !== false) scheduleCartConfigBackendSave(state);
   }
 
   function hasCartConfigurationData(state){
@@ -9886,8 +9888,8 @@ if(false){(function(){
         name:cart.name,
         mac:cart.mac,
         roomId:cart.roomId || '',
-        locationStatus:cart.locationStatus || 'in_room',
-        fillPercentage:Number(cart.fillPercentage || 0),
+        locationStatus:cart.roomId ? 'in_room' : 'offline',
+        fillPercentage:0,
         calibration:normalizeCartCalibration(cart.calibration),
         registeredAt:cart.registeredAt || ''
       })) : [],
@@ -9936,9 +9938,9 @@ if(false){(function(){
       const backendState = ensureSeedData({
         ...readState(),
         ...(saved?.state || payload),
-        telemetryEvents:state.telemetryEvents || [],
-        backendChartSamples:state.backendChartSamples || [],
-        alerts:state.alerts || []
+        telemetryEvents:[],
+        backendChartSamples:[],
+        alerts:[]
       }).state;
       cartConfigBackendLoaded = true;
       localStorage.setItem(STORAGE_KEY, JSON.stringify(backendState));
@@ -10972,7 +10974,7 @@ if(false){(function(){
         changed = true;
       }
       if(changed){
-        saveState(state);
+        saveState(state, { persistConfig:false });
         renderRooms();
         if(lastGeneratedCartAlertId){
           lastGeneratedCartAlertId = '';
@@ -11164,6 +11166,32 @@ if(false){(function(){
     };
   }
 
+  function gatewayLastCommunicationForRoom(room){
+    if(!gatewayStatusMatchesRoom(cartGatewayStatus, room)) return '';
+    const payloadStatus = cartGatewayStatus?.lastPayload?.gatewayStatus || cartGatewayStatus?.gatewayStatus || null;
+    return payloadStatus?.timestamp || cartGatewayStatus?.lastGatewayStatusAt || cartGatewayStatus?.lastMessageAt || '';
+  }
+
+  function gatewayConnectionToneForRoom(room){
+    const timestamp = gatewayLastCommunicationForRoom(room);
+    const ms = new Date(timestamp || '').getTime();
+    if(!Number.isFinite(ms)) return 'unknown';
+    const age = Date.now() - ms;
+    if(age <= GATEWAY_ONLINE_GRACE_MS) return 'online';
+    if(age <= GATEWAY_STALE_GRACE_MS) return 'warning';
+    return 'offline';
+  }
+
+  function gatewayConnectionTitle(room){
+    const timestamp = gatewayLastCommunicationForRoom(room);
+    const tone = gatewayConnectionToneForRoom(room);
+    if(!timestamp) return 'Gateway aguardando comunicação';
+    const prefix = tone === 'online'
+      ? 'Gateway comunicando'
+      : (tone === 'warning' ? 'Gateway sem pacote recente' : 'Gateway sem comunicação recente');
+    return `${prefix}: ${formatDateTime(timestamp)}`;
+  }
+
   function gatewayBatteryHtml(room){
     const status = gatewayBatteryStatusForRoom(room);
     if(!status) return '';
@@ -11172,7 +11200,8 @@ if(false){(function(){
       `Bateria do gateway: ${Math.round(status.percent)}%`,
       status.voltageMv !== null ? `${Math.round(status.voltageMv)} mV` : '',
       status.networkType ? `Rede ${status.networkType}` : '',
-      status.csq !== null ? `CSQ ${status.csq}` : ''
+      status.csq !== null ? `CSQ ${status.csq}` : '',
+      status.timestamp ? `Última ${formatDateTime(status.timestamp)}` : ''
     ].filter(Boolean);
     return `
       <span class="cart-gateway-battery ${tone}" title="${escapeHtml(titleParts.join(' · '))}">
@@ -13732,7 +13761,7 @@ if(false){(function(){
               <h2>${escapeHtml(room.name)}</h2>
               <span class="cart-room-gateway readonly">
                 <span>Gateway: ${escapeHtml(formatGatewayShort(room.gatewayDeviceId))}</span>
-                <i class="cart-room-online-dot" aria-hidden="true"></i>
+                <i class="cart-room-online-dot ${escapeHtml(gatewayConnectionToneForRoom(room))}" title="${escapeHtml(gatewayConnectionTitle(room))}" aria-hidden="true"></i>
                 ${gatewayBatteryHtml(room)}
               </span>
             </div>
@@ -14221,9 +14250,9 @@ if(false){(function(){
       ...currentState,
       ...(saved?.state || {}),
       alertSettings:saved?.alertSettings || saved?.state?.alertSettings || normalizedSettings,
-      telemetryEvents:currentState.telemetryEvents || [],
-      backendChartSamples:currentState.backendChartSamples || [],
-      alerts:currentState.alerts || []
+      telemetryEvents:[],
+      backendChartSamples:[],
+      alerts:[]
     }).state;
     cartConfigBackendLoaded = true;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(backendState));
@@ -14248,9 +14277,9 @@ if(false){(function(){
       const backendState = ensureSeedData({
         ...currentState,
         ...payloadState,
-        telemetryEvents:currentState.telemetryEvents || [],
-        backendChartSamples:currentState.backendChartSamples || [],
-        alerts:currentState.alerts || []
+        telemetryEvents:[],
+        backendChartSamples:[],
+        alerts:[]
       }).state;
       if(hasCartConfigurationData(currentState) && !hasCartConfigurationData(backendState)){
         cartConfigBackendLoaded = true;

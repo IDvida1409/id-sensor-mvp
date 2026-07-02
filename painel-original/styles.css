@@ -15150,6 +15150,17 @@ body.analytic-report-open{overflow:hidden}
   width:9px;
 }
 
+.cart-room-online-dot.warning{
+  background:#f59e0b;
+  border-color:#fef3c7;
+}
+
+.cart-room-online-dot.offline,
+.cart-room-online-dot.unknown{
+  background:#94a3b8;
+  border-color:#e2e8f0;
+}
+
 .cart-room-header-actions{
   gap:5px !important;
 }
