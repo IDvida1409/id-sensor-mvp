@@ -322,7 +322,7 @@ function parsePayload(payload) {
   };
 }
 
-function startMqttBridge({ storePayload }) {
+function startMqttBridge({ storePayload, recordPayload } = {}) {
   status.enabled = mqttBridge.enabled;
   status.configured = Boolean(mqttBridge.host && mqttBridge.username && mqttBridge.password);
   status.hostConfigured = Boolean(mqttBridge.host);
@@ -408,6 +408,19 @@ function startMqttBridge({ storePayload }) {
       status.lastMessageAt = nowIso();
       status.lastPayload = payloadSummary(payload, result);
       status.lastError = null;
+      if (typeof recordPayload === 'function') {
+        try {
+          recordPayload(payload, result, {
+            topic: message.topic,
+            qos: message.qos,
+            packetId: message.packetId,
+            receivedAt: status.lastMessageAt,
+            summary: status.lastPayload
+          });
+        } catch (error) {
+          console.error(`[mqtt] Falha ao persistir mensagem do gateway: ${error.message}`);
+        }
+      }
       console.log(`[mqtt] ${message.topic}: ${result.stored}/${result.received} leitura(s) salvas.`);
     }
   }

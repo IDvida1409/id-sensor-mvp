@@ -1083,6 +1083,230 @@ function safeJsonStringify(value) {
   }
 }
 
+function safeJsonParse(value, fallback = null) {
+  if (typeof value !== 'string' || !value.trim()) return fallback;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
+}
+
+function gatewayMessageStatusFromRow(row, summary = {}) {
+  const summaryStatus = summary?.gatewayStatus && typeof summary.gatewayStatus === 'object'
+    ? summary.gatewayStatus
+    : null;
+  if (summaryStatus) return summaryStatus;
+
+  const batteryVoltageMv = finiteNumberOrNull(row?.battery_voltage_mv);
+  const batteryPercent = finiteNumberOrNull(row?.battery_percent);
+  const csq = finiteNumberOrNull(row?.csq);
+  const hasStatus = row?.gateway_timestamp || row?.network_type || csq !== null
+    || batteryVoltageMv !== null || batteryPercent !== null;
+  if (!hasStatus) return null;
+
+  return {
+    timestamp: row?.gateway_timestamp || null,
+    networkType: row?.network_type || null,
+    csq,
+    batteryVoltageMv,
+    batteryPercent,
+    accStatus: null,
+    imei: null
+  };
+}
+
+function serializeGatewayMessage(row) {
+  if (!row) return null;
+  const summary = safeJsonParse(row.summary_json, {}) || {};
+  const result = {
+    received: finiteNumberOrNull(row.received) ?? finiteNumberOrNull(summary.received) ?? 0,
+    stored: finiteNumberOrNull(row.stored) ?? finiteNumberOrNull(summary.stored) ?? 0,
+    ignored: finiteNumberOrNull(row.ignored) ?? finiteNumberOrNull(summary.ignored) ?? 0
+  };
+  const gatewayStatus = gatewayMessageStatusFromRow(row, summary);
+  const gatewayMac = compactBleSensorId(row.gateway_mac || summary.gatewayMac) || null;
+  const normalizedSummary = {
+    ...summary,
+    flag: row.flag || summary.flag || null,
+    kind: row.kind || summary.kind || null,
+    gatewayMac,
+    gatewayStatus,
+    received: result.received,
+    stored: result.stored,
+    ignored: result.ignored
+  };
+
+  return {
+    id: row.id,
+    gatewayMac,
+    flag: normalizedSummary.flag,
+    kind: normalizedSummary.kind,
+    topic: row.topic || null,
+    qos: finiteNumberOrNull(row.qos),
+    packetId: finiteNumberOrNull(row.packet_id),
+    receivedAt: row.received_at || row.created_at || null,
+    createdAt: row.created_at || null,
+    gatewayStatus,
+    gatewayTimestamp: gatewayStatus?.timestamp || row.gateway_timestamp || null,
+    result,
+    summary: normalizedSummary,
+    hasPayload: Boolean(row.payload_json)
+  };
+}
+
+function saveGatewayMqttMessage(payload, result = {}, meta = {}) {
+  const db = getDb();
+  const now = nowIso();
+  const receivedAt = String(meta.receivedAt || now);
+  const summary = meta.summary && typeof meta.summary === 'object'
+    ? meta.summary
+    : {
+      kind: payload?.raw_data ? 'raw_hex' : 'json',
+      flag: payload?.flag || null,
+      gatewayMac: payload?.gatewayMac || null,
+      gatewayStatus: null,
+      received: Number(result?.received || 0),
+      stored: Number(result?.stored || 0),
+      ignored: Number(result?.ignored || 0)
+    };
+  const gatewayStatus = summary.gatewayStatus && typeof summary.gatewayStatus === 'object'
+    ? summary.gatewayStatus
+    : null;
+  const deviceStatus = payload?.deviceStatus && typeof payload.deviceStatus === 'object'
+    ? payload.deviceStatus
+    : null;
+  const gatewayMac = compactBleSensorId(summary.gatewayMac || payload?.gatewayMac) || null;
+  const payloadJson = safeJsonStringify(payload) || '{}';
+  const summaryJson = safeJsonStringify(summary) || '{}';
+  const deviceStatusJson = deviceStatus ? safeJsonStringify(deviceStatus) : null;
+  const row = {
+    id: id('gateway_message'),
+    gateway_mac: gatewayMac,
+    flag: summary.flag || payload?.flag || null,
+    kind: summary.kind || (payload?.raw_data ? 'raw_hex' : 'json'),
+    topic: meta.topic || null,
+    qos: finiteNumberOrNull(meta.qos),
+    packet_id: finiteNumberOrNull(meta.packetId),
+    payload_json: payloadJson,
+    summary_json: summaryJson,
+    device_status_json: deviceStatusJson,
+    gateway_timestamp: gatewayStatus?.timestamp || null,
+    network_type: gatewayStatus?.networkType || deviceStatus?.networkType || deviceStatus?.netwrokType || null,
+    csq: finiteNumberOrNull(gatewayStatus?.csq ?? deviceStatus?.csq),
+    battery_voltage_mv: finiteNumberOrNull(gatewayStatus?.batteryVoltageMv ?? deviceStatus?.battVoltage),
+    battery_percent: finiteNumberOrNull(gatewayStatus?.batteryPercent),
+    received: Number(result?.received ?? summary.received ?? 0),
+    stored: Number(result?.stored ?? summary.stored ?? 0),
+    ignored: Number(result?.ignored ?? summary.ignored ?? 0),
+    received_at: receivedAt,
+    created_at: now
+  };
+
+  db.prepare(`
+    INSERT INTO gateway_messages (
+      id, gateway_mac, flag, kind, topic, qos, packet_id,
+      payload_json, summary_json, device_status_json, gateway_timestamp,
+      network_type, csq, battery_voltage_mv, battery_percent,
+      received, stored, ignored, received_at, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    row.id,
+    row.gateway_mac,
+    row.flag,
+    row.kind,
+    row.topic,
+    row.qos,
+    row.packet_id,
+    row.payload_json,
+    row.summary_json,
+    row.device_status_json,
+    row.gateway_timestamp,
+    row.network_type,
+    row.csq,
+    row.battery_voltage_mv,
+    row.battery_percent,
+    row.received,
+    row.stored,
+    row.ignored,
+    row.received_at,
+    row.created_at
+  );
+
+  return serializeGatewayMessage(row);
+}
+
+function latestGatewayMqttMessage(db, gatewayMac = EINSTEIN_CART_GATEWAY_ID) {
+  const compactGatewayMac = compactBleSensorId(gatewayMac);
+  const row = compactGatewayMac
+    ? db.prepare(`
+      SELECT *
+      FROM gateway_messages
+      WHERE gateway_mac = ?
+      ORDER BY received_at DESC
+      LIMIT 1
+    `).get(compactGatewayMac)
+    : db.prepare(`
+      SELECT *
+      FROM gateway_messages
+      ORDER BY received_at DESC
+      LIMIT 1
+    `).get();
+  return serializeGatewayMessage(row);
+}
+
+function latestGatewayStatusMessage(db, gatewayMac = EINSTEIN_CART_GATEWAY_ID) {
+  const compactGatewayMac = compactBleSensorId(gatewayMac);
+  const row = compactGatewayMac
+    ? db.prepare(`
+      SELECT *
+      FROM gateway_messages
+      WHERE gateway_mac = ? AND device_status_json IS NOT NULL
+      ORDER BY received_at DESC
+      LIMIT 1
+    `).get(compactGatewayMac)
+    : db.prepare(`
+      SELECT *
+      FROM gateway_messages
+      WHERE device_status_json IS NOT NULL
+      ORDER BY received_at DESC
+      LIMIT 1
+    `).get();
+  return serializeGatewayMessage(row);
+}
+
+function persistedMqttBridgeStatus() {
+  const bridgeStatus = getMqttBridgeStatus();
+  try {
+    const db = getDb();
+    const livePayload = bridgeStatus.lastPayload || null;
+    const gatewayMac = compactBleSensorId(livePayload?.gatewayMac || EINSTEIN_CART_GATEWAY_ID);
+    const latestMessage = latestGatewayMqttMessage(db, gatewayMac);
+    const latestGatewayStatus = latestGatewayStatusMessage(db, gatewayMac);
+    const liveGatewayStatus = livePayload?.gatewayStatus || null;
+    const effectivePayload = liveGatewayStatus
+      ? livePayload
+      : (latestGatewayStatus?.summary || livePayload || latestMessage?.summary || null);
+    const effectiveGatewayStatus = liveGatewayStatus || latestGatewayStatus?.gatewayStatus || null;
+
+    return {
+      ...bridgeStatus,
+      gatewayMac: livePayload?.gatewayMac || latestGatewayStatus?.gatewayMac || latestMessage?.gatewayMac || null,
+      gatewayStatus: effectiveGatewayStatus,
+      lastPayload: effectivePayload,
+      lastMessageAt: bridgeStatus.lastMessageAt || latestMessage?.receivedAt || latestGatewayStatus?.receivedAt || null,
+      lastGatewayStatusAt: latestGatewayStatus?.receivedAt || null,
+      lastPersistedMessage: latestMessage,
+      lastPersistedGatewayStatus: latestGatewayStatus
+    };
+  } catch (error) {
+    return {
+      ...bridgeStatus,
+      persistenceError: error.message
+    };
+  }
+}
+
 function collectorPayloadReceivedAt(reading) {
   const timestamp = new Date(reading?.receivedAt || '').getTime();
   return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : null;
@@ -2585,7 +2809,7 @@ addRoute('GET', '/health', async ({ res }) => {
 });
 
 addRoute('GET', '/api/mqtt/status', async ({ res }) => {
-  ok(res, getMqttBridgeStatus());
+  ok(res, persistedMqttBridgeStatus());
 });
 
 addRoute('GET', '/api/db/status', async ({ res }) => {
@@ -3635,5 +3859,6 @@ async function app(req, res) {
 
 module.exports = {
   app,
+  saveGatewayMqttMessage,
   storeBleGatewayPayload
 };

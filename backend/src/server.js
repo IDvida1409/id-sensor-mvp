@@ -1,5 +1,5 @@
 const http = require('node:http');
-const { app, storeBleGatewayPayload } = require('./app');
+const { app, saveGatewayMqttMessage, storeBleGatewayPayload } = require('./app');
 const { initDb } = require('./db/database');
 const { seedDatabaseIfEmpty } = require('./db/seed');
 const { autoSeedDemoData, port } = require('./config');
@@ -18,4 +18,7 @@ http.createServer(app).listen(port, () => {
   console.log(`ID Sensor backend rodando na porta ${port}`);
 });
 
-startMqttBridge({ storePayload: storeBleGatewayPayload });
+startMqttBridge({
+  storePayload: storeBleGatewayPayload,
+  recordPayload: saveGatewayMqttMessage
+});

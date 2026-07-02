@@ -207,6 +207,29 @@ function initDb() {
       updated_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS gateway_messages (
+      id TEXT PRIMARY KEY,
+      gateway_mac TEXT,
+      flag TEXT,
+      kind TEXT,
+      topic TEXT,
+      qos INTEGER,
+      packet_id INTEGER,
+      payload_json TEXT NOT NULL,
+      summary_json TEXT NOT NULL,
+      device_status_json TEXT,
+      gateway_timestamp TEXT,
+      network_type TEXT,
+      csq REAL,
+      battery_voltage_mv REAL,
+      battery_percent REAL,
+      received INTEGER NOT NULL DEFAULT 0,
+      stored INTEGER NOT NULL DEFAULT 0,
+      ignored INTEGER NOT NULL DEFAULT 0,
+      received_at TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS cart_tracking_config (
       client_id TEXT PRIMARY KEY,
       state_json TEXT NOT NULL,
@@ -263,6 +286,12 @@ function initDb() {
 
     CREATE INDEX IF NOT EXISTS idx_collector_readings_sensor_time
     ON collector_readings (ble_sensor_id, created_at DESC);
+
+    CREATE INDEX IF NOT EXISTS idx_gateway_messages_gateway_time
+    ON gateway_messages (gateway_mac, received_at DESC);
+
+    CREATE INDEX IF NOT EXISTS idx_gateway_messages_time
+    ON gateway_messages (received_at DESC);
 
     CREATE INDEX IF NOT EXISTS idx_panel_users_cliente
     ON panel_users (cliente_id, ativo);
