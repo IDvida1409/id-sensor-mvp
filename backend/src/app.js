@@ -1519,6 +1519,13 @@ function saveCollectorReading(db, normalizedReading) {
   let officialReading = false;
 
   if (rawFillPercentage !== null && rawLevelStatus) {
+    const sameConfirmedLevel = previousConfirmedLevel === rawLevelStatus;
+    const enteringCritical = rawLevelStatus === COLLECTOR_CRITICAL_LEVEL_STATUS
+      && previousConfirmedLevel !== COLLECTOR_CRITICAL_LEVEL_STATUS;
+    const requiredReadingsForLevel = enteringCritical
+      ? Math.max(requiredReadings, Number(CART_CRITICAL_CONFIRM_READINGS || requiredReadings))
+      : requiredReadings;
+    const shouldConfirmImmediately = sameConfirmedLevel || !enteringCritical;
     const sameCandidate = previousCandidateLevel === rawLevelStatus;
     const spikeFromCandidate = sameCandidate
       && previousCandidateFill !== null
@@ -1529,7 +1536,7 @@ function saveCollectorReading(db, normalizedReading) {
       ? previousCandidateReadings
       : (sameCandidate && !spikeFromCandidate ? previousCandidateReadings + 1 : 1);
 
-    if (candidateLevelReadings >= requiredReadings) {
+    if (shouldConfirmImmediately || candidateLevelReadings >= requiredReadingsForLevel) {
       fillPercentage = rawFillPercentage;
       confirmedLevelStatus = rawLevelStatus;
       candidateLevelStatus = null;

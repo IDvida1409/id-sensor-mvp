@@ -11058,7 +11058,7 @@ if(false){(function(){
     const rawStatus = String(cart?.collectorStatus || '').toLowerCase();
     if(isLostCart(cart)) return 'Perdido';
     if(rawStatus === 'uncalibrated') return 'Aguardando calibração';
-    if(rawStatus === 'calibration_pending') return 'Validando leitura';
+    if(rawStatus === 'calibration_pending') return 'Aguardando leitura';
     if(rawStatus === 'sensor_removed') return 'Sensor fora da posição';
     if(rawStatus === 'sensor_obstructed') return 'Possível obstrução';
     if(isLidOpen(cart)) return 'Porta aberta';
@@ -11107,7 +11107,7 @@ if(false){(function(){
     const distance = finiteNumberOrNull(cart?.distanceMm);
     const rawStatus = String(cart?.collectorStatus || '').toLowerCase();
     if(rawStatus === 'uncalibrated') return 'Aguardando calibração';
-    if(rawStatus === 'calibration_pending') return 'Aguardando ciclo oficial';
+    if(rawStatus === 'calibration_pending') return 'Aguardando leitura';
     if(rawStatus === 'sensor_removed'){
       return distance !== null ? `Sensor fora da posição - ${Math.round(distance)} mm` : 'Sensor fora da posição';
     }
@@ -11289,7 +11289,7 @@ if(false){(function(){
 
   function renderCartUnderMeta(cart){
     const battery = cartBatteryPercent(cart);
-    const lastCommunication = cart.lastCommunicationSeen || cart.lastSeen || 'aguardando validação';
+    const lastCommunication = cart.lastCommunicationSeen || 'sem comunicação';
     return `
       <div class="cart-under-meta" aria-label="Comunicação e bateria de ${escapeHtml(cartDisplayName(cart))}">
         <span class="cart-under-row cart-under-battery">
@@ -15149,7 +15149,7 @@ if(false){(function(){
         <span><small>Sala</small><strong>${escapeHtml(cartRoomNameById(state, cart.roomId))}</strong></span>
         <span><small>Bateria</small><strong>${escapeHtml(cartBatteryLabel(cart))}</strong></span>
         <span><small>Última comunicação</small><strong>${escapeHtml(cart.lastCommunicationSeen || cart.lastSeen || 'sem comunicação')}</strong></span>
-        <span><small>Leitura válida</small><strong>${escapeHtml(cart.lastSeen || 'sem leitura válida')}</strong></span>
+        <span><small>Última leitura</small><strong>${escapeHtml(cart.lastSeen || 'sem leitura')}</strong></span>
         <span><small>Calibração</small><strong>${escapeHtml(cartCalibrationSummaryLabel(cart))}</strong></span>
       ` : `
         <span><small>Tipo</small><strong>Sensor ToF BLE</strong></span>
