@@ -1851,9 +1851,34 @@ function technicalMessageForAlert(type, roomName, cartName) {
   return `${roomName}: evento técnico no ${cartName}.`;
 }
 
+function einsteinCartOperationalSensors(config) {
+  const state = normalizeCartTrackingConfigState(config);
+  const roomById = new Map(state.rooms.map((room) => [String(room.id || '').trim(), room]));
+  const cartBySensorId = new Map(state.carts
+    .map((cart) => [compactBleSensorId(cart.mac), cart])
+    .filter(([sensorId]) => sensorId));
+
+  return new Map(EINSTEIN_CART_SENSORS.map((sensor) => {
+    const cart = cartBySensorId.get(sensor.sensorId) || null;
+    const roomId = String(cart?.roomId || sensor.roomId || EINSTEIN_CART_ROOM_ID).trim();
+    const room = roomById.get(roomId) || null;
+    const name = String(cart?.name || sensor.name || '').trim() || sensor.name;
+    const roomName = String(room?.name || sensor.roomName || EINSTEIN_CART_ROOM_NAME).trim() || EINSTEIN_CART_ROOM_NAME;
+
+    return [sensor.sensorId, {
+      ...sensor,
+      name,
+      roomId,
+      roomName
+    }];
+  }));
+}
+
 function buildEinsteinCartOperationalDataset(db, options = {}) {
+  const config = cartTrackingConfigForClient(db, EINSTEIN_CART_CLIENT_ID);
+  const operationalSensors = einsteinCartOperationalSensors(config);
   const requestedSensors = Array.isArray(options.macFilters) && options.macFilters.length
-    ? options.macFilters.filter((sensorId) => EINSTEIN_CART_SENSOR_BY_ID.has(sensorId))
+    ? options.macFilters.filter((sensorId) => operationalSensors.has(sensorId))
     : EINSTEIN_CART_SENSORS.map((sensor) => sensor.sensorId);
   const readings = operationalReadingsHistory(db, {
     limit: options.limit || 2000,
@@ -1885,7 +1910,7 @@ function buildEinsteinCartOperationalDataset(db, options = {}) {
 
   for (const reading of readings) {
     const sensorId = compactBleSensorId(reading?.bleSensorId || reading?.mac);
-    const sensor = EINSTEIN_CART_SENSOR_BY_ID.get(sensorId);
+    const sensor = operationalSensors.get(sensorId);
     if (!sensor) continue;
 
     const ts = readingTimeIso(reading);
@@ -2018,11 +2043,17 @@ function buildEinsteinCartOperationalDataset(db, options = {}) {
   }
 
   const latestReadings = latestCollectorReadings(db, { macFilters: requestedSensors, limit: requestedSensors.length || 2 });
+  const primarySensor = requestedSensors.map((sensorId) => operationalSensors.get(sensorId)).find(Boolean)
+    || operationalSensors.values().next().value
+    || { roomId: EINSTEIN_CART_ROOM_ID, roomName: EINSTEIN_CART_ROOM_NAME };
 
   return {
     clientId: EINSTEIN_CART_CLIENT_ID,
     generatedAt: nowIso(),
-    room: { id: EINSTEIN_CART_ROOM_ID, name: EINSTEIN_CART_ROOM_NAME },
+    room: {
+      id: primarySensor.roomId || EINSTEIN_CART_ROOM_ID,
+      name: primarySensor.roomName || EINSTEIN_CART_ROOM_NAME
+    },
     latestReadings,
     alerts: alerts
       .sort((a, b) => new Date(b.ts || 0) - new Date(a.ts || 0))
