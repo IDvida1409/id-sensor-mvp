@@ -10354,7 +10354,7 @@ if(false){(function(){
       changed = true;
     }
 
-    if(rawStatus === 'sensor_obstructed'){
+    if(isObstructedCart(cart)){
       const lastObstructionMs = new Date(alertState.lastObstructionAlertAt || 0).getTime();
       if(!alertState.lastObstructionAlertAt || (Number.isFinite(nowMs) && Number.isFinite(lastObstructionMs) && nowMs - lastObstructionMs >= recurrenceMs)){
         if(appendCartAlert(state, {
@@ -10372,7 +10372,7 @@ if(false){(function(){
         alertState.lastObstructionAlertAt = ts;
         changed = true;
       }
-    }else if(alertState.lastObstructionAlertAt && rawStatus !== 'sensor_obstructed'){
+    }else if(alertState.lastObstructionAlertAt && !isObstructedCart(cart)){
       alertState.lastObstructionAlertAt = '';
       changed = true;
     }
@@ -10657,7 +10657,8 @@ if(false){(function(){
         ? normalizeCartCalibration({ ...currentCalibration, ...reading.calibration })
         : null;
       const effectiveCalibration = readingCalibration || currentCalibration;
-      const sensorPositionAlert = rawStatus === 'sensor_removed' || rawStatus === 'sensor_obstructed';
+      const sensorPositionAlert = rawStatus === 'sensor_removed'
+        || (rawStatus === 'sensor_obstructed' && effectiveCalibration.lidDetectionEnabled === true);
       const technicalReadingStatus = isTechnicalReadingStatus(rawStatus);
       const readingLidOpen = effectiveCalibration.lidDetectionEnabled === true
         && !sensorPositionAlert
@@ -11060,7 +11061,7 @@ if(false){(function(){
     if(rawStatus === 'uncalibrated') return 'Aguardando calibração';
     if(rawStatus === 'calibration_pending') return 'Aguardando leitura';
     if(rawStatus === 'sensor_removed') return 'Sensor fora da posição';
-    if(rawStatus === 'sensor_obstructed') return 'Possível obstrução';
+    if(isObstructedCart(cart)) return 'Possível obstrução';
     if(isLidOpen(cart)) return 'Porta aberta';
     const fill = Number(cart.fillPercentage || 0);
     if(fill >= cartRedPercent(cart)) return 'Crítico';
@@ -11084,7 +11085,7 @@ if(false){(function(){
     if(isLostCart(cart)) return 'lost';
     if(rawStatus === 'uncalibrated' || rawStatus === 'calibration_pending') return 'pending';
     if(rawStatus === 'sensor_removed') return 'sensor';
-    if(rawStatus === 'sensor_obstructed') return 'obstruction';
+    if(isObstructedCart(cart)) return 'obstruction';
     const fill = cartOperationalFill(cart);
     if(fill >= cartRedPercent(cart)) return 'full';
     return 'empty';
@@ -11111,7 +11112,7 @@ if(false){(function(){
     if(rawStatus === 'sensor_removed'){
       return distance !== null ? `Sensor fora da posição - ${Math.round(distance)} mm` : 'Sensor fora da posição';
     }
-    if(rawStatus === 'sensor_obstructed'){
+    if(isObstructedCart(cart)){
       return distance !== null ? `Possível obstrução - ${Math.round(distance)} mm` : 'Possível obstrução';
     }
     if(isLidOpen(cart)){
@@ -11233,7 +11234,8 @@ if(false){(function(){
   }
 
   function isObstructedCart(cart){
-    return String(cart?.collectorStatus || '').toLowerCase() === 'sensor_obstructed';
+    return String(cart?.collectorStatus || '').toLowerCase() === 'sensor_obstructed'
+      && cartCalibration(cart).lidDetectionEnabled === true;
   }
 
   function cartCriticalDistanceLabel(cart){
@@ -11416,7 +11418,7 @@ if(false){(function(){
         value:cartVisualFill(cart),
         time:cart.lastReadingAt || now,
         label:formatClock(cart.lastReadingAt || now),
-        tone:String(cart.collectorStatus || '').toLowerCase() === 'sensor_obstructed'
+        tone:isObstructedCart(cart)
           ? 'obstruction'
           : (fillTone(cart) === 'full' ? 'critical' : 'normal'),
         distanceMm:finiteNumberOrNull(cart.distanceMm)
@@ -11537,7 +11539,7 @@ if(false){(function(){
     const criticalEvents = events.filter(isCriticalEvent);
     const alertEvents = events.filter(event => event.type === 'alert');
     const obstructionCount = events.filter(isObstructionEvent).length
-      + carts.filter(cart => String(cart.collectorStatus || '').toLowerCase() === 'sensor_obstructed').length;
+      + carts.filter(isObstructedCart).length;
     const firstReading = readingEvents[0];
     const lastReading = readingEvents[readingEvents.length - 1];
     const lastCritical = criticalEvents[criticalEvents.length - 1];

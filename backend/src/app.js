@@ -946,9 +946,11 @@ function isCollectorSensorRemovedDistance(distanceMm, calibration) {
 }
 
 function isCollectorObstructedDistance(distanceMm, calibration) {
+  const normalized = normalizeCollectorCalibration(calibration);
+  if (!normalized.lidDetectionEnabled) return false;
   const distance = finiteNumberOrNull(distanceMm);
   if (distance === null) return false;
-  return distance < collectorValidDistanceMin(calibration);
+  return distance < collectorValidDistanceMin(normalized);
 }
 
 function isCollectorLidClosedDistance(distanceMm, calibration) {
@@ -967,6 +969,7 @@ function calculateCollectorFillPercentage(distanceMm, calibration) {
   const normalized = normalizeCollectorCalibration(calibration);
   const distance = finiteNumberOrNull(distanceMm);
   if (distance === null) return null;
+  if (!normalized.lidDetectionEnabled && distance < collectorValidDistanceMin(normalized)) return 100;
   if (isCollectorObstructedDistance(distance, normalized)) return null;
   if (!isCollectorCalibratedDistance(distance, normalized)) return null;
 
@@ -1832,9 +1835,12 @@ function isCriticalOperationalReading(reading, calibration) {
   return fill !== null && fill >= redPercent;
 }
 
-function technicalAlertTypeForReading(reading) {
+function technicalAlertTypeForReading(reading, calibration = null) {
   const status = String(reading?.status || '').toLowerCase();
-  if (status === COLLECTOR_SENSOR_OBSTRUCTED_STATUS) return 'obstruction';
+  const normalizedCalibration = normalizeCollectorCalibration(calibration || reading?.calibration || {});
+  if (status === COLLECTOR_SENSOR_OBSTRUCTED_STATUS) {
+    return normalizedCalibration.lidDetectionEnabled ? 'obstruction' : '';
+  }
   if (status === COLLECTOR_SENSOR_REMOVED_STATUS) return 'sensor';
   return '';
 }
@@ -1923,7 +1929,7 @@ function buildEinsteinCartOperationalDataset(db, options = {}) {
       lastCriticalAlertAt: '',
       lastTechnicalType: ''
     };
-    const technicalType = technicalAlertTypeForReading(reading);
+    const technicalType = technicalAlertTypeForReading(reading, calibration);
 
     if (technicalType && technicalType !== state.lastTechnicalType) {
       appendAlert({
