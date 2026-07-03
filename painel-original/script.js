@@ -9551,7 +9551,8 @@ if(false){(function(){
   const ROOM_SWITCH_RSSI_MIN = -70;
   const ROOM_SWITCH_CONFIRM_READINGS = 2;
   const ROOM_READING_RECENT_MS = 30 * 60 * 1000;
-  const CART_ROOM_EXIT_GRACE_MS = 30 * 60 * 1000;
+  const CART_ROOM_EXIT_GRACE_MS = 2 * 60 * 1000;
+  const CART_LOST_AFTER_MS = 24 * 60 * 60 * 1000;
   const OBSOLETE_CART_IDS = new Set(['cart-flat-03']);
   const OBSOLETE_CART_MACS = new Set(['AABBCC000003']);
   const RESIDUE_ROOM_ID = 'sala-residuos';
@@ -10496,16 +10497,33 @@ if(false){(function(){
     return timestamps.length ? Math.max(...timestamps) : null;
   }
 
-  function cartMeetsCriticalFill(cart){
-    return cartOperationalFill(cart) >= cartRedPercent(cart);
+  function shouldLeaveRoomForExchange(cart, nowMs){
+    if(!cart || cart.locationStatus === 'transit' || cart.locationStatus === 'offline') return false;
+    const lastMs = cartLastCommunicationMs(cart);
+    if(lastMs === null) return true;
+    return nowMs - lastMs >= CART_ROOM_EXIT_GRACE_MS;
   }
 
-  function shouldLeaveRoomForExchange(cart, nowMs){
-    if(!cart || cart.locationStatus === 'transit') return false;
-    if(!cartMeetsCriticalFill(cart)) return false;
+  function shouldMarkCartLost(cart, nowMs){
+    if(!cart || cart.locationStatus === 'offline') return false;
     const lastMs = cartLastCommunicationMs(cart);
-    if(lastMs === null) return false;
-    return nowMs - lastMs >= CART_ROOM_EXIT_GRACE_MS;
+    return lastMs !== null && nowMs - lastMs >= CART_LOST_AFTER_MS;
+  }
+
+  function applyCartLostAging(state){
+    const nowMs = Date.now();
+    const ts = new Date(nowMs).toISOString();
+    let changed = false;
+    state.carts.forEach(cart => {
+      if(!shouldMarkCartLost(cart, nowMs)) return;
+      if(setCartLocation(cart, 'offline', 0)) changed = true;
+      if(clearPendingRoom(cart)) changed = true;
+      if(cart.lostAt !== ts){
+        cart.lostAt = ts;
+        changed = true;
+      }
+    });
+    return changed;
   }
 
   function applyRoomExchangeFromCurrentReadings(state, readingContextsByMac){
@@ -10604,9 +10622,8 @@ if(false){(function(){
   }
 
   function applyReadingsToState(state, readings){
-    if(!Array.isArray(readings) || !readings.length) return false;
-
-    const readingsByMac = new Map(readings.map(reading => [
+    const latestReadings = Array.isArray(readings) ? readings : [];
+    const readingsByMac = new Map(latestReadings.map(reading => [
       cleanMac(reading.mac || reading.bleSensorId),
       reading
     ]).filter(([mac]) => mac.length === 12));
@@ -10816,6 +10833,7 @@ if(false){(function(){
     });
 
     if(applyRoomExchangeFromCurrentReadings(state, readingContextsByMac)) changed = true;
+    if(applyCartLostAging(state)) changed = true;
 
     return changed;
   }
