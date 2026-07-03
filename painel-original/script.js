@@ -10838,6 +10838,30 @@ if(false){(function(){
     return payload?.data || null;
   }
 
+  function cartMacFiltersForState(state){
+    return Array.from(new Set(
+      (state?.carts || [])
+        .map(cart => cleanMac(cart.mac))
+        .filter(mac => mac.length === 12)
+    ));
+  }
+
+  async function fetchLatestCartReadings(macFilters){
+    const query = macFilters.length
+      ? `?mac=${encodeURIComponent(macFilters.join(','))}&limit=${Math.max(20, macFilters.length * 20)}`
+      : '';
+    const response = await fetch(`/api/cart-tracking/readings${query}`, { cache:'no-store' });
+    const payload = await response.json();
+    return payload?.data?.readings || [];
+  }
+
+  async function hydrateStateWithLatestCartReadings(state){
+    const macFilters = cartMacFiltersForState(state);
+    if(!macFilters.length) return false;
+    const readings = await fetchLatestCartReadings(macFilters);
+    return applyReadingsToState(state, readings);
+  }
+
   async function refreshGatewayStatusFromBackend(){
     try{
       const response = await fetch('/api/mqtt/status', { cache:'no-store' });
@@ -10940,17 +10964,8 @@ if(false){(function(){
         renderRooms();
         return;
       }
-      const macFilters = Array.from(new Set(
-        state.carts
-          .map(cart => cleanMac(cart.mac))
-          .filter(mac => mac.length === 12)
-      ));
-      const query = macFilters.length
-        ? `?mac=${encodeURIComponent(macFilters.join(','))}&limit=${Math.max(20, macFilters.length * 20)}`
-        : '';
-      const response = await fetch(`/api/cart-tracking/readings${query}`, { cache:'no-store' });
-      const payload = await response.json();
-      const readings = payload?.data?.readings || [];
+      const macFilters = cartMacFiltersForState(state);
+      const readings = await fetchLatestCartReadings(macFilters);
       let changed = false;
       let operational = null;
       try{
@@ -11274,7 +11289,7 @@ if(false){(function(){
 
   function renderCartUnderMeta(cart){
     const battery = cartBatteryPercent(cart);
-    const lastValidatedReading = cart.lastSeen || 'aguardando validação';
+    const lastCommunication = cart.lastCommunicationSeen || cart.lastSeen || 'aguardando validação';
     return `
       <div class="cart-under-meta" aria-label="Comunicação e bateria de ${escapeHtml(cartDisplayName(cart))}">
         <span class="cart-under-row cart-under-battery">
@@ -11283,8 +11298,8 @@ if(false){(function(){
           <span>${escapeHtml(cartBatteryLabel(cart))}</span>
         </span>
         <span class="cart-under-row cart-under-reading">
-          <small>&Uacute;ltima leitura</small>
-          <span>${escapeHtml(lastValidatedReading)}</span>
+          <small>&Uacute;ltima comunica&ccedil;&atilde;o</small>
+          <span>${escapeHtml(lastCommunication)}</span>
         </span>
       </div>
     `;
@@ -15094,6 +15109,15 @@ if(false){(function(){
       renderCartCalibrationPanel(null);
       return;
     }
+    if(window.activePanelSession?.token){
+      try{
+        if(await hydrateStateWithLatestCartReadings(state)){
+          saveState(state, { persistConfig:false });
+        }
+      }catch(error){
+        console.warn('Nao foi possivel atualizar leitura antes dos detalhes do carrinho.', error);
+      }
+    }
     if(window.activePanelSession?.token) renderRooms(state);
     const cart = state.carts.find(item => item.id === cartId);
 
@@ -15105,9 +15129,9 @@ if(false){(function(){
     const saveBtn = document.getElementById('cartDetailSaveBtn');
     const canManage = canManageCartSettings();
     const isNewCart = !cart;
-    const canEditIdentity = canManage && isNewCart;
+    const canEditIdentity = canManage;
 
-    if(title) title.textContent = cart?.name || 'Novo dispositivo';
+    if(title) title.textContent = cart ? cartDisplayName(cart) : 'Novo dispositivo';
     if(meta){
       const readingDetail = cart ? cartReadingDetail(cart) : '';
       const readingText = readingDetail ? ` - ${readingDetail}` : '';
