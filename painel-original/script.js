@@ -9551,7 +9551,8 @@ if(false){(function(){
   const ROOM_SWITCH_RSSI_MIN = -70;
   const ROOM_SWITCH_CONFIRM_READINGS = 2;
   const ROOM_READING_RECENT_MS = 30 * 60 * 1000;
-  const CART_ROOM_EXIT_GRACE_MS = 2 * 60 * 1000;
+  const CART_EXCHANGE_CONFIRM_READINGS = 2;
+  const CART_EXCHANGE_OLD_SILENCE_MS = 4 * 60 * 1000;
   const CART_LOST_AFTER_MS = 24 * 60 * 60 * 1000;
   const CART_TRANSIT_FLOW_ENABLED = false;
   const OBSOLETE_CART_IDS = new Set(['cart-flat-03']);
@@ -10499,10 +10500,49 @@ if(false){(function(){
   }
 
   function shouldLeaveRoomForExchange(cart, nowMs){
-    if(!cart || cart.locationStatus === 'transit' || cart.locationStatus === 'offline') return false;
+    if(!cart || cart.locationStatus === 'transit') return false;
     const lastMs = cartLastCommunicationMs(cart);
     if(lastMs === null) return false;
-    return nowMs - lastMs >= CART_ROOM_EXIT_GRACE_MS;
+    return nowMs - lastMs >= CART_EXCHANGE_OLD_SILENCE_MS;
+  }
+
+  function clearExchangeCandidate(cart){
+    let changed = false;
+    [
+      'exchangeCandidateCartId',
+      'exchangeCandidateRoomId',
+      'exchangeCandidateReadingKey',
+      'exchangeCandidateReadings',
+      'exchangeCandidateStartedAt'
+    ].forEach(key => {
+      if(Object.prototype.hasOwnProperty.call(cart, key)){
+        delete cart[key];
+        changed = true;
+      }
+    });
+    return changed;
+  }
+
+  function trackExchangeCandidate(oldCart, newest, roomId){
+    const key = readingIdentity(newest.context.reading);
+    let changed = false;
+
+    if(oldCart.exchangeCandidateCartId !== newest.cart.id || oldCart.exchangeCandidateRoomId !== roomId){
+      oldCart.exchangeCandidateCartId = newest.cart.id;
+      oldCart.exchangeCandidateRoomId = roomId;
+      oldCart.exchangeCandidateReadingKey = key;
+      oldCart.exchangeCandidateReadings = 1;
+      oldCart.exchangeCandidateStartedAt = newest.context.readingAt || new Date().toISOString();
+      return true;
+    }
+
+    if(oldCart.exchangeCandidateReadingKey !== key){
+      oldCart.exchangeCandidateReadingKey = key;
+      oldCart.exchangeCandidateReadings = Number(oldCart.exchangeCandidateReadings || 0) + 1;
+      changed = true;
+    }
+
+    return changed;
   }
 
   function shouldMarkNeverSeenCartLost(cart){
@@ -10556,16 +10596,20 @@ if(false){(function(){
 
       state.carts
         .filter(cart => cart.roomId === roomId && cart.id !== newest.cart.id)
-        .filter(cart => shouldLeaveRoomForExchange(cart, nowMs))
         .forEach(oldCart => {
+          const oldContext = readingContextsByMac.get(cleanMac(oldCart.mac));
+          if(oldContext?.strongRoomReading){
+            if(clearExchangeCandidate(oldCart)) changed = true;
+            return;
+          }
+          if(trackExchangeCandidate(oldCart, newest, roomId)) changed = true;
+          if(Number(oldCart.exchangeCandidateReadings || 0) < CART_EXCHANGE_CONFIRM_READINGS) return;
+          if(!shouldLeaveRoomForExchange(oldCart, nowMs)) return;
+
           const ts = newest.context.readingAt || new Date().toISOString();
           if(setCartLocation(oldCart, CART_TRANSIT_FLOW_ENABLED ? 'transit' : 'offline', CART_TRANSIT_FLOW_ENABLED ? 1 : 0)) changed = true;
           if(oldCart.transitStartedAt !== ts){
             oldCart.transitStartedAt = ts;
-            changed = true;
-          }
-          if(oldCart.exchangeCandidateCartId !== newest.cart.id){
-            oldCart.exchangeCandidateCartId = newest.cart.id;
             changed = true;
           }
           if(appendTelemetryEvent(state, {
@@ -10580,6 +10624,7 @@ if(false){(function(){
             title:'Troca de carrinho registrada',
             detail:`${cartDisplayName(oldCart)} saiu da ${roomName}; ${cartDisplayName(newest.cart)} entrou com leitura forte.`
           })) changed = true;
+          if(clearExchangeCandidate(oldCart)) changed = true;
         });
     });
 
