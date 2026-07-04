@@ -11663,7 +11663,7 @@ if(false){(function(){
     const criticalStartMs = lastCritical ? lastCritical._time : (fullCarts[0]?.lastReadingAt ? new Date(fullCarts[0].lastReadingAt).getTime() : NaN);
     const firstReadingMs = firstReading ? firstReading._time : (lastReading ? lastReading._time : NaN);
     const exchangeEvent = Number.isFinite(criticalStartMs)
-      ? events.find(event => event._time > criticalStartMs && isRoomEntryEvent(event))
+      ? events.find(event => event._time > criticalStartMs && (isExchangeEvent(event) || isRoomEntryEvent(event)))
       : null;
     const values = [
       ...readingEvents.map(event => ({ value:finiteNumberOrNull(event.fill), time:event.ts, distanceMm:finiteNumberOrNull(event.distanceMm) })),

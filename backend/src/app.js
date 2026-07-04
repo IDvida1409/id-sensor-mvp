@@ -101,6 +101,8 @@ const EINSTEIN_CART_ROOM_ID = 'sala-bloco-b1';
 const EINSTEIN_CART_ROOM_NAME = 'SALA BLOCO B1';
 const EINSTEIN_CART_CRITICAL_FIRST_ALERT_MS = Number(process.env.EINSTEIN_CART_CRITICAL_FIRST_ALERT_MS || 10 * 60 * 1000);
 const EINSTEIN_CART_ALERT_RECURRENCE_MS = Number(process.env.EINSTEIN_CART_ALERT_RECURRENCE_MS || 30 * 60 * 1000);
+const EINSTEIN_CART_EXCHANGE_CONFIRM_READINGS = Number(process.env.EINSTEIN_CART_EXCHANGE_CONFIRM_READINGS || 2);
+const EINSTEIN_CART_EXCHANGE_OLD_SILENCE_MS = Number(process.env.EINSTEIN_CART_EXCHANGE_OLD_SILENCE_MS || 4 * 60 * 1000);
 const EINSTEIN_CART_SENSORS = [
   { id: 'c01', name: 'C01', sensorId: 'de08dbf47311', roomId: EINSTEIN_CART_ROOM_ID, roomName: EINSTEIN_CART_ROOM_NAME },
   { id: 'c02', name: 'C02', sensorId: 'c4894994a485', roomId: EINSTEIN_CART_ROOM_ID, roomName: EINSTEIN_CART_ROOM_NAME }
@@ -1892,6 +1894,8 @@ function buildEinsteinCartOperationalDataset(db, options = {}) {
   const alerts = [];
   const samples = [];
   const sensorState = new Map();
+  const roomExchangeState = new Map();
+  const exchangeCandidates = new Map();
 
   const appendTelemetry = (event) => telemetryEvents.push(createOperationalTelemetryEvent(event));
   const appendAlert = (alert) => {
@@ -1910,6 +1914,81 @@ function buildEinsteinCartOperationalDataset(db, options = {}) {
       fill: alert.fill,
       distanceMm: alert.distanceMm
     });
+  };
+  const readingMs = (value) => {
+    const time = new Date(value || '').getTime();
+    return Number.isFinite(time) ? time : null;
+  };
+  const exchangeReadingKey = (reading, sensorId, ts) => [
+    reading?.id || '',
+    sensorId || '',
+    reading?.receivedAt || '',
+    ts || ''
+  ].join('|');
+  const rememberOfficialRoomReading = (roomId, sensorId, ts, reading, fill, distanceMm) => {
+    const roomState = roomExchangeState.get(roomId) || {
+      activeSensorId: '',
+      lastBySensor: new Map()
+    };
+    roomState.lastBySensor.set(sensorId, { ts, reading, fill, distanceMm });
+    if (!roomState.activeSensorId) roomState.activeSensorId = sensorId;
+    roomExchangeState.set(roomId, roomState);
+    return roomState;
+  };
+  const appendOfficialExchangeIfConfirmed = ({ sensor, reading, ts, fill, distanceMm }) => {
+    const sensorId = sensor.sensorId;
+    const roomId = sensor.roomId || EINSTEIN_CART_ROOM_ID;
+    const roomName = sensor.roomName || EINSTEIN_CART_ROOM_NAME;
+    const roomState = roomExchangeState.get(roomId);
+    if (!roomState || !roomState.activeSensorId || roomState.activeSensorId === sensorId) return;
+
+    const oldSensorId = roomState.activeSensorId;
+    const oldReading = roomState.lastBySensor.get(oldSensorId);
+    const oldSensor = operationalSensors.get(oldSensorId);
+    if (!oldReading || !oldSensor) return;
+
+    const currentMs = readingMs(ts);
+    const oldMs = readingMs(oldReading.ts);
+    if (currentMs === null || oldMs === null) return;
+
+    const candidateKey = `${roomId}|${oldSensorId}|${sensorId}`;
+    const currentReadingKey = exchangeReadingKey(reading, sensorId, ts);
+    let candidate = exchangeCandidates.get(roomId);
+    if (!candidate || candidate.key !== candidateKey) {
+      candidate = {
+        key: candidateKey,
+        oldSensorId,
+        newSensorId: sensorId,
+        firstSeenAt: ts,
+        readings: 0,
+        lastReadingKey: ''
+      };
+    }
+    if (candidate.lastReadingKey !== currentReadingKey) {
+      candidate.readings += 1;
+      candidate.lastReadingKey = currentReadingKey;
+    }
+    candidate.lastSeenAt = ts;
+    exchangeCandidates.set(roomId, candidate);
+
+    if (candidate.readings < EINSTEIN_CART_EXCHANGE_CONFIRM_READINGS) return;
+    if (currentMs - oldMs < EINSTEIN_CART_EXCHANGE_OLD_SILENCE_MS) return;
+
+    appendTelemetry({
+      key: `exchange|${roomId}|${oldSensor.id}|${sensor.id}|${candidate.firstSeenAt}|${ts}`,
+      type: 'exchange',
+      roomId,
+      roomName,
+      cartId: oldSensor.id,
+      cartName: oldSensor.name,
+      ts,
+      title: 'Troca de carrinho registrada',
+      detail: `${oldSensor.name} saiu da ${roomName}; ${sensor.name} entrou. ${oldSensor.name} sem comunicaÃ§Ã£o desde ${oldReading.ts}.`,
+      fill: 0,
+      distanceMm
+    });
+    roomState.activeSensorId = sensorId;
+    exchangeCandidates.delete(roomId);
   };
 
   for (const reading of readings) {
@@ -1981,6 +2060,8 @@ function buildEinsteinCartOperationalDataset(db, options = {}) {
       fill,
       distanceMm
     });
+    appendOfficialExchangeIfConfirmed({ sensor, reading, ts, fill, distanceMm });
+    rememberOfficialRoomReading(sensor.roomId || EINSTEIN_CART_ROOM_ID, sensorId, ts, reading, fill, distanceMm);
 
     if (critical) {
       if (!state.critical) {
