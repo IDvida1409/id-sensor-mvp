@@ -9553,6 +9553,7 @@ if(false){(function(){
   const ROOM_READING_RECENT_MS = 30 * 60 * 1000;
   const CART_ROOM_EXIT_GRACE_MS = 2 * 60 * 1000;
   const CART_LOST_AFTER_MS = 24 * 60 * 60 * 1000;
+  const CART_TRANSIT_FLOW_ENABLED = false;
   const OBSOLETE_CART_IDS = new Set(['cart-flat-03']);
   const OBSOLETE_CART_MACS = new Set(['AABBCC000003']);
   const RESIDUE_ROOM_ID = 'sala-residuos';
@@ -10500,8 +10501,13 @@ if(false){(function(){
   function shouldLeaveRoomForExchange(cart, nowMs){
     if(!cart || cart.locationStatus === 'transit' || cart.locationStatus === 'offline') return false;
     const lastMs = cartLastCommunicationMs(cart);
-    if(lastMs === null) return true;
+    if(lastMs === null) return false;
     return nowMs - lastMs >= CART_ROOM_EXIT_GRACE_MS;
+  }
+
+  function shouldMarkNeverSeenCartLost(cart){
+    if(!cart || cart.locationStatus === 'offline') return false;
+    return cartLastCommunicationMs(cart) === null;
   }
 
   function shouldMarkCartLost(cart, nowMs){
@@ -10515,7 +10521,7 @@ if(false){(function(){
     const ts = new Date(nowMs).toISOString();
     let changed = false;
     state.carts.forEach(cart => {
-      if(!shouldMarkCartLost(cart, nowMs)) return;
+      if(!shouldMarkNeverSeenCartLost(cart) && !shouldMarkCartLost(cart, nowMs)) return;
       if(setCartLocation(cart, 'offline', 0)) changed = true;
       if(clearPendingRoom(cart)) changed = true;
       if(cart.lostAt !== ts){
@@ -10553,7 +10559,7 @@ if(false){(function(){
         .filter(cart => shouldLeaveRoomForExchange(cart, nowMs))
         .forEach(oldCart => {
           const ts = newest.context.readingAt || new Date().toISOString();
-          if(setCartLocation(oldCart, 'transit', 1)) changed = true;
+          if(setCartLocation(oldCart, CART_TRANSIT_FLOW_ENABLED ? 'transit' : 'offline', CART_TRANSIT_FLOW_ENABLED ? 1 : 0)) changed = true;
           if(oldCart.transitStartedAt !== ts){
             oldCart.transitStartedAt = ts;
             changed = true;
@@ -10783,7 +10789,7 @@ if(false){(function(){
           }
         }
       }
-      if(rawStatus === 'offline' && cart.locationStatus !== 'transit'){
+      if(rawStatus === 'offline'){
         if(setCartLocation(cart, 'offline', 0)) changed = true;
         if(clearPendingRoom(cart)) changed = true;
       }else if(applyGatewayRoomToCart(cart, gatewayRoomId, rssi, reading)){
@@ -13561,13 +13567,13 @@ if(false){(function(){
     const query = normalizeCartSearch(cartSearchTerm);
     const roomMatched = query && normalizeCartSearch([room?.name, room?.gatewayDeviceId].join(' ')).includes(query);
     return carts
-      .filter(cart => cart.roomId === room.id && cart.locationStatus !== 'transit')
+      .filter(cart => cart.roomId === room.id && cart.locationStatus !== 'transit' && cart.locationStatus !== 'offline')
       .filter(cart => cartMatchesFilter(cart))
       .filter(cart => !query || roomMatched || cartMatchesSearch(cart, room, query));
   }
 
   function roomStats(room, carts){
-    const roomCarts = carts.filter(cart => cart.roomId === room.id && cart.locationStatus !== 'transit');
+    const roomCarts = carts.filter(cart => cart.roomId === room.id && cart.locationStatus !== 'transit' && cart.locationStatus !== 'offline');
     return {
       total: roomCarts.length,
       full: roomCarts.filter(cart => cartMatchesFilter(cart, 'full')).length,
@@ -13595,7 +13601,9 @@ if(false){(function(){
     const summary = document.getElementById('cartTrackingSummary');
     if(!summary) return;
     const stats = globalStats(state);
-    const transitTotal = state.carts.filter(cart => cart.locationStatus === 'transit').length;
+    const transitTotal = CART_TRANSIT_FLOW_ENABLED
+      ? state.carts.filter(cart => cart.locationStatus === 'transit').length
+      : 0;
     const alertsTotal = isEinsteinCartAlertContext() ? unreadAlertCount(state) : 0;
     const countText = value => String(Math.max(0, Number(value || 0)));
     const totalText = value => countText(value).padStart(2, '0');
@@ -13726,6 +13734,7 @@ if(false){(function(){
   }
 
   function renderRoomTransitRows(room, carts){
+    if(!CART_TRANSIT_FLOW_ENABLED) return '';
     const transitCarts = carts.filter(cart => cart.roomId === room.id && cart.locationStatus === 'transit');
     if(!transitCarts.length) return '';
 
