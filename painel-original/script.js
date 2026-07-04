@@ -5710,7 +5710,7 @@ document.getElementById('infoMacOverlay')?.addEventListener('click', ()=> openIn
     syncProtectedUi(role);
   }
 
-  function showLogin(){
+  function showLogin(message = '', tone = ''){
     document.body.classList.add('auth-pending');
     document.body.classList.remove('auth-ready');
     delete document.body.dataset.authRole;
@@ -5723,9 +5723,34 @@ document.getElementById('infoMacOverlay')?.addEventListener('click', ()=> openIn
     if(typeof window.hideCartAlertsOutsideContext === 'function') window.hideCartAlertsOutsideContext();
     if(loginShell) loginShell.hidden = false;
     if(passwordInput) passwordInput.value = '';
-    setFeedback('', '');
+    setFeedback(message, tone);
     updateLoginPreview();
     scheduleLoginDiagonalUpdate();
+  }
+
+  function decodePanelTokenPayload(token){
+    try {
+      const encodedPayload = String(token || '').split('.')[0];
+      if(!encodedPayload) return null;
+      const normalizedPayload = encodedPayload.replace(/-/g, '+').replace(/_/g, '/');
+      const paddedPayload = normalizedPayload.padEnd(Math.ceil(normalizedPayload.length / 4) * 4, '=');
+      return JSON.parse(atob(paddedPayload));
+    } catch(e) {
+      return null;
+    }
+  }
+
+  function isPanelSessionExpired(session){
+    const payload = decodePanelTokenPayload(session?.token);
+    const expiresAt = Number(payload?.exp || 0);
+    return Number.isFinite(expiresAt) && expiresAt > 0 && expiresAt <= Date.now();
+  }
+
+  function expirePanelSession(message = 'Sessão expirada. Faça login novamente.'){
+    try { localStorage.removeItem(SESSION_KEY); } catch(e) {}
+    window.activePanelSession = null;
+    if(userMenu) userMenu.style.display = 'none';
+    showLogin(message, 'error');
   }
 
   function shouldRestoreCartRouteFromStorage(){
@@ -5739,6 +5764,7 @@ document.getElementById('infoMacOverlay')?.addEventListener('click', ()=> openIn
   function applySession(session){
     if(!session || !session.role) return showLogin();
     if(!session.token) return showLogin();
+    if(isPanelSessionExpired(session)) return expirePanelSession();
     const restoreCartRoute = session.role !== 'cart' && shouldRestoreCartRouteFromStorage();
     window.activePanelSession = session;
     try {
@@ -5803,6 +5829,7 @@ document.getElementById('infoMacOverlay')?.addEventListener('click', ()=> openIn
 
   window.getPanelApiBaseUrl = getAuthApiBaseUrl;
   window.syncPanelRoleChrome = syncPanelRoleChrome;
+  window.expirePanelSession = expirePanelSession;
 
   if(usernameInput){
     usernameInput.addEventListener('input', updateLoginPreview);
@@ -14320,7 +14347,13 @@ if(false){(function(){
     });
     const payload = await response.json().catch(() => null);
     if(!response.ok || !payload?.ok){
-      throw new Error(payload?.message || 'Não foi possível concluir a operação.');
+      const message = payload?.message || 'Não foi possível concluir a operação.';
+      if(response.status === 401 && typeof window.expirePanelSession === 'function'){
+        window.expirePanelSession('Sessão expirada. Faça login novamente.');
+      }
+      const error = new Error(message);
+      error.status = response.status;
+      throw error;
     }
     return payload.data;
   }
