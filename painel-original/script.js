@@ -14408,7 +14408,7 @@ if(false){(function(){
       alertSettings:saved?.alertSettings || saved?.state?.alertSettings || normalizedSettings,
       telemetryEvents:[],
       backendChartSamples:[],
-      alerts:[]
+      alerts:Array.isArray(currentState.alerts) ? currentState.alerts : []
     }).state;
     cartConfigBackendLoaded = true;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(backendState));
@@ -14435,7 +14435,7 @@ if(false){(function(){
         ...payloadState,
         telemetryEvents:[],
         backendChartSamples:[],
-        alerts:[]
+        alerts:Array.isArray(currentState.alerts) ? currentState.alerts : []
       }).state;
       if(hasCartConfigurationData(currentState) && !hasCartConfigurationData(backendState)){
         cartConfigBackendLoaded = true;
