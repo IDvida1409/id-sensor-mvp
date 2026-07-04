@@ -99,6 +99,7 @@ const DEFAULT_COLLECTOR_CALIBRATION = {
 const EINSTEIN_CART_CLIENT_ID = 'einstein';
 const EINSTEIN_CART_ROOM_ID = 'sala-bloco-b1';
 const EINSTEIN_CART_ROOM_NAME = 'SALA BLOCO B1';
+const EINSTEIN_CART_CRITICAL_FIRST_ALERT_MS = Number(process.env.EINSTEIN_CART_CRITICAL_FIRST_ALERT_MS || 10 * 60 * 1000);
 const EINSTEIN_CART_ALERT_RECURRENCE_MS = Number(process.env.EINSTEIN_CART_ALERT_RECURRENCE_MS || 30 * 60 * 1000);
 const EINSTEIN_CART_SENSORS = [
   { id: 'c01', name: 'C01', sensorId: 'de08dbf47311', roomId: EINSTEIN_CART_ROOM_ID, roomName: EINSTEIN_CART_ROOM_NAME },
@@ -120,9 +121,6 @@ const EINSTEIN_CART_CONFIG_DEFAULT = {
     enabledTypes: {
       critical: true,
       recurrence: true,
-      obstruction: true,
-      sensor: true,
-      exchange: true
     }
   }
 };
@@ -1932,7 +1930,7 @@ function buildEinsteinCartOperationalDataset(db, options = {}) {
     const technicalType = technicalAlertTypeForReading(reading, calibration);
 
     if (technicalType && technicalType !== state.lastTechnicalType) {
-      appendAlert({
+      appendTelemetry({
         key: `${technicalType}|${sensor.id}|${ts}`,
         type: technicalType,
         roomId: sensor.roomId,
@@ -1988,35 +1986,28 @@ function buildEinsteinCartOperationalDataset(db, options = {}) {
       if (!state.critical) {
         state.critical = true;
         state.criticalStartedAt = ts;
-        state.lastCriticalAlertAt = ts;
-        appendAlert({
-          key: `critical|${sensor.id}|${ts}`,
-          type: 'critical',
-          roomId: sensor.roomId,
-          roomName: sensor.roomName,
-          cartId: sensor.id,
-          cartName: sensor.name,
-          ts,
-          title: `${sensor.name} crítico`,
-          message: `${sensor.roomName}: ${sensor.name} atingiu o limite crítico.`,
-          detail: `Leitura ${Math.round(fill)}%${distanceMm !== null ? ` - ${Math.round(distanceMm)} mm` : ''}.`,
-          fill,
-          distanceMm
-        });
+        state.lastCriticalAlertAt = '';
       } else {
-        const elapsedSinceAlert = minutesBetween(state.lastCriticalAlertAt, ts);
-        if (elapsedSinceAlert !== null && elapsedSinceAlert * 60000 >= EINSTEIN_CART_ALERT_RECURRENCE_MS) {
+        const elapsedSinceCriticalStart = minutesBetween(state.criticalStartedAt, ts);
+        const elapsedSinceAlert = state.lastCriticalAlertAt ? minutesBetween(state.lastCriticalAlertAt, ts) : null;
+        const shouldSendInitialAlert = !state.lastCriticalAlertAt
+          && elapsedSinceCriticalStart !== null
+          && elapsedSinceCriticalStart * 60000 >= EINSTEIN_CART_CRITICAL_FIRST_ALERT_MS;
+        const shouldSendRecurrenceAlert = state.lastCriticalAlertAt
+          && elapsedSinceAlert !== null
+          && elapsedSinceAlert * 60000 >= EINSTEIN_CART_ALERT_RECURRENCE_MS;
+        if (shouldSendInitialAlert || shouldSendRecurrenceAlert) {
           const elapsed = durationLabelFromMinutes(minutesBetween(state.criticalStartedAt, ts));
           state.lastCriticalAlertAt = ts;
           appendAlert({
-            key: `recurrence|${sensor.id}|${state.criticalStartedAt}|${ts}`,
-            type: 'recurrence',
+            key: `${shouldSendInitialAlert ? 'critical' : 'recurrence'}|${sensor.id}|${state.criticalStartedAt}|${ts}`,
+            type: shouldSendInitialAlert ? 'critical' : 'recurrence',
             roomId: sensor.roomId,
             roomName: sensor.roomName,
             cartId: sensor.id,
             cartName: sensor.name,
             ts,
-            title: `${sensor.name} segue crítico`,
+            title: shouldSendInitialAlert ? `${sensor.name} crítico` : `${sensor.name} segue crítico`,
             message: `${sensor.roomName}: ${sensor.name} está crítico há ${elapsed}.`,
             detail: `Leitura ${Math.round(fill)}%${distanceMm !== null ? ` - ${Math.round(distanceMm)} mm` : ''}.`,
             fill,
@@ -2026,17 +2017,16 @@ function buildEinsteinCartOperationalDataset(db, options = {}) {
       }
     } else if (state.critical) {
       const elapsed = durationLabelFromMinutes(minutesBetween(state.criticalStartedAt, ts));
-      appendAlert({
-        key: `exchange|${sensor.id}|${state.criticalStartedAt}|${ts}`,
-        type: 'exchange',
+      appendTelemetry({
+        key: `critical-normalized|${sensor.id}|${state.criticalStartedAt}|${ts}`,
+        type: 'reading',
         roomId: sensor.roomId,
         roomName: sensor.roomName,
         cartId: sensor.id,
         cartName: sensor.name,
         ts,
-        title: 'Troca de carrinho registrada',
-        message: `${sensor.roomName}: ${sensor.name} voltou para livre.`,
-        detail: `Tempo desde o alerta: ${elapsed}.`,
+        title: `${sensor.name} voltou para livre`,
+        detail: `${sensor.roomName}: ${sensor.name} voltou para livre. Tempo desde o alerta: ${elapsed}.`,
         fill,
         distanceMm
       });

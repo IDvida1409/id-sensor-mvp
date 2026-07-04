@@ -9613,6 +9613,7 @@ if(false){(function(){
   const CART_SUSPICIOUS_JUMP_PERCENT = 75;
   const CART_CRITICAL_PERCENT = 90;
   const CART_READING_POLL_MS = 5000;
+  const CART_CRITICAL_FIRST_ALERT_MS = 10 * 60 * 1000;
   const CART_ALERT_RECURRENCE_MS = 30 * 60 * 1000;
   const CART_ALERT_LIMIT = 80;
   const GATEWAY_ONLINE_GRACE_MS = 60 * 60 * 1000;
@@ -9624,17 +9625,11 @@ if(false){(function(){
     enabledTypes:{
       critical:true,
       recurrence:true,
-      obstruction:true,
-      sensor:true,
-      exchange:true
     }
   };
   const CART_ALERT_TYPE_OPTIONS = [
     { id:'critical', label:'Crítico', detail:'Carrinho atingiu o limite crítico.' },
     { id:'recurrence', label:'Recorrência crítica', detail:'Carrinho segue crítico após o intervalo.' },
-    { id:'obstruction', label:'Obstrução provável', detail:'Salto de leitura no sensor.' },
-    { id:'sensor', label:'Sensor fora da calibração', detail:'Sensor removido ou fora da faixa esperada.' },
-    { id:'exchange', label:'Troca registrada', detail:'Carrinho voltou para livre.' }
   ];
   const OBSOLETE_ROOM_IDS = new Set(['sala-bloco-a']);
 
@@ -10340,7 +10335,11 @@ if(false){(function(){
         changed = true;
       }
       const lastMs = new Date(alertState.lastCriticalAlertAt || 0).getTime();
-      const shouldSendInitial = !alertState.lastCriticalAlertAt;
+      const criticalStartMs = new Date(alertState.criticalStartedAt || 0).getTime();
+      const shouldSendInitial = !alertState.lastCriticalAlertAt
+        && Number.isFinite(nowMs)
+        && Number.isFinite(criticalStartMs)
+        && nowMs - criticalStartMs >= CART_CRITICAL_FIRST_ALERT_MS;
       const shouldSendRecurrence = !shouldSendInitial && Number.isFinite(nowMs) && Number.isFinite(lastMs) && nowMs - lastMs >= recurrenceMs;
       if(shouldSendInitial || shouldSendRecurrence){
         const type = shouldSendInitial ? 'critical' : 'recurrence';
@@ -10367,17 +10366,12 @@ if(false){(function(){
       && !['obstruction', 'sensor', 'pending', 'lost'].includes(nextTone)
       && alertState.criticalStartedAt
     ){
-      if(appendCartAlert(state, {
-        key:`exchange|${cart.id}|${alertState.criticalStartedAt}|${ts}`,
-        type:'exchange',
-        roomId:eventBase.roomId,
-        roomName,
-        cartId:cart.id,
-        cartName,
-        ts,
-        title:'Troca de carrinho registrada',
-        message:`${roomName}: ${cartName} voltou para livre.`,
-        detail:`Tempo desde o alerta: ${alertAgeLabel(alertState.criticalStartedAt, ts)}.`
+      if(appendTelemetryEvent(state, {
+        ...eventBase,
+        key:`critical-normalized|${cart.id}|${alertState.criticalStartedAt}|${ts}`,
+        type:'reading',
+        title:`${cartName} voltou para livre`,
+        detail:`${roomName}: ${cartName} voltou para livre.`
       })) changed = true;
       alertState.criticalStartedAt = '';
       alertState.lastCriticalAlertAt = '';
@@ -15533,21 +15527,6 @@ if(false){(function(){
       label:'Recorrência crítica',
       detail:'Repetir aviso enquanto o carrinho continuar crítico.'
     },
-    {
-      id:'obstruction',
-      label:'Obstrução provável',
-      detail:'Avisar salto de leitura ou possível obstrução do sensor.'
-    },
-    {
-      id:'sensor',
-      label:'Sensor fora da calibração',
-      detail:'Avisar possível sensor removido ou leitura fora da faixa.'
-    },
-    {
-      id:'exchange',
-      label:'Troca de carrinho',
-      detail:'Registrar quando um carrinho volta para livre.'
-    }
   ];
   let audioContext = null;
   let lastAlertSignature = '';
@@ -15859,16 +15838,18 @@ if(false){(function(){
     const allAlerts = sortedStableAlerts();
     const unreadAlerts = allAlerts.filter(isUnreadStableAlert);
     const isHistory = mode === 'history';
-    const alerts = (isHistory ? allAlerts : unreadAlerts).slice(0, 50);
-    const groupTitle = isHistory ? 'Histórico de alertas' : 'Alertas sem leitura';
+    const recentAlerts = allAlerts.slice(0, 10);
+    const historyAlerts = allAlerts.slice(10, 80);
+    const alerts = isHistory ? historyAlerts : recentAlerts;
+    const groupTitle = isHistory ? 'Historico de alertas' : 'Ultimos 10 alertas';
     return `
       <header class="cart-alert-history-head">
         <span>Alertas</span>
         <h2>${isHistory ? 'Histórico de alertas' : 'Caixa de alertas'}</h2>
-        <p>${isHistory ? 'Registro dos avisos gerados pelo painel.' : `${unreadAlerts.length} alerta${unreadAlerts.length === 1 ? '' : 's'} sem leitura.`}</p>
+        <p>${isHistory ? 'Alertas anteriores aos 10 mais recentes.' : `${recentAlerts.length} alerta${recentAlerts.length === 1 ? '' : 's'} recente${recentAlerts.length === 1 ? '' : 's'}.`}</p>
       </header>
       ${renderStableAlertNav(isHistory ? 'history' : 'unread')}
-      ${renderStableAlertRows(alerts, isHistory ? 'Sem histórico por enquanto.' : 'Sem alertas novos.', groupTitle)}
+      ${renderStableAlertRows(alerts, isHistory ? 'Sem histórico por enquanto.' : 'Sem alertas recentes.', groupTitle)}
     `;
   }
 
@@ -15952,7 +15933,7 @@ if(false){(function(){
         <p>${isHistory ? 'Registro dos avisos gerados pelo painel.' : `${unreadAlerts.length} alerta${unreadAlerts.length === 1 ? '' : 's'} sem leitura.`}</p>
       </header>
       ${renderStableAlertNav(isHistory ? 'history' : 'unread')}
-      ${renderStableAlertRows(alerts, isHistory ? 'Sem histórico por enquanto.' : 'Sem alertas novos.')}
+      ${renderStableAlertRows(alerts, isHistory ? 'Sem histórico por enquanto.' : 'Sem alertas recentes.')}
     `;
     return `
       <header class="cart-alert-history-head">
