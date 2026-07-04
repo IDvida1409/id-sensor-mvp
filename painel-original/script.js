@@ -10572,6 +10572,28 @@ if(false){(function(){
     return changed;
   }
 
+  function resetCartForStock(cart){
+    let changed = false;
+    const updates = {
+      fillPercentage:0,
+      displayFillPercentage:0,
+      levelStatus:'normal',
+      collectorStatus:'stock',
+      candidateLevelStatus:null,
+      candidateFillPercentage:null,
+      candidateLevelReadings:0,
+      consecutiveCriticalReadings:0,
+      consecutiveObstructedReadings:0
+    };
+    Object.entries(updates).forEach(([key, value]) => {
+      if(cart[key] !== value){
+        cart[key] = value;
+        changed = true;
+      }
+    });
+    return changed;
+  }
+
   function shouldMarkNeverSeenCartLost(cart){
     return false;
   }
@@ -10634,6 +10656,7 @@ if(false){(function(){
 
           const ts = newest.context.readingAt || new Date().toISOString();
           if(setCartLocation(oldCart, CART_TRANSIT_FLOW_ENABLED ? 'transit' : 'offline', CART_TRANSIT_FLOW_ENABLED ? 1 : 0)) changed = true;
+          if(!CART_TRANSIT_FLOW_ENABLED && resetCartForStock(oldCart)) changed = true;
           if(oldCart.transitStartedAt !== ts){
             oldCart.transitStartedAt = ts;
             changed = true;
@@ -11166,12 +11189,14 @@ if(false){(function(){
   }
 
   function cartVisualFill(cart){
+    if(isStockCart(cart)) return 0;
     const displayFill = finiteNumberOrNull(cart?.displayFillPercentage);
     const confirmedFill = finiteNumberOrNull(cart?.fillPercentage);
     return Math.max(0, Math.min(100, Number(displayFill ?? confirmedFill ?? 0)));
   }
 
   function cartOperationalFill(cart){
+    if(isStockCart(cart)) return 0;
     const confirmedFill = finiteNumberOrNull(cart?.fillPercentage);
     const displayFill = finiteNumberOrNull(cart?.displayFillPercentage);
     return Math.max(0, Math.min(100, Number(confirmedFill ?? displayFill ?? 0)));
