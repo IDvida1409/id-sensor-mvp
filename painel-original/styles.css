@@ -17981,3 +17981,26 @@ body.analytic-report-open{overflow:hidden}
     grid-template-columns:repeat(2,minmax(0,1fr));
   }
 }
+
+/* ===== CR stock status for single-gateway POC ===== */
+.cart-status-strip{
+  grid-template-columns:minmax(104px,108px) repeat(4,minmax(48px,1fr)) !important;
+}
+
+.cart-status-item.stock i{
+  background:#8b5cf6 !important;
+}
+
+.cart-status-item.stock strong{
+  color:#8b5cf6 !important;
+}
+
+.cart-item-card.stock{
+  background:linear-gradient(180deg,#182f70 0%,#1368c7 100%) !important;
+}
+
+.cart-item-card.stock .cart-card-status i{
+  background:#f3e8ff !important;
+  border-color:#c4b5fd !important;
+  color:#5b21b6 !important;
+}

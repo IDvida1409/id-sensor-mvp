@@ -10573,12 +10573,11 @@ if(false){(function(){
   }
 
   function shouldMarkNeverSeenCartLost(cart){
-    if(!cart || cart.locationStatus === 'offline') return false;
-    return cartLastCommunicationMs(cart) === null;
+    return false;
   }
 
   function shouldMarkCartLost(cart, nowMs){
-    if(!cart || cart.locationStatus === 'offline') return false;
+    if(!cart || cart.lostAt) return false;
     const lastMs = cartLastCommunicationMs(cart);
     return lastMs !== null && nowMs - lastMs >= CART_LOST_AFTER_MS;
   }
@@ -11147,6 +11146,7 @@ if(false){(function(){
   function locationLabel(cart){
     if(cart.locationStatus === 'near') return 'Próximo';
     if(cart.locationStatus === 'transit') return 'Em trânsito';
+    if(isStockCart(cart)) return 'Estoque';
     if(cart.locationStatus === 'offline') return 'Sem comunicação';
     return 'Na sala';
   }
@@ -11154,6 +11154,7 @@ if(false){(function(){
   function fillLabel(cart){
     const rawStatus = String(cart?.collectorStatus || '').toLowerCase();
     if(isLostCart(cart)) return 'Perdido';
+    if(isStockCart(cart)) return 'Estoque';
     if(rawStatus === 'uncalibrated') return 'Aguardando calibração';
     if(rawStatus === 'calibration_pending') return 'Aguardando leitura';
     if(rawStatus === 'sensor_removed') return 'Sensor fora da posição';
@@ -11179,6 +11180,7 @@ if(false){(function(){
   function fillTone(cart){
     const rawStatus = String(cart?.collectorStatus || '').toLowerCase();
     if(isLostCart(cart)) return 'lost';
+    if(isStockCart(cart)) return 'stock';
     if(rawStatus === 'uncalibrated' || rawStatus === 'calibration_pending') return 'pending';
     if(rawStatus === 'sensor_removed') return 'sensor';
     if(isObstructedCart(cart)) return 'obstruction';
@@ -13602,17 +13604,22 @@ if(false){(function(){
   }
 
   function isLostCart(cart){
-    return cart.locationStatus === 'offline';
+    return cart.locationStatus === 'offline' && Boolean(cart.lostAt);
+  }
+
+  function isStockCart(cart){
+    return cart.locationStatus === 'offline' && !isLostCart(cart);
   }
 
   function isFreeCart(cart){
-    return !isLostCart(cart) && fillTone(cart) === 'empty';
+    return !isLostCart(cart) && !isStockCart(cart) && fillTone(cart) === 'empty';
   }
 
   function cartMatchesFilter(cart, filter = activeCartFilter){
     if(!filter || filter === 'all') return true;
     if(filter === 'empty') return isFreeCart(cart);
-    if(filter === 'full') return fillTone(cart) === 'full';
+    if(filter === 'full') return !isStockCart(cart) && !isLostCart(cart) && fillTone(cart) === 'full';
+    if(filter === 'stock') return isStockCart(cart);
     if(filter === 'lost') return isLostCart(cart);
     return true;
   }
@@ -13638,8 +13645,10 @@ if(false){(function(){
   function visibleRoomCarts(room, carts){
     const query = normalizeCartSearch(cartSearchTerm);
     const roomMatched = query && normalizeCartSearch([room?.name, room?.gatewayDeviceId].join(' ')).includes(query);
+    const showOutOfRoom = activeCartFilter === 'stock' || activeCartFilter === 'lost';
     return carts
-      .filter(cart => cart.roomId === room.id && cart.locationStatus !== 'transit' && cart.locationStatus !== 'offline')
+      .filter(cart => cart.roomId === room.id && cart.locationStatus !== 'transit')
+      .filter(cart => showOutOfRoom || cart.locationStatus !== 'offline')
       .filter(cart => cartMatchesFilter(cart))
       .filter(cart => !query || roomMatched || cartMatchesSearch(cart, room, query));
   }
@@ -13650,6 +13659,7 @@ if(false){(function(){
       total: roomCarts.length,
       full: roomCarts.filter(cart => cartMatchesFilter(cart, 'full')).length,
       empty: roomCarts.filter(cart => cartMatchesFilter(cart, 'empty')).length,
+      stock:carts.filter(cart => cart.roomId === room.id && cartMatchesFilter(cart, 'stock')).length,
       lost: roomCarts.filter(cart => cartMatchesFilter(cart, 'lost')).length
     };
   }
@@ -13657,8 +13667,9 @@ if(false){(function(){
   function globalStats(state){
     const empty = state.carts.filter(cart => cartMatchesFilter(cart, 'empty')).length;
     const full = state.carts.filter(cart => cartMatchesFilter(cart, 'full')).length;
+    const stock = state.carts.filter(cart => cartMatchesFilter(cart, 'stock')).length;
     const lost = state.carts.filter(cart => cartMatchesFilter(cart, 'lost')).length;
-    return { total: state.carts.length, empty, full, lost };
+    return { total: state.carts.length, empty, full, stock, lost };
   }
 
   function unreadAlertCount(state){
@@ -13697,6 +13708,10 @@ if(false){(function(){
           <button type="button" class="cart-status-item lost ${activeCartFilter === 'lost' ? 'active' : ''}" data-cart-filter="lost" aria-pressed="${activeCartFilter === 'lost' ? 'true' : 'false'}">
             <em><i></i>Perdidos</em>
             <strong>${countText(stats.lost)}</strong>
+          </button>
+          <button type="button" class="cart-status-item stock ${activeCartFilter === 'stock' ? 'active' : ''}" data-cart-filter="stock" aria-pressed="${activeCartFilter === 'stock' ? 'true' : 'false'}">
+            <em><i></i>Estoque</em>
+            <strong>${countText(stats.stock)}</strong>
           </button>
         </div>
       </article>
@@ -13765,7 +13780,7 @@ if(false){(function(){
       <div class="cart-item-unit">
         <div class="cart-card-stack">
           <button type="button" class="cart-item-card ${tone} ${escapeHtml(cart.locationStatus)} ${lidOpen ? 'lid-open' : 'lid-closed'}" data-cart-id="${escapeHtml(cart.id)}" style="--cart-fill:${visualFill}%;--cart-liquid:${visualFill}%">
-            <span class="cart-card-online-dot ${isLostCart(cart) ? 'offline' : 'online'}" aria-hidden="true"></span>
+            <span class="cart-card-online-dot ${isLostCart(cart) || isStockCart(cart) ? 'offline' : 'online'}" aria-hidden="true"></span>
             ${showStatus ? `<span class="cart-card-status"><i>${locationLabel(cart)}</i></span>` : ''}
             <span class="cart-item-body">
               <strong>${escapeHtml(cartDisplayName(cart))}</strong>
