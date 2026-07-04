@@ -10939,7 +10939,7 @@ if(false){(function(){
     }
     params.set('limit', '3000');
     params.set('alertLimit', String(CART_ALERT_LIMIT));
-    params.set('telemetryLimit', '260');
+    params.set('telemetryLimit', '1000');
     params.set('sampleLimit', '900');
     return `?${params.toString()}`;
   }
@@ -11034,7 +11034,7 @@ if(false){(function(){
     const nextTelemetry = backendTelemetry
       .filter(event => event && (event.key || event.id))
       .sort((a, b) => new Date(a.ts || 0) - new Date(b.ts || 0))
-      .slice(-260);
+      .slice(-1000);
     const telemetrySignature = JSON.stringify((state.telemetryEvents || []).map(event => [event.key || event.id, event.ts, event.type]));
     const nextTelemetrySignature = JSON.stringify(nextTelemetry.map(event => [event.key || event.id, event.ts, event.type]));
     if(telemetrySignature !== nextTelemetrySignature){
@@ -12523,7 +12523,7 @@ if(false){(function(){
 
   function renderRoomTelemetryMode(state, room){
     const summary = roomOperationalSummary(state, room);
-    const timelineEvents = summary.events.slice(-18).reverse().map(event => {
+    const timelineEvents = summary.events.slice(-120).reverse().map(event => {
       const critical = isCriticalEvent(event);
       const obstruction = isObstructionEvent(event);
       const roomEntry = isRoomEntryEvent(event);
@@ -12573,7 +12573,7 @@ if(false){(function(){
             <div class="telemetry-expanded-content">
               <div class="telemetry-timeline-head">
                 <div><strong>Linha do tempo</strong><small>Leituras, alertas e trocas vinculados a esta sala.</small></div>
-                <span>Últimas leituras</span>
+                <span>Eventos da sala</span>
               </div>
               <div class="telemetry-timeline">
                 ${timelineEvents.length ? timelineEvents.map(event => `
