@@ -12118,11 +12118,18 @@ if(false){(function(){
         maxPoints:52
       };
     }
-    const start = startOfLocalDayMs(now);
+    const todayStart = startOfLocalDayMs(now);
+    const hasTodayEvents = (events || []).some(event => Number.isFinite(event._time) && event._time >= todayStart && event._time <= now);
+    const latestEventTime = (events || [])
+      .map(event => event._time)
+      .filter(Number.isFinite)
+      .sort((a, b) => b - a)[0];
+    const reference = hasTodayEvents || !Number.isFinite(latestEventTime) ? now : latestEventTime;
+    const start = startOfLocalDayMs(reference);
     return {
       key:'day',
-      title:'últimas 24 horas',
-      range:'Exibir por: 24 horas',
+      title:hasTodayEvents ? 'ultimas 24 horas' : 'ultimo dia com dados',
+      range:hasTodayEvents ? 'Exibir por: 24 horas' : 'Exibir por: ultimo dia com telemetria',
       start,
       end:addDaysMs(start, 1),
       maxPoints:46
@@ -12224,6 +12231,10 @@ if(false){(function(){
     return event?.type === 'recurrence' || text.includes('recorr') || text.includes('segue');
   }
 
+  function isNonCriticalReadingEvent(event){
+    return event?.type === 'reading' && !isCriticalEvent(event) && !isObstructionEvent(event);
+  }
+
   function roomChartBoundaryPoint(samples, meta, criticalPercent){
     const previous = samples
       .filter(point => point.time < meta.start)
@@ -12279,11 +12290,31 @@ if(false){(function(){
     const alertEvents = inRangeEvents.filter(event => event.type === 'alert' && !isObstructionEvent(event));
     const recurrenceEvents = inRangeEvents.filter(event => eventLooksLikeRecurrence(event) && isCriticalEvent(event));
     const exchangeEvents = inRangeEvents.filter(event => isExchangeEvent(event) || isRoomEntryEvent(event));
-    const alertEvent = alertEvents.find(event => isCriticalEvent(event)) || criticalEvents[0] || null;
-    const recurrenceEvent = recurrenceEvents.find(event => !alertEvent || event._time > alertEvent._time) || criticalEvents.find((event, index) => index > 0 && (!alertEvent || event._time > alertEvent._time)) || null;
-    const exchangeEvent = alertEvent
-      ? exchangeEvents.find(event => event._time > alertEvent._time) || null
-      : exchangeEvents[0] || null;
+    const responsePairForExchange = exchange => {
+      const responseCartId = exchange?.cartId || '';
+      const sameResponseCart = event => !responseCartId || event.cartId === responseCartId;
+      const responseBoundary = inRangeEvents
+        .filter(event => event._time < exchange._time && sameResponseCart(event))
+        .filter(event => isExchangeEvent(event) || isNonCriticalReadingEvent(event))
+        .sort((a, b) => b._time - a._time)[0];
+      const responseAlert = alertEvents
+        .filter(event => sameResponseCart(event) && event._time < exchange._time)
+        .filter(event => !responseBoundary || event._time > responseBoundary._time)
+        .filter(event => isCriticalEvent(event) && !eventLooksLikeRecurrence(event))
+        .sort((a, b) => a._time - b._time)[0] || null;
+      return responseAlert ? { exchange, alert:responseAlert } : null;
+    };
+    const responsePair = exchangeEvents
+      .slice()
+      .reverse()
+      .map(responsePairForExchange)
+      .find(Boolean) || null;
+    const exchangeEvent = responsePair?.exchange || exchangeEvents[exchangeEvents.length - 1] || null;
+    const alertEvent = responsePair?.alert
+      || (!exchangeEvent ? (alertEvents.find(event => isCriticalEvent(event) && !eventLooksLikeRecurrence(event)) || criticalEvents[0] || null) : null);
+    const recurrenceEvent = recurrenceEvents.find(event => !alertEvent || event._time > alertEvent._time)
+      || criticalEvents.find((event, index) => index > 0 && (!alertEvent || event._time > alertEvent._time))
+      || null;
     const alertTime = alertEvent?._time || criticalPoint?.time || null;
     const recurrenceTime = recurrenceEvent?._time || null;
     const exchangeTime = exchangeEvent?._time || detectedExchangePoint?.time || null;
