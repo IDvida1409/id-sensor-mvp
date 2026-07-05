@@ -12118,20 +12118,13 @@ if(false){(function(){
         maxPoints:52
       };
     }
-    const todayStart = startOfLocalDayMs(now);
-    const hasTodayEvents = (events || []).some(event => Number.isFinite(event._time) && event._time >= todayStart && event._time <= now);
-    const latestEventTime = (events || [])
-      .map(event => event._time)
-      .filter(Number.isFinite)
-      .sort((a, b) => b - a)[0];
-    const reference = hasTodayEvents || !Number.isFinite(latestEventTime) ? now : latestEventTime;
-    const start = startOfLocalDayMs(reference);
+    const start = now - 24 * 60 * 60000;
     return {
       key:'day',
-      title:hasTodayEvents ? 'ultimas 24 horas' : 'ultimo dia com dados',
-      range:hasTodayEvents ? 'Exibir por: 24 horas' : 'Exibir por: ultimo dia com telemetria',
+      title:'ultimas 24 horas',
+      range:'Exibir por: 24 horas',
       start,
-      end:addDaysMs(start, 1),
+      end:now,
       maxPoints:46
     };
   }
@@ -12334,7 +12327,7 @@ if(false){(function(){
       exchangeTime,
       responseLabel,
       timeToCritical,
-      alertTotal:criticalEvents.length || alertEvents.filter(event => isCriticalEvent(event)).length || (criticalPoint ? 1 : 0),
+      alertTotal:alertEvents.filter(event => isCriticalEvent(event) && !eventLooksLikeRecurrence(event)).length || (criticalPoint ? 1 : 0),
       recurrenceTotal:recurrenceEvents.length,
       exchangeTotal:exchangeEvents.length || (detectedExchangePoint ? 1 : 0),
       roomName:room.name || roomBlockLabel(room)
