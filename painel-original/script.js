@@ -737,7 +737,7 @@ function buildScheduledCollectionCard(d, values){
           <h3 class="graph-mini-title">Coleta programada</h3>
           <span class="graph-schedule-pill muted">Não configurada</span>
         </div>
-        <div class="graph-mini-sub">Configure a rotina na engrenagem do painel para acompanhar a formação do relatório diário.</div>
+        <div class="graph-mini-sub">Configure a rotina na engrenagem do painel. O relatório consolidado será gerado apenas no fechamento de 30 dias.</div>
         <div class="graph-schedule-empty">Nenhuma coleta programada foi salva para esta área.</div>
       </div>
     `;
@@ -783,7 +783,6 @@ function buildScheduledCollectionCard(d, values){
     : hasHumidityMetrics
       ? describeGroup('umidade', showHumiditySnapshot, showHumidityAverage)
       : describeGroup('temperatura', showTemperatureSnapshot, showTemperatureAverage);
-  const remainingText = timing.remaining === 1 ? 'Falta 1 coleta' : `Faltam ${timing.remaining} coletas`;
   const lastCollection = timing.last || new Date(config.updatedAt);
   const intervalEnd = lastCollection;
   const intervalStart = new Date(intervalEnd.getTime() - config.hours * 60 * 60 * 1000);
@@ -869,10 +868,9 @@ function buildScheduledCollectionCard(d, values){
       </div>
       <div class="graph-schedule-progress-compact">
         <div>
-          <span>Relatório diário</span>
-          <strong>${timing.remaining === 0 ? 'Completo' : remainingText}</strong>
+          <span>Fechamento do ciclo</span>
+          <strong>Relatório após 30 dias</strong>
         </div>
-        <div class="graph-schedule-bar"><span style="width:${timing.progress}%"></span></div>
       </div>
     </div>
   `;
@@ -8443,7 +8441,7 @@ document.addEventListener('DOMContentLoaded', function(){
     const pendingLabel = state.pending?.effectiveAt
       ? ` Alteração pendente para ${formatScheduleClock(new Date(state.pending.effectiveAt))}.`
       : '';
-    mini.textContent = `Coleta programada: ${formatHours(current.hours)} · ${scopeLabel} · ${metricLabel}.${pendingLabel}`;
+    mini.textContent = `Coleta programada: ${formatHours(current.hours)} · ${scopeLabel} · ${metricLabel}. Fechamento em 30 dias.${pendingLabel}`;
     mini.classList.add('show');
   }
 
