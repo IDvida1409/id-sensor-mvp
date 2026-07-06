@@ -26,6 +26,32 @@ const devices = [
   {id:24,name:'Geladeira 24',sector:'Banco IDvida',temp:null,min:2,max:8,status:'MANUTENÇÃO',state:'maint',online:false,battery:null,hum1:null,hum2:null,updated:'há 50 min',timerLabel:'Em manutenção',timer:55,fill:28,range:0,events:['Falha detectada','Responsável: Ana Paula','Previsão: mais 30 min'],chart:[5.8,5.8,5.7,5.7,5.6,5.6,5.6,5.5,5.5,5.5,5.5,5.5]}
 ];
 
+const SAMPLE_CERTIFICATE_FILE = 'certificado-geladeira-1.pdf';
+const SAMPLE_CERTIFICATE_NAME = 'certificado-geladeira-1.pdf';
+
+devices.forEach(device => {
+  const hasSampleCertificate = Number(device.id) === 1 || Number(device.id) === 2;
+  device.hasCertificate = hasSampleCertificate;
+  device.certificateHidden = !hasSampleCertificate;
+  device.certificateFile = hasSampleCertificate ? SAMPLE_CERTIFICATE_FILE : '';
+  device.certificateFileName = hasSampleCertificate ? SAMPLE_CERTIFICATE_NAME : '';
+});
+
+function panelEscapeHtml(value){
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function certificatePreviewUrl(url){
+  const cleanUrl = String(url || '').trim();
+  if(!cleanUrl) return '';
+  return cleanUrl.includes('#') ? cleanUrl : `${cleanUrl}#toolbar=0&navpanes=0&scrollbar=0`;
+}
+
 const grid = document.getElementById('cardGrid');
 const layout = document.getElementById('layout');
 const sidepanel = document.getElementById('sidepanel');
@@ -2430,13 +2456,17 @@ function getSealInfo(d){
 }
 
 function getCalibHTML(d){
-  if(d && (d.certificateHidden || d.hasCertificate === false)) return '';
+  if(!d || d.certificateHidden || d.hasCertificate !== true) return '';
   const info = getSealInfo(d);
-  const isGeladeira1 = d && d.name === 'Geladeira 1';
-  const previewHTML = isGeladeira1
+  const certificateUrl = d.certificateFile || SAMPLE_CERTIFICATE_FILE;
+  const certificateName = d.certificateFileName || certificateUrl;
+  const safeUrl = panelEscapeHtml(certificateUrl);
+  const safePreviewUrl = panelEscapeHtml(certificatePreviewUrl(certificateUrl));
+  const safeName = panelEscapeHtml(certificateName);
+  const previewHTML = certificateUrl
     ? `<iframe
-         src="certificado-geladeira-1.pdf#toolbar=0&navpanes=0&scrollbar=0"
-         title="Pré-visualização do certificado da Geladeira 1"
+         src="${safePreviewUrl}"
+         title="Pre-visualizacao do certificado de ${panelEscapeHtml(d.name)}"
          style="width:100%;height:100%;border:none;border-radius:10px;background:#fff;">
        </iframe>`
     : `<div class="calib-pop-sheet">
@@ -2458,6 +2488,12 @@ function getCalibHTML(d){
         <div class="calib-pop-preview">
           ${previewHTML}
         </div>
+        ${certificateUrl ? `
+          <div class="calib-pop-actions">
+            <a href="${safeUrl}" target="_blank" rel="noopener">Ver previa</a>
+            <a href="${safeUrl}" download="${safeName}">Baixar certificado</a>
+          </div>
+        ` : ''}
       </div>
     </div>`;
 }
@@ -4806,11 +4842,13 @@ window.DRILL_CONFIG_TREE = {
           badge:'24',
           badgeClass:'badge-blue',
           areaEnabled:true,
-          devices: Array.from({length:24}, (_,i) => ({
-            title:`Geladeira ${i+1}`,
+          devices: devices.map(device => ({
+            deviceId: device.id,
+            title: device.name,
             subtitle:'Certificado controlado pelo detalhe do dispositivo.',
-            enabled: true,
-            fileName: i===2 ? 'certificado-geladeira-3.pdf' : '',
+            enabled: device.hasCertificate === true && !device.certificateHidden,
+            fileName: device.certificateFileName || '',
+            fileUrl: device.certificateFile || '',
             badgeClass:'badge-blue'
           }))
         }
@@ -4819,12 +4857,40 @@ window.DRILL_CONFIG_TREE = {
   ]
 };
 
+function getConfigDeviceCertificateUrl(device){
+  if(!device) return '';
+  if(device.fileUrl) return device.fileUrl;
+  return device.fileName === SAMPLE_CERTIFICATE_NAME ? SAMPLE_CERTIFICATE_FILE : '';
+}
+
+function syncConfigDeviceCertificate(configDevice, areaEnabled){
+  if(!configDevice) return;
+  const panelDevice = getDeviceById(configDevice.deviceId);
+  if(!panelDevice) return;
+  const fileUrl = getConfigDeviceCertificateUrl(configDevice);
+  const hasVisibleCertificate = Boolean(areaEnabled && configDevice.enabled && configDevice.fileName && fileUrl);
+  panelDevice.certificateFileName = configDevice.fileName || '';
+  panelDevice.certificateFile = fileUrl;
+  panelDevice.hasCertificate = hasVisibleCertificate;
+  panelDevice.certificateHidden = !hasVisibleCertificate;
+}
+
+function refreshCertificatePanelView(){
+  if(typeof renderGrid === 'function') renderGrid();
+  if(activeId !== null && typeof openDetail === 'function'){
+    const active = getDeviceById(activeId);
+    if(active) openDetail(active.id, true);
+  }
+}
+
 window.toggleConfigArea = function(configId, areaId){
   const root = window.DRILL_CONFIG_TREE.root.find(x => x.id === configId);
   if(!root) return;
   const area = root.areas.find(x => x.id === areaId);
   if(!area) return;
   area.areaEnabled = !area.areaEnabled;
+  area.devices.forEach(device => syncConfigDeviceCertificate(device, area.areaEnabled));
+  refreshCertificatePanelView();
   window.renderConfigDevices(root, area);
 };
 
@@ -4836,6 +4902,8 @@ window.toggleConfigDevice = function(configId, areaId, index){
   const device = area.devices[index];
   if(!device) return;
   device.enabled = !device.enabled;
+  syncConfigDeviceCertificate(device, area.areaEnabled);
+  refreshCertificatePanelView();
   window.renderConfigDevices(root, area);
 };
 
@@ -4848,9 +4916,39 @@ window.uploadConfigDevice = function(configId, areaId, index, input){
   if(!area) return;
   const device = area.devices[index];
   if(!device) return;
+  if(device.fileUrl && String(device.fileUrl).startsWith('blob:')){
+    URL.revokeObjectURL(device.fileUrl);
+  }
   device.fileName = file.name;
+  device.fileUrl = file.name === SAMPLE_CERTIFICATE_NAME ? SAMPLE_CERTIFICATE_FILE : URL.createObjectURL(file);
+  device.enabled = true;
+  syncConfigDeviceCertificate(device, area.areaEnabled);
+  refreshCertificatePanelView();
   window.renderConfigDevices(root, area);
 };
+
+function renderConfigCertificatePreview(device){
+  const fileUrl = getConfigDeviceCertificateUrl(device);
+  if(!device?.fileName || !fileUrl) return '';
+  const safeUrl = panelEscapeHtml(fileUrl);
+  const safePreviewUrl = panelEscapeHtml(certificatePreviewUrl(fileUrl));
+  const safeFileName = panelEscapeHtml(device.fileName);
+  return `
+    <div class="config-cert-preview">
+      <div class="config-cert-preview-head">
+        <div>
+          <strong>Pre-visualizacao</strong>
+          <span>${safeFileName}</span>
+        </div>
+        <div class="config-cert-actions">
+          <a href="${safeUrl}" target="_blank" rel="noopener">Ver previa</a>
+          <a href="${safeUrl}" download="${safeFileName}">Baixar</a>
+        </div>
+      </div>
+      <iframe src="${safePreviewUrl}" title="Pre-visualizacao do certificado ${safeFileName}"></iframe>
+    </div>
+  `;
+}
 
 window.renderConfigRoot = function(){
   const title = document.getElementById('drillTitle');
@@ -4955,7 +5053,7 @@ window.renderConfigDevices = function(item, area){
 
     <div class="drill-list">
       ${area.devices.map((device, idx) => `
-        <div class="drill-item config-device-row">
+        <div class="drill-item config-device-row${device.fileName ? ' has-certificate' : ''}">
           <div>
             <strong>${device.title}</strong>
             <span>${device.enabled ? 'Certificado habilitado individualmente.' : 'Certificado desabilitado individualmente.'}</span>
@@ -4964,10 +5062,11 @@ window.renderConfigDevices = function(item, area){
             <input type="file" accept=".pdf,.png,.jpg,.jpeg" onchange="uploadConfigDevice('${item.id}','${area.id}', ${idx}, this)">
             <span>↑</span>
           </label>
-          <div style="display:flex; align-items:center; gap:12px;">
+          <div class="config-device-controls">
             <div class="config-inline-state">${device.fileName ? device.fileName : 'Nenhum arquivo'}</div>
             <button class="config-switch ${device.enabled ? 'on' : ''}" type="button" onclick="toggleConfigDevice('${item.id}','${area.id}', ${idx})"></button>
           </div>
+          ${renderConfigCertificatePreview(device)}
         </div>
       `).join('')}
     </div>
