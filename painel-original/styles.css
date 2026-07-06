@@ -4838,6 +4838,62 @@ body:not(.density-compact) .grid .card{
   padding:10px 14px !important;
   border-radius:999px !important;
 }
+.drill-section-title{
+  margin:0 0 12px;
+  color:#26354d;
+  font-size:13px;
+  font-weight:900;
+}
+.drill-service-config{
+  display:grid;
+  gap:16px;
+}
+.drill-service-summary{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:14px;
+  padding:14px 16px;
+  border:1px solid #e3ebf5;
+  border-radius:18px;
+  background:#f8fbff;
+}
+.drill-service-summary strong{
+  display:block;
+  color:#26354d;
+  font-size:14px;
+}
+.drill-service-summary span{
+  display:block;
+  margin-top:4px;
+  color:#6f7d90;
+  font-size:12px;
+}
+.drill-service-form{
+  display:grid;
+  grid-template-columns:repeat(2, minmax(0, 1fr));
+  gap:14px;
+}
+.drill-service-form .orc-field{
+  margin:0;
+}
+.drill-service-limit-field{
+  grid-column:1 / -1;
+}
+.drill-service-limit-field.is-disabled{
+  opacity:.68;
+}
+.drill-service-help{
+  margin-top:8px;
+  color:#718096;
+  font-size:12px;
+  font-weight:700;
+}
+@media (max-width:720px){
+  .drill-service-form{
+    grid-template-columns:1fr;
+  }
+}
 
 /* ajuste leve do modal de acessibilidade (sem quebrar layout) */
 .modal-acessibilidade{

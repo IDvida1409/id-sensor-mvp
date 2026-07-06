@@ -3037,6 +3037,46 @@ window.DRILL_CONTRATO_TREE = {
               ]
             }
           ]
+        },
+        {
+          id:'servicos',
+          type:'services',
+          title:'Serviços',
+          subtitle:'Serviços contratados: SMS, WhatsApp e e-mail.',
+          badge:'3',
+          badgeClass:'badge-purple',
+          services:[
+            {
+              id:'sms',
+              title:'SMS',
+              subtitle:'Mensagens de alerta por SMS.',
+              description:'Controle de disparos SMS contratados para alertas e notificações.',
+              status:'ativo',
+              limitType:'limited',
+              limit:5000,
+              badgeClass:'badge-green'
+            },
+            {
+              id:'whatsapp',
+              title:'WhatsApp',
+              subtitle:'Alertas e notificações por WhatsApp.',
+              description:'Controle de disparos via WhatsApp para alertas operacionais.',
+              status:'ativo',
+              limitType:'unlimited',
+              limit:0,
+              badgeClass:'badge-green'
+            },
+            {
+              id:'email',
+              title:'E-mail',
+              subtitle:'Envio de alertas e relatórios por e-mail.',
+              description:'Controle de mensagens de e-mail contratadas para o cliente.',
+              status:'ativo',
+              limitType:'limited',
+              limit:10000,
+              badgeClass:'badge-green'
+            }
+          ]
         }
       ]
     }
@@ -3091,6 +3131,22 @@ function parseDrillCount(value){
   const clean = String(value == null ? '' : value).replace(/[^0-9]/g, '');
   const n = Number(clean);
   return Number.isFinite(n) ? n : 0;
+}
+
+function contratoServiceStatusLabel(service){
+  return String(service?.status || '').toLowerCase() === 'inativo' ? 'Inativo' : 'Ativo';
+}
+
+function contratoServiceBadgeClass(service){
+  return contratoServiceStatusLabel(service) === 'Inativo' ? 'badge-gray' : (service?.badgeClass || 'badge-green');
+}
+
+function contratoServiceLimitLabel(service){
+  if(String(service?.limitType || '').toLowerCase() === 'limited'){
+    const limit = parseDrillCount(service?.limit);
+    return `Com limite · ${limit.toLocaleString('pt-BR')} mensagens`;
+  }
+  return 'Ilimitado';
 }
 
 function normalizeDrillAreaKey(text){
@@ -4205,9 +4261,9 @@ window.renderContratoCategories = function(client, options){
 
   title.textContent = client.title;
   sub.textContent = context === 'unidade'
-    ? `${client.title} · total de dispositivos, em contrato, aguardando e disponível.`
-    : 'Total de dispositivos, em contrato, aguardando e disponível.';
-  hint.textContent = 'Clique em uma categoria para ver os dispositivos daquele contexto.';
+    ? `${client.title} · total de dispositivos, em contrato, aguardando, disponível e serviços contratados.`
+    : 'Total de dispositivos, em contrato, aguardando, disponível e serviços contratados.';
+  hint.textContent = 'Clique em uma categoria para ver os dispositivos ou serviços daquele contexto.';
   back.textContent = backText;
   back.onclick = onBack;
 
@@ -4229,6 +4285,15 @@ window.renderContratoCategories = function(client, options){
     btn.addEventListener('click', () => {
       const item = (client.categories || []).find(x => x.id === btn.dataset.contratoCategory);
       if(item){
+        if(item.type === 'services' || Array.isArray(item.services)){
+          window.renderContratoServices(client, item, {
+            context,
+            onBack: () => window.renderContratoCategories(client, options),
+            backText: '← Voltar às categorias',
+            breadcrumbsPrefix: categoryCrumbs
+          });
+          return;
+        }
         window.renderContratoAreas(client, item, {
           context,
           onBack: () => window.renderContratoCategories(client, options),
@@ -4290,6 +4355,153 @@ window.renderContratoAreas = function(client, item, options){
         });
       }
     });
+  });
+};
+
+window.renderContratoServices = function(client, item, options){
+  const title = document.getElementById('drillTitle');
+  const sub = document.getElementById('drillSub');
+  const hint = document.getElementById('drillHint');
+  const content = document.getElementById('drillContent');
+  const back = document.querySelector('.drill-back');
+  if(!title || !sub || !hint || !content || !back) return;
+
+  const context = options?.context === 'unidade' ? 'unidade' : 'cliente';
+  const onBack = options && typeof options.onBack === 'function'
+    ? options.onBack
+    : () => window.renderContratoCategories(client, { context });
+  const backText = options?.backText || '← Voltar às categorias';
+  const breadcrumbsPrefix = Array.isArray(options?.breadcrumbsPrefix) && options.breadcrumbsPrefix.length
+    ? options.breadcrumbsPrefix
+    : ['Contrato', client.title];
+  const serviceCrumbs = [...breadcrumbsPrefix, item.title];
+
+  title.textContent = item.title;
+  sub.textContent = 'Serviços contratados pelo cliente.';
+  hint.textContent = 'Clique em um serviço contratado para configurar status e limite.';
+  back.textContent = backText;
+  back.onclick = onBack;
+
+  content.innerHTML = `
+    <div class="drill-breadcrumbs">
+      ${serviceCrumbs.map(crumb => `<span class="drill-crumb">${crumb}</span>`).join('')}
+    </div>
+    <div class="drill-section-title">Serviços contratados</div>
+    <div class="drill-list">
+      ${(item.services || []).map(service => `
+        <button class="drill-item drill-nav drill-service-item" type="button" data-contrato-service="${service.id}">
+          <div><strong>${service.title}</strong><span>${textForDrillContext(service.subtitle, context)} · ${contratoServiceLimitLabel(service)}</span></div>
+          <div class="drill-badge ${contratoServiceBadgeClass(service)}">${contratoServiceStatusLabel(service)}</div>
+        </button>
+      `).join('')}
+    </div>
+  `;
+
+  content.querySelectorAll('[data-contrato-service]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const service = (item.services || []).find(x => x.id === btn.dataset.contratoService);
+      if(service){
+        window.renderContratoServiceConfig(client, item, service, {
+          context,
+          onBack: () => window.renderContratoServices(client, item, options),
+          backText: '← Voltar aos serviços',
+          breadcrumbs: [...serviceCrumbs, service.title]
+        });
+      }
+    });
+  });
+};
+
+window.renderContratoServiceConfig = function(client, item, service, options){
+  const title = document.getElementById('drillTitle');
+  const sub = document.getElementById('drillSub');
+  const hint = document.getElementById('drillHint');
+  const content = document.getElementById('drillContent');
+  const back = document.querySelector('.drill-back');
+  if(!title || !sub || !hint || !content || !back) return;
+
+  const onBack = options && typeof options.onBack === 'function'
+    ? options.onBack
+    : () => window.renderContratoServices(client, item, { context: options?.context });
+  const backText = options?.backText || '← Voltar aos serviços';
+  const crumbs = Array.isArray(options?.breadcrumbs) && options.breadcrumbs.length
+    ? options.breadcrumbs
+    : ['Contrato', client.title, item.title, service.title];
+  const limitType = String(service.limitType || '').toLowerCase() === 'limited' ? 'limited' : 'unlimited';
+  const limitValue = parseDrillCount(service.limit);
+
+  title.textContent = service.title;
+  sub.textContent = 'Configuração do serviço contratado.';
+  hint.textContent = 'Selecione se está ativo ou inativo e defina se o serviço é ilimitado ou com limite.';
+  back.textContent = backText;
+  back.onclick = onBack;
+
+  content.innerHTML = `
+    <div class="drill-breadcrumbs">
+      ${crumbs.map(crumb => `<span class="drill-crumb">${crumb}</span>`).join('')}
+    </div>
+    <div class="drill-service-config">
+      <div class="drill-service-summary">
+        <div>
+          <strong>${service.title}</strong>
+          <span>${service.description || service.subtitle || 'Serviço contratado.'}</span>
+        </div>
+        <div class="drill-badge ${contratoServiceBadgeClass(service)}" data-service-current-badge>${contratoServiceStatusLabel(service)}</div>
+      </div>
+      <div class="drill-service-form">
+        <div class="orc-field">
+          <label>Status do serviço</label>
+          <select data-service-status>
+            <option value="ativo" ${contratoServiceStatusLabel(service) === 'Ativo' ? 'selected' : ''}>Ativo</option>
+            <option value="inativo" ${contratoServiceStatusLabel(service) === 'Inativo' ? 'selected' : ''}>Inativo</option>
+          </select>
+        </div>
+        <div class="orc-field">
+          <label>Tipo de limite</label>
+          <select data-service-limit-type>
+            <option value="unlimited" ${limitType === 'unlimited' ? 'selected' : ''}>Ilimitado</option>
+            <option value="limited" ${limitType === 'limited' ? 'selected' : ''}>Com limite</option>
+          </select>
+        </div>
+        <div class="orc-field drill-service-limit-field ${limitType === 'limited' ? '' : 'is-disabled'}">
+          <label>Limite de mensagens</label>
+          <input type="number" min="0" step="1" value="${limitValue}" data-service-limit ${limitType === 'limited' ? '' : 'disabled'}>
+          <div class="drill-service-help">Valor contratado para este canal.</div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  const statusSelect = content.querySelector('[data-service-status]');
+  const limitTypeSelect = content.querySelector('[data-service-limit-type]');
+  const limitInput = content.querySelector('[data-service-limit]');
+  const badge = content.querySelector('[data-service-current-badge]');
+  const limitField = content.querySelector('.drill-service-limit-field');
+
+  const syncBadge = () => {
+    if(!badge) return;
+    badge.textContent = contratoServiceStatusLabel(service);
+    badge.className = `drill-badge ${contratoServiceBadgeClass(service)}`;
+  };
+
+  const syncLimitField = () => {
+    const limited = limitTypeSelect?.value === 'limited';
+    service.limitType = limited ? 'limited' : 'unlimited';
+    if(limitInput){
+      limitInput.disabled = !limited;
+      if(limited && !limitInput.value) limitInput.value = '0';
+      service.limit = limited ? parseDrillCount(limitInput.value) : 0;
+    }
+    if(limitField) limitField.classList.toggle('is-disabled', !limited);
+  };
+
+  statusSelect?.addEventListener('change', () => {
+    service.status = statusSelect.value === 'inativo' ? 'inativo' : 'ativo';
+    syncBadge();
+  });
+  limitTypeSelect?.addEventListener('change', syncLimitField);
+  limitInput?.addEventListener('input', () => {
+    service.limit = parseDrillCount(limitInput.value);
   });
 };
 
