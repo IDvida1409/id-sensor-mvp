@@ -17948,7 +17948,7 @@ body.analytic-report-open{overflow:hidden}
 .cart-op-graph-svg{
   display:block;
   height:auto;
-  max-height:430px;
+  max-height:460px;
   overflow:visible;
   width:100%;
 }
@@ -18110,6 +18110,10 @@ body.analytic-report-open{overflow:hidden}
 
 .cart-op-event-list i.is-exchange{
   background:#18a66f;
+}
+
+.cart-op-event-list .is-summary i{
+  background:#526987;
 }
 
 .cart-op-event-list strong{

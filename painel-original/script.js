@@ -12597,6 +12597,17 @@ if(false){(function(){
       }, []);
   }
 
+  function filterInferredExchangeEvents(inferredEvents, officialEvents){
+    const official = (officialEvents || [])
+      .filter(event => Number.isFinite(event._time))
+      .sort((a, b) => a._time - b._time);
+    const inferred = (inferredEvents || [])
+      .filter(event => Number.isFinite(event._time))
+      .sort((a, b) => a._time - b._time);
+    if(!official.length) return inferred.slice(-1);
+    return inferred.filter(event => event._time < official[0]._time).slice(-1);
+  }
+
   function criticalCycleForExchange(samples, exchange, criticalPercent){
     if(!exchange) return null;
     const cartId = exchange.cartId || '';
@@ -12677,7 +12688,10 @@ if(false){(function(){
     const alertEvents = inRangeEvents.filter(event => event.type === 'alert' && !isObstructionEvent(event));
     const recurrenceEvents = inRangeEvents.filter(event => eventLooksLikeRecurrence(event) && isCriticalEvent(event));
     const officialExchangeEvents = inRangeEvents.filter(event => isExchangeEvent(event));
-    const inferredExchangeEvents = inferExchangeEventsFromSamples(periodSamples, officialExchangeEvents);
+    const inferredExchangeEvents = filterInferredExchangeEvents(
+      inferExchangeEventsFromSamples(periodSamples, officialExchangeEvents),
+      officialExchangeEvents
+    );
     const exchangeEvents = dedupeExchangeEvents([...officialExchangeEvents, ...inferredExchangeEvents]);
     const criticalCycles = exchangeEvents
       .map(exchange => criticalCycleForExchange(periodSamples, exchange, criticalPercent))
@@ -12860,8 +12874,8 @@ if(false){(function(){
       const valueAtMarker = points.reduce((best, point) => Math.abs(point.time - item.time) < Math.abs(best.time - item.time) ? point : best, points[0]);
       return `<circle cx="${item.x}" cy="${y(valueAtMarker?.value || 0)}" r="5" class="${item.tone === 'green' ? 'cart-op-marker-green' : 'cart-op-marker-red'}"></circle>`;
     }).join('');
-    const stateY = detailed ? 360 : 306;
-    const legendY = detailed ? 420 : 0;
+    const stateY = detailed ? 386 : 306;
+    const legendY = detailed ? 438 : 0;
     const responseStateSegments = (model.responseSegments || []).map(segment => {
       const criticalStartX = x(segment.criticalStart);
       const alertX = segment.alertTime ? x(segment.alertTime) : null;
@@ -12873,7 +12887,6 @@ if(false){(function(){
       `;
     }).join('');
     const stateBar = detailed ? `
-      <text x="12" y="${stateY - 22}" class="cart-op-section-label">Faixa de estados operacionais</text>
       <rect x="${left}" y="${stateY}" width="${width}" height="16" rx="2" class="cart-op-state free"></rect>
       ${responseStateSegments}
       <text x="${left}" y="${stateY + 42}" text-anchor="middle" class="cart-op-axis">${escapeHtml(chartTickLabel(model.period.start, model.period.key, span))}</text>
@@ -12896,7 +12909,7 @@ if(false){(function(){
       <text x="350" y="${legendY + 56}" class="cart-op-response-sub">Entre o alerta gerado e a troca concluída.</text>
     ` : '';
     return `
-      <svg class="cart-op-graph-svg ${detailed ? 'is-detail' : 'is-summary'}" viewBox="0 0 1080 ${detailed ? 500 : 370}" role="img" aria-label="Evolução operacional da ocupação da sala">
+      <svg class="cart-op-graph-svg ${detailed ? 'is-detail' : 'is-summary'}" viewBox="0 0 1080 ${detailed ? 530 : 370}" role="img" aria-label="Evolução operacional da ocupação da sala">
         <defs>
           <linearGradient id="cartOpAreaGradient" x1="0" x2="0" y1="0" y2="1">
             <stop offset="0%" stop-color="#1d7cff" stop-opacity=".18"></stop>
@@ -12938,7 +12951,9 @@ if(false){(function(){
       { label:'Recorrências', value:String(model.recurrenceTotal), red:model.recurrenceTotal > 0 },
       { label:'Trocas registradas', value:String(model.exchangeTotal), green:model.exchangeTotal > 0 }
     ];
-    const eventRows = (model.eventRows || []).slice(-6);
+    const allEventRows = model.eventRows || [];
+    const eventRows = allEventRows.slice(-3);
+    const hiddenEventRows = Math.max(0, allEventRows.length - eventRows.length);
     return `
       <section class="cart-op-chart-shell">
         <header class="cart-op-chart-head">
@@ -12976,6 +12991,7 @@ if(false){(function(){
               <em>${escapeHtml(row.response)}</em>
             </span>
           `).join('') : '<span><strong>Sem trocas no periodo</strong><small>--</small><em>sem resposta</em></span>'}
+          ${hiddenEventRows ? `<span class="is-summary"><strong>Mais ${hiddenEventRows} troca(s)</strong><small>${escapeHtml(model.period.title)}</small><em>Veja a lista completa na telemetria.</em></span>` : ''}
         </div>
         <div class="cart-op-kpis">
           ${cards.map(card => `
