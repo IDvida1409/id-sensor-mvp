@@ -12586,6 +12586,17 @@ if(false){(function(){
     return inferred;
   }
 
+  function dedupeExchangeEvents(events){
+    return (events || [])
+      .filter(event => event && Number.isFinite(event._time))
+      .sort((a, b) => a._time - b._time)
+      .reduce((acc, event) => {
+        const duplicate = acc.some(item => Math.abs(item._time - event._time) <= 15 * 60 * 1000);
+        if(!duplicate) acc.push(event);
+        return acc;
+      }, []);
+  }
+
   function criticalCycleForExchange(samples, exchange, criticalPercent){
     if(!exchange) return null;
     const cartId = exchange.cartId || '';
@@ -12665,9 +12676,9 @@ if(false){(function(){
     const criticalEvents = inRangeEvents.filter(event => isCriticalEvent(event) && !isObstructionEvent(event));
     const alertEvents = inRangeEvents.filter(event => event.type === 'alert' && !isObstructionEvent(event));
     const recurrenceEvents = inRangeEvents.filter(event => eventLooksLikeRecurrence(event) && isCriticalEvent(event));
-    const officialExchangeEvents = inRangeEvents.filter(event => isExchangeEvent(event) || isRoomEntryEvent(event));
+    const officialExchangeEvents = inRangeEvents.filter(event => isExchangeEvent(event));
     const inferredExchangeEvents = inferExchangeEventsFromSamples(periodSamples, officialExchangeEvents);
-    const exchangeEvents = [...officialExchangeEvents, ...inferredExchangeEvents].sort((a, b) => a._time - b._time);
+    const exchangeEvents = dedupeExchangeEvents([...officialExchangeEvents, ...inferredExchangeEvents]);
     const criticalCycles = exchangeEvents
       .map(exchange => criticalCycleForExchange(periodSamples, exchange, criticalPercent))
       .filter(Boolean);
@@ -12719,6 +12730,20 @@ if(false){(function(){
           criticalStart:cycle.criticalStart,
           alertTime:alert?._time || null,
           cartId:cycle.cartId
+        };
+      }),
+      eventRows:exchangeEvents.map((event, index) => {
+        const cycle = criticalCycles.find(item => item.exchange === event) || null;
+        const pair = cycle ? responsePairForExchange(cycle) : null;
+        const responseMinutes = pair?.alert
+          ? Math.max(0, Math.round((event._time - pair.alert._time) / 60000))
+          : null;
+        return {
+          type:'exchange',
+          label:`Troca ${index + 1}`,
+          time:event._time,
+          detail:event.detail || event.title || 'Troca de carrinho registrada.',
+          response:responseMinutes === null ? 'sem alerta no ciclo' : formatCartDurationFromMs(responseMinutes * 60000, '--')
         };
       }),
       responseLabel,
@@ -12828,18 +12853,9 @@ if(false){(function(){
       detailed && model.recurrenceTime ? { x:x(model.recurrenceTime), time:model.recurrenceTime, label:'Recorrencia', tone:'red' } : null,
       ...exchangeItems
     ].filter(Boolean);
-    const labels = layoutChartLabels(eventItems);
-    const eventSvg = labels.map(item => {
-      const labelY = 14 + item.level * 27;
-      const labelMarkup = item.hiddenLabel ? '' : `
-        <text x="${item.labelX}" y="${labelY}" text-anchor="middle" class="cart-op-event-label ${item.tone}">${escapeHtml(item.label)}</text>
-        <text x="${item.labelX}" y="${labelY + 14}" text-anchor="middle" class="cart-op-event-label ${item.tone}">${escapeHtml(chartEventClock(item.time))}</text>
-      `;
-      return `
-        <line x1="${item.x}" y1="${top - 8}" x2="${item.x}" y2="${detailed ? 428 : bottom}" class="cart-op-event-line ${item.tone}"></line>
-        ${labelMarkup}
-      `;
-    }).join('');
+    const eventSvg = eventItems.map(item => `
+      <line x1="${item.x}" y1="${top - 8}" x2="${item.x}" y2="${detailed ? 428 : bottom}" class="cart-op-event-line ${item.tone}"></line>
+    `).join('');
     const markerSvg = eventItems.map(item => {
       const valueAtMarker = points.reduce((best, point) => Math.abs(point.time - item.time) < Math.abs(best.time - item.time) ? point : best, points[0]);
       return `<circle cx="${item.x}" cy="${y(valueAtMarker?.value || 0)}" r="5" class="${item.tone === 'green' ? 'cart-op-marker-green' : 'cart-op-marker-red'}"></circle>`;
@@ -12856,24 +12872,11 @@ if(false){(function(){
         ${alertX ? `<rect x="${alertX}" y="${stateY}" width="${Math.max(0, exchangeX - alertX)}" height="16" class="cart-op-state exchanged"></rect>` : ''}
       `;
     }).join('');
-    const stateTicks = [
-      ...((model.responseSegments || []).flatMap(segment => [segment.criticalStart, segment.alertTime, segment.exchangeTime])),
-      ...(model.exchangeEvents || []).map(event => event._time)
-    ].filter(Number.isFinite);
-    const stateTickLabels = stateTicks
-      .sort((a, b) => a - b)
-      .filter((time, index, list) => index === 0 || Math.abs(x(time) - x(list[index - 1])) >= 58);
     const stateBar = detailed ? `
       <text x="12" y="${stateY - 22}" class="cart-op-section-label">Faixa de estados operacionais</text>
       <rect x="${left}" y="${stateY}" width="${width}" height="16" rx="2" class="cart-op-state free"></rect>
       ${responseStateSegments}
       <text x="${left}" y="${stateY + 42}" text-anchor="middle" class="cart-op-axis">${escapeHtml(chartTickLabel(model.period.start, model.period.key, span))}</text>
-      ${stateTickLabels.map(time => {
-        const tx = x(time);
-        return Math.abs(tx - left) > 70 && Math.abs(tx - (left + width)) > 70
-          ? `<text x="${tx}" y="${stateY + 42}" text-anchor="middle" class="cart-op-axis">${escapeHtml(chartEventClock(time))}</text>`
-          : '';
-      }).join('')}
       <text x="${left + width}" y="${stateY + 42}" text-anchor="middle" class="cart-op-axis">${escapeHtml(chartTickLabel(model.period.end, model.period.key, span))}</text>
       <circle cx="110" cy="${legendY}" r="5" class="cart-op-dot free"></circle>
       <text x="130" y="${legendY + 5}" class="cart-op-legend-text">Livre</text>
@@ -12935,6 +12938,7 @@ if(false){(function(){
       { label:'Recorrências', value:String(model.recurrenceTotal), red:model.recurrenceTotal > 0 },
       { label:'Trocas registradas', value:String(model.exchangeTotal), green:model.exchangeTotal > 0 }
     ];
+    const eventRows = (model.eventRows || []).slice(-6);
     return `
       <section class="cart-op-chart-shell">
         <header class="cart-op-chart-head">
@@ -12963,6 +12967,16 @@ if(false){(function(){
           </div>
           ${renderRoomOperationalGraphSvg(model, activeView)}
         </article>
+        <div class="cart-op-event-list">
+          ${eventRows.length ? eventRows.map(row => `
+            <span>
+              <i class="is-${escapeHtml(row.type)}"></i>
+              <strong>${escapeHtml(row.label)}</strong>
+              <small>${escapeHtml(chartEventClock(row.time))}</small>
+              <em>${escapeHtml(row.response)}</em>
+            </span>
+          `).join('') : '<span><strong>Sem trocas no periodo</strong><small>--</small><em>sem resposta</em></span>'}
+        </div>
         <div class="cart-op-kpis">
           ${cards.map(card => `
             <span class="${card.red ? 'is-red' : ''} ${card.green ? 'is-green' : ''}">
