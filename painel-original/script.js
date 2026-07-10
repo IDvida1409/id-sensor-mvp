@@ -12734,31 +12734,40 @@ if(false){(function(){
     const sorted = items
       .filter(item => Number.isFinite(item.x))
       .sort((a, b) => a.x - b.x);
-    const groups = [];
-    sorted.forEach(item => {
-      const group = groups.find(entry => Math.abs(entry.center - item.x) < 112);
-      if(group){
-        group.items.push(item);
-        group.center = group.items.reduce((sum, entry) => sum + entry.x, 0) / group.items.length;
-      }else{
-        groups.push({ center:item.x, items:[item] });
+    const lanes = [];
+    return sorted.map(item => {
+      const lane = lanes.findIndex(lastX => Math.abs(item.x - lastX) >= 92);
+      if(lane >= 0){
+        lanes[lane] = item.x;
+        return {
+          ...item,
+          labelX:clampNumber(item.x, 82, 994),
+          level:lane,
+          hiddenLabel:false
+        };
       }
-    });
-    return groups.flatMap(group => {
-      const count = group.items.length;
-      const offsets = count === 1 ? [0] : count === 2 ? [-42, 42] : [-66, 0, 66];
-      return group.items.map((item, index) => ({
+      if(lanes.length < 4){
+        lanes.push(item.x);
+        return {
+          ...item,
+          labelX:clampNumber(item.x, 82, 994),
+          level:lanes.length - 1,
+          hiddenLabel:false
+        };
+      }
+      return {
         ...item,
-        labelX:clampNumber(item.x + offsets[Math.min(index, offsets.length - 1)], 82, 994),
-        level:Math.min(index, 2)
-      }));
+        labelX:clampNumber(item.x, 82, 994),
+        level:3,
+        hiddenLabel:true
+      };
     });
   }
 
   function renderRoomOperationalGraphSvg(model, view = 'detail'){
     const detailed = view !== 'summary';
     const left = 72;
-    const top = detailed ? 86 : 72;
+    const top = detailed ? 112 : 72;
     const width = 904;
     const height = detailed ? 206 : 176;
     const bottom = top + height;
@@ -12821,11 +12830,14 @@ if(false){(function(){
     ].filter(Boolean);
     const labels = layoutChartLabels(eventItems);
     const eventSvg = labels.map(item => {
-      const labelY = 22 + item.level * 21;
-      return `
-        <line x1="${item.x}" y1="${top - 8}" x2="${item.x}" y2="${detailed ? 428 : bottom}" class="cart-op-event-line ${item.tone}"></line>
+      const labelY = 14 + item.level * 27;
+      const labelMarkup = item.hiddenLabel ? '' : `
         <text x="${item.labelX}" y="${labelY}" text-anchor="middle" class="cart-op-event-label ${item.tone}">${escapeHtml(item.label)}</text>
         <text x="${item.labelX}" y="${labelY + 14}" text-anchor="middle" class="cart-op-event-label ${item.tone}">${escapeHtml(chartEventClock(item.time))}</text>
+      `;
+      return `
+        <line x1="${item.x}" y1="${top - 8}" x2="${item.x}" y2="${detailed ? 428 : bottom}" class="cart-op-event-line ${item.tone}"></line>
+        ${labelMarkup}
       `;
     }).join('');
     const markerSvg = eventItems.map(item => {
@@ -12848,12 +12860,15 @@ if(false){(function(){
       ...((model.responseSegments || []).flatMap(segment => [segment.criticalStart, segment.alertTime, segment.exchangeTime])),
       ...(model.exchangeEvents || []).map(event => event._time)
     ].filter(Number.isFinite);
+    const stateTickLabels = stateTicks
+      .sort((a, b) => a - b)
+      .filter((time, index, list) => index === 0 || Math.abs(x(time) - x(list[index - 1])) >= 58);
     const stateBar = detailed ? `
       <text x="12" y="${stateY - 22}" class="cart-op-section-label">Faixa de estados operacionais</text>
       <rect x="${left}" y="${stateY}" width="${width}" height="16" rx="2" class="cart-op-state free"></rect>
       ${responseStateSegments}
       <text x="${left}" y="${stateY + 42}" text-anchor="middle" class="cart-op-axis">${escapeHtml(chartTickLabel(model.period.start, model.period.key, span))}</text>
-      ${stateTicks.map(time => {
+      ${stateTickLabels.map(time => {
         const tx = x(time);
         return Math.abs(tx - left) > 70 && Math.abs(tx - (left + width)) > 70
           ? `<text x="${tx}" y="${stateY + 42}" text-anchor="middle" class="cart-op-axis">${escapeHtml(chartEventClock(time))}</text>`
