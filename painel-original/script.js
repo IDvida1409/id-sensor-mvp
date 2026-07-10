@@ -11246,10 +11246,10 @@ if(false){(function(){
     if(Array.isArray(macFilters) && macFilters.length){
       params.set('mac', macFilters.join(','));
     }
-    params.set('limit', '3000');
+    params.set('limit', '10000');
     params.set('alertLimit', String(CART_ALERT_LIMIT));
-    params.set('telemetryLimit', '1000');
-    params.set('sampleLimit', '3000');
+    params.set('telemetryLimit', '5000');
+    params.set('sampleLimit', '10000');
     return `?${params.toString()}`;
   }
 
@@ -12391,7 +12391,7 @@ if(false){(function(){
     return date.getTime();
   }
 
-  function roomChartPeriodMeta(period, events){
+  function roomChartPeriodMeta(period, events, samples = []){
     const now = Date.now();
     if(period === 'week'){
       return {
@@ -12414,9 +12414,13 @@ if(false){(function(){
       };
     }
     if(period === 'custom'){
-      const times = (events || [])
+      const eventTimes = (events || [])
         .map(event => event._time)
         .filter(Number.isFinite);
+      const sampleTimes = (samples || [])
+        .map(sample => sample.time)
+        .filter(Number.isFinite);
+      const times = [...eventTimes, ...sampleTimes];
       const start = times.length ? Math.min(...times) : now - 48 * 60 * 60000;
       return {
         key:'custom',
@@ -12451,6 +12455,12 @@ if(false){(function(){
     const date = new Date(value || 0);
     if(Number.isNaN(date.getTime())) return '--:--';
     return date.toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' });
+  }
+
+  function chartEventDateTime(value){
+    const date = new Date(value || 0);
+    if(Number.isNaN(date.getTime())) return '--';
+    return `${date.toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit' })} ${date.toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' })}`;
   }
 
   function roomChartBucketPoints(points, start, end, maxPoints){
@@ -12675,7 +12685,7 @@ if(false){(function(){
       ? Math.max(...carts.map(cart => cartRedPercent(cart)))
       : DEFAULT_CART_CALIBRATION.redPercent;
     const chartData = roomChartSamples(state, room);
-    const meta = roomChartPeriodMeta(period, chartData.events);
+    const meta = roomChartPeriodMeta(period, chartData.events, chartData.samples);
     const inRangeEvents = chartData.events.filter(event => event._time >= meta.start && event._time <= meta.end);
     const periodSamples = chartData.samples.filter(point => point.time >= meta.start && point.time <= meta.end);
     let points = periodSamples;
@@ -12754,7 +12764,7 @@ if(false){(function(){
           : null;
         return {
           type:'exchange',
-          label:`Troca ${index + 1}`,
+          label:`Troca ${index + 1}${event.inferred ? ' identificada' : ''}`,
           time:event._time,
           detail:event.detail || event.title || 'Troca de carrinho registrada.',
           response:responseMinutes === null ? 'sem alerta no ciclo' : formatCartDurationFromMs(responseMinutes * 60000, '--')
@@ -12852,6 +12862,7 @@ if(false){(function(){
       x:x(event._time),
       time:event._time,
       label:`Troca ${index + 1}`,
+      detail:chartEventDateTime(event._time),
       tone:'green'
     }));
     const responseAlertItems = (model.responseSegments || [])
@@ -12872,8 +12883,19 @@ if(false){(function(){
     `).join('');
     const markerSvg = eventItems.map(item => {
       const valueAtMarker = points.reduce((best, point) => Math.abs(point.time - item.time) < Math.abs(best.time - item.time) ? point : best, points[0]);
-      return `<circle cx="${item.x}" cy="${y(valueAtMarker?.value || 0)}" r="5" class="${item.tone === 'green' ? 'cart-op-marker-green' : 'cart-op-marker-red'}"></circle>`;
+      return `<circle cx="${item.x}" cy="${y(valueAtMarker?.value || 0)}" r="5" class="${item.tone === 'green' ? 'cart-op-marker-green' : 'cart-op-marker-red'}"><title>${escapeHtml(`${item.label} - ${chartEventDateTime(item.time)}`)}</title></circle>`;
     }).join('');
+    const eventLabelSvg = detailed ? layoutChartLabels(exchangeItems)
+      .filter(item => !item.hiddenLabel)
+      .map(item => {
+        const yOffset = top - 44 - item.level * 18;
+        return `
+          <text x="${item.labelX}" y="${yOffset}" text-anchor="middle" class="cart-op-event-label ${item.tone}">
+            <tspan x="${item.labelX}" dy="0">${escapeHtml(item.label)}</tspan>
+            <tspan x="${item.labelX}" dy="13">${escapeHtml(item.detail || chartEventClock(item.time))}</tspan>
+          </text>
+        `;
+      }).join('') : '';
     const stateY = detailed ? 386 : 306;
     const legendY = detailed ? 438 : 0;
     const responseStateSegments = (model.responseSegments || []).map(segment => {
@@ -12929,6 +12951,7 @@ if(false){(function(){
           : '').join('')}
         ${eventSvg}
         ${markerSvg}
+        ${eventLabelSvg}
         ${stateBar}
       </svg>
     `;
@@ -12987,7 +13010,7 @@ if(false){(function(){
             <span>
               <i class="is-${escapeHtml(row.type)}"></i>
               <strong>${escapeHtml(row.label)}</strong>
-              <small>${escapeHtml(chartEventClock(row.time))}</small>
+              <small>${escapeHtml(chartEventDateTime(row.time))}</small>
               <em>${escapeHtml(row.response)}</em>
             </span>
           `).join('') : '<span><strong>Sem trocas no periodo</strong><small>--</small><em>sem resposta</em></span>'}

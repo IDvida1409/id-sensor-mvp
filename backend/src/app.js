@@ -1700,7 +1700,7 @@ function latestCollectorReadings(db, options = {}) {
 }
 
 function collectorReadingsHistory(db, options = {}) {
-  const limit = Math.max(1, Math.min(500, Number(options.limit || 100)));
+  const limit = Math.max(1, Math.min(10000, Number(options.limit || 100)));
   const macFilters = Array.isArray(options.macFilters) ? options.macFilters.filter(Boolean) : [];
 
   if (macFilters.length) {
@@ -2137,9 +2137,9 @@ function buildEinsteinCartOperationalDataset(db, options = {}) {
       .slice(0, Math.max(1, Math.min(500, Number(options.alertLimit || 120)))),
     telemetryEvents: telemetryEvents
       .sort((a, b) => new Date(a.ts || 0) - new Date(b.ts || 0))
-      .slice(-Math.max(1, Math.min(1000, Number(options.telemetryLimit || 240)))),
+      .slice(-Math.max(1, Math.min(5000, Number(options.telemetryLimit || 240)))),
     chart: {
-      samples: samples.slice(-Math.max(1, Math.min(2000, Number(options.sampleLimit || 500))))
+      samples: samples.slice(-Math.max(1, Math.min(10000, Number(options.sampleLimit || 500))))
     }
   };
 }
