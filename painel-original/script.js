@@ -11249,7 +11249,7 @@ if(false){(function(){
     params.set('limit', '3000');
     params.set('alertLimit', String(CART_ALERT_LIMIT));
     params.set('telemetryLimit', '1000');
-    params.set('sampleLimit', '900');
+    params.set('sampleLimit', '3000');
     return `?${params.toString()}`;
   }
 
