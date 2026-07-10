@@ -12586,6 +12586,30 @@ if(false){(function(){
     return inferred;
   }
 
+  function criticalCycleForExchange(samples, exchange, criticalPercent){
+    if(!exchange) return null;
+    const cartId = exchange.cartId || '';
+    const exchangeTime = exchange._time;
+    if(!cartId || !Number.isFinite(exchangeTime)) return null;
+    const cartSamples = (samples || [])
+      .filter(sample => sample.cartId === cartId && Number.isFinite(sample.time) && sample.time < exchangeTime)
+      .sort((a, b) => a.time - b.time);
+    const lastSample = cartSamples[cartSamples.length - 1] || null;
+    if(!lastSample || lastSample.value < criticalPercent) return null;
+    let criticalStart = lastSample.time;
+    for(let index = cartSamples.length - 1; index >= 0; index -= 1){
+      const sample = cartSamples[index];
+      if(sample.value < criticalPercent) break;
+      criticalStart = sample.time;
+    }
+    return {
+      exchange,
+      criticalStart,
+      criticalEnd:exchangeTime,
+      cartId
+    };
+  }
+
   function roomChartBoundaryPoint(samples, meta, criticalPercent){
     const previous = samples
       .filter(point => point.time < meta.start)
@@ -12644,21 +12668,21 @@ if(false){(function(){
     const officialExchangeEvents = inRangeEvents.filter(event => isExchangeEvent(event) || isRoomEntryEvent(event));
     const inferredExchangeEvents = inferExchangeEventsFromSamples(periodSamples, officialExchangeEvents);
     const exchangeEvents = [...officialExchangeEvents, ...inferredExchangeEvents].sort((a, b) => a._time - b._time);
-    const responsePairForExchange = exchange => {
+    const criticalCycles = exchangeEvents
+      .map(exchange => criticalCycleForExchange(periodSamples, exchange, criticalPercent))
+      .filter(Boolean);
+    const responsePairForExchange = cycle => {
+      const exchange = cycle.exchange;
       const responseCartId = exchange?.cartId || '';
       const sameResponseCart = event => !responseCartId || event.cartId === responseCartId;
-      const responseBoundary = inRangeEvents
-        .filter(event => event._time < exchange._time && sameResponseCart(event))
-        .filter(event => isExchangeEvent(event) || isNonCriticalReadingEvent(event))
-        .sort((a, b) => b._time - a._time)[0];
       const responseAlert = alertEvents
         .filter(event => sameResponseCart(event) && event._time < exchange._time)
-        .filter(event => !responseBoundary || event._time > responseBoundary._time)
+        .filter(event => event._time >= cycle.criticalStart)
         .filter(event => isCriticalEvent(event) && !eventLooksLikeRecurrence(event))
         .sort((a, b) => a._time - b._time)[0] || null;
-      return responseAlert ? { exchange, alert:responseAlert } : null;
+      return responseAlert ? { exchange, alert:responseAlert, cycle } : null;
     };
-    const responsePair = exchangeEvents
+    const responsePair = criticalCycles
       .slice()
       .reverse()
       .map(responsePairForExchange)
@@ -12686,6 +12710,17 @@ if(false){(function(){
       alertTime,
       recurrenceTime,
       exchangeTime,
+      exchangeEvents,
+      criticalCycles,
+      responseSegments:criticalCycles.map(cycle => {
+        const alert = responsePairForExchange(cycle)?.alert || null;
+        return {
+          exchangeTime:cycle.exchange._time,
+          criticalStart:cycle.criticalStart,
+          alertTime:alert?._time || null,
+          cartId:cycle.cartId
+        };
+      }),
       responseLabel,
       timeToCritical,
       alertTotal:alertEvents.filter(event => isCriticalEvent(event) && !eventLooksLikeRecurrence(event)).length || (criticalPoint ? 1 : 0),
@@ -12765,10 +12800,24 @@ if(false){(function(){
         <text x="${gx}" y="${bottom + 26}" text-anchor="middle" class="cart-op-axis">${escapeHtml(chartTickLabel(value, model.period.key, span))}</text>
       `;
     }).join('');
+    const exchangeItems = (model.exchangeEvents || []).map((event, index) => ({
+      x:x(event._time),
+      time:event._time,
+      label:`Troca ${index + 1}`,
+      tone:'green'
+    }));
+    const responseAlertItems = (model.responseSegments || [])
+      .filter(segment => segment.alertTime)
+      .map(segment => ({
+        x:x(segment.alertTime),
+        time:segment.alertTime,
+        label:'Alerta gerado',
+        tone:'red'
+      }));
     const eventItems = [
-      model.alertTime ? { x:x(model.alertTime), time:model.alertTime, label:'Alerta gerado', tone:'red' } : null,
-      detailed && model.recurrenceTime ? { x:x(model.recurrenceTime), time:model.recurrenceTime, label:'Recorrência', tone:'red' } : null,
-      model.exchangeTime ? { x:x(model.exchangeTime), time:model.exchangeTime, label:'Troca do carrinho', tone:'green' } : null
+      ...responseAlertItems,
+      detailed && model.recurrenceTime ? { x:x(model.recurrenceTime), time:model.recurrenceTime, label:'Recorrencia', tone:'red' } : null,
+      ...exchangeItems
     ].filter(Boolean);
     const labels = layoutChartLabels(eventItems);
     const eventSvg = labels.map(item => {
@@ -12785,20 +12834,32 @@ if(false){(function(){
     }).join('');
     const stateY = detailed ? 360 : 306;
     const legendY = detailed ? 420 : 0;
-    const alertX = model.alertTime ? x(model.alertTime) : null;
-    const exchangeX = model.exchangeTime ? x(model.exchangeTime) : null;
-    const freeEnd = alertX || left + width;
-    const criticalEnd = exchangeX || left + width;
+    const responseStateSegments = (model.responseSegments || []).map(segment => {
+      const criticalStartX = x(segment.criticalStart);
+      const alertX = segment.alertTime ? x(segment.alertTime) : null;
+      const exchangeX = x(segment.exchangeTime);
+      const redEndX = alertX || exchangeX;
+      return `
+        <rect x="${criticalStartX}" y="${stateY}" width="${Math.max(0, redEndX - criticalStartX)}" height="16" class="cart-op-state critical"></rect>
+        ${alertX ? `<rect x="${alertX}" y="${stateY}" width="${Math.max(0, exchangeX - alertX)}" height="16" class="cart-op-state exchanged"></rect>` : ''}
+      `;
+    }).join('');
+    const stateTicks = [
+      ...((model.responseSegments || []).flatMap(segment => [segment.criticalStart, segment.alertTime, segment.exchangeTime])),
+      ...(model.exchangeEvents || []).map(event => event._time)
+    ].filter(Number.isFinite);
     const stateBar = detailed ? `
       <text x="12" y="${stateY - 22}" class="cart-op-section-label">Faixa de estados operacionais</text>
-      <rect x="${left}" y="${stateY}" width="${Math.max(0, freeEnd - left)}" height="16" rx="2" class="cart-op-state free"></rect>
-      ${alertX ? `<rect x="${alertX}" y="${stateY}" width="${Math.max(0, criticalEnd - alertX)}" height="16" class="cart-op-state critical"></rect>` : ''}
-      ${exchangeX ? `<rect x="${exchangeX}" y="${stateY}" width="${Math.max(0, left + width - exchangeX)}" height="16" rx="2" class="cart-op-state exchanged"></rect>` : ''}
+      <rect x="${left}" y="${stateY}" width="${width}" height="16" rx="2" class="cart-op-state free"></rect>
+      ${responseStateSegments}
       <text x="${left}" y="${stateY + 42}" text-anchor="middle" class="cart-op-axis">${escapeHtml(chartTickLabel(model.period.start, model.period.key, span))}</text>
-      ${alertX && Math.abs(alertX - left) > 70 ? `<text x="${alertX}" y="${stateY + 42}" text-anchor="middle" class="cart-op-axis">${escapeHtml(chartEventClock(model.alertTime))}</text>` : ''}
-      ${exchangeX && (!alertX || Math.abs(exchangeX - alertX) > 70) ? `<text x="${exchangeX}" y="${stateY + 42}" text-anchor="middle" class="cart-op-axis">${escapeHtml(chartEventClock(model.exchangeTime))}</text>` : ''}
+      ${stateTicks.map(time => {
+        const tx = x(time);
+        return Math.abs(tx - left) > 70 && Math.abs(tx - (left + width)) > 70
+          ? `<text x="${tx}" y="${stateY + 42}" text-anchor="middle" class="cart-op-axis">${escapeHtml(chartEventClock(time))}</text>`
+          : '';
+      }).join('')}
       <text x="${left + width}" y="${stateY + 42}" text-anchor="middle" class="cart-op-axis">${escapeHtml(chartTickLabel(model.period.end, model.period.key, span))}</text>
-
       <circle cx="110" cy="${legendY}" r="5" class="cart-op-dot free"></circle>
       <text x="130" y="${legendY + 5}" class="cart-op-legend-text">Livre</text>
       <circle cx="220" cy="${legendY}" r="5" class="cart-op-dot critical"></circle>
