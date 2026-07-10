@@ -12482,7 +12482,9 @@ if(false){(function(){
         ts:sample.ts,
         source:{ ...sample, type:sample.status === 'critical' ? 'critical' : 'reading' },
         tone:sample.status === 'critical' ? 'critical' : 'free',
-        cartName:sample.cartName || ''
+        cartName:sample.cartName || '',
+        cartId:sample.cartId || '',
+        roomId:sample.roomId || room.id
       }))
       .filter(sample => Number.isFinite(sample.time))
       .sort((a, b) => a.time - b.time);
@@ -12500,7 +12502,9 @@ if(false){(function(){
         ts:event.ts,
         source:event,
         tone:isCriticalEvent(event) ? 'critical' : 'free',
-        cartName:event.cartName || ''
+        cartName:event.cartName || '',
+        cartId:event.cartId || '',
+        roomId:event.roomId || room.id
       }));
     const cartSamples = roomCartsForDetails(state, room)
       .filter(cart => !isObstructedCart(cart))
@@ -12512,7 +12516,9 @@ if(false){(function(){
           ts,
           source:null,
           tone:fillTone(cart) === 'full' ? 'critical' : 'free',
-          cartName:cartDisplayName(cart)
+          cartName:cartDisplayName(cart),
+          cartId:cart.id || '',
+          roomId:room.id
         };
       })
       .filter(sample => Number.isFinite(sample.time));
@@ -12535,6 +12541,49 @@ if(false){(function(){
 
   function isNonCriticalReadingEvent(event){
     return event?.type === 'reading' && !isCriticalEvent(event) && !isObstructionEvent(event);
+  }
+
+  function inferExchangeEventsFromSamples(samples, officialExchangeEvents = []){
+    const sorted = (samples || [])
+      .filter(sample => sample && sample.cartId && Number.isFinite(sample.time))
+      .sort((a, b) => a.time - b.time);
+    const inferred = [];
+    let current = null;
+    let lastSwitchTime = null;
+    sorted.forEach(sample => {
+      if(!current){
+        current = sample;
+        return;
+      }
+      if(sample.cartId === current.cartId){
+        current = sample;
+        return;
+      }
+      const windowEnd = sample.time + 10 * 60 * 1000;
+      const newFuture = sorted.filter(item => item.cartId === sample.cartId && item.time >= sample.time && item.time <= windowEnd).length;
+      const oldFuture = sorted.filter(item => item.cartId === current.cartId && item.time > sample.time && item.time <= windowEnd).length;
+      const recentlySwitched = lastSwitchTime !== null && Math.abs(sample.time - lastSwitchTime) <= 12 * 60 * 1000;
+      if(newFuture < 2 || oldFuture > 1 || recentlySwitched) return;
+      const duplicateOfficial = officialExchangeEvents.some(event => Math.abs((event._time || 0) - sample.time) <= 15 * 60 * 1000);
+      if(!duplicateOfficial){
+        inferred.push({
+          id:`inferred-exchange-${current.cartId}-${sample.cartId}-${sample.ts || sample.time}`,
+          key:`inferred-exchange|${current.cartId}|${sample.cartId}|${sample.ts || sample.time}`,
+          type:'exchange',
+          inferred:true,
+          _time:sample.time,
+          ts:sample.ts || new Date(sample.time).toISOString(),
+          roomId:sample.roomId || current.roomId || '',
+          cartId:current.cartId,
+          cartName:current.cartName || current.cartId,
+          title:'Troca de carrinho identificada',
+          detail:`${current.cartName || current.cartId} saiu; ${sample.cartName || sample.cartId} entrou.`
+        });
+      }
+      lastSwitchTime = sample.time;
+      current = sample;
+    });
+    return inferred;
   }
 
   function roomChartBoundaryPoint(samples, meta, criticalPercent){
@@ -12582,7 +12631,8 @@ if(false){(function(){
     const chartData = roomChartSamples(state, room);
     const meta = roomChartPeriodMeta(period, chartData.events);
     const inRangeEvents = chartData.events.filter(event => event._time >= meta.start && event._time <= meta.end);
-    let points = chartData.samples.filter(point => point.time >= meta.start && point.time <= meta.end);
+    const periodSamples = chartData.samples.filter(point => point.time >= meta.start && point.time <= meta.end);
+    let points = periodSamples;
     points = roomChartBucketPoints(points, meta.start, meta.end, meta.maxPoints);
     points = normalizeRoomChartPoints(chartData.samples, points, meta, criticalPercent);
 
@@ -12591,7 +12641,9 @@ if(false){(function(){
     const criticalEvents = inRangeEvents.filter(event => isCriticalEvent(event) && !isObstructionEvent(event));
     const alertEvents = inRangeEvents.filter(event => event.type === 'alert' && !isObstructionEvent(event));
     const recurrenceEvents = inRangeEvents.filter(event => eventLooksLikeRecurrence(event) && isCriticalEvent(event));
-    const exchangeEvents = inRangeEvents.filter(event => isExchangeEvent(event) || isRoomEntryEvent(event));
+    const officialExchangeEvents = inRangeEvents.filter(event => isExchangeEvent(event) || isRoomEntryEvent(event));
+    const inferredExchangeEvents = inferExchangeEventsFromSamples(periodSamples, officialExchangeEvents);
+    const exchangeEvents = [...officialExchangeEvents, ...inferredExchangeEvents].sort((a, b) => a._time - b._time);
     const responsePairForExchange = exchange => {
       const responseCartId = exchange?.cartId || '';
       const sameResponseCart = event => !responseCartId || event.cartId === responseCartId;
