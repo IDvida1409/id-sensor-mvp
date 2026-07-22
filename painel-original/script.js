@@ -9889,6 +9889,7 @@ if(false){(function(){
   const ROOM_READING_RECENT_MS = 30 * 60 * 1000;
   const CART_EXCHANGE_CONFIRM_READINGS = 2;
   const CART_EXCHANGE_OLD_SILENCE_MS = 4 * 60 * 1000;
+  const CHART_EXCHANGE_MIN_RETURN_MS = 30 * 60 * 1000;
   const CART_LOST_AFTER_MS = 24 * 60 * 60 * 1000;
   const CART_TRANSIT_FLOW_ENABLED = false;
   const OBSOLETE_CART_IDS = new Set(['cart-flat-03']);
@@ -12618,6 +12619,48 @@ if(false){(function(){
     return inferred.filter(event => event._time < official[0]._time).slice(-1);
   }
 
+  function inferValidatedExchangeEventsFromSamples(samples){
+    const sorted = (samples || [])
+      .filter(sample => sample && sample.cartId && Number.isFinite(sample.time))
+      .sort((a, b) => a.time - b.time);
+    const exchanges = [];
+    let previous = null;
+    sorted.forEach(sample => {
+      if(!previous){
+        previous = sample;
+        return;
+      }
+      if(sample.cartId === previous.cartId){
+        previous = sample;
+        return;
+      }
+      const returningOld = sorted.find(item => item.cartId === previous.cartId && item.time > sample.time) || null;
+      const returnGap = returningOld ? returningOld.time - sample.time : null;
+      if(returnGap !== null && returnGap <= CHART_EXCHANGE_MIN_RETURN_MS){
+        previous = sample;
+        return;
+      }
+      exchanges.push({
+        id:`validated-exchange-${previous.cartId}-${sample.cartId}-${sample.ts || sample.time}`,
+        key:`validated-exchange|${previous.cartId}|${sample.cartId}|${sample.ts || sample.time}`,
+        type:'exchange',
+        inferred:true,
+        validated:true,
+        _time:sample.time,
+        ts:sample.ts || new Date(sample.time).toISOString(),
+        roomId:sample.roomId || previous.roomId || '',
+        cartId:previous.cartId,
+        cartName:previous.cartName || previous.cartId,
+        enteringCartId:sample.cartId,
+        enteringCartName:sample.cartName || sample.cartId,
+        title:'Troca de carrinho validada',
+        detail:`${previous.cartName || previous.cartId} saiu; ${sample.cartName || sample.cartId} entrou. ${returningOld ? `${previous.cartName || previous.cartId} voltou depois de ${formatCartDurationFromMs(returnGap, '--')}.` : `${previous.cartName || previous.cartId} ainda não voltou a comunicar.`}`
+      });
+      previous = sample;
+    });
+    return dedupeExchangeEvents(exchanges);
+  }
+
   function criticalCycleForExchange(samples, exchange, criticalPercent){
     if(!exchange) return null;
     const cartId = exchange.cartId || '';
@@ -12697,12 +12740,10 @@ if(false){(function(){
     const criticalEvents = inRangeEvents.filter(event => isCriticalEvent(event) && !isObstructionEvent(event));
     const alertEvents = inRangeEvents.filter(event => event.type === 'alert' && !isObstructionEvent(event));
     const recurrenceEvents = inRangeEvents.filter(event => eventLooksLikeRecurrence(event) && isCriticalEvent(event));
-    const officialExchangeEvents = inRangeEvents.filter(event => isExchangeEvent(event));
-    const inferredExchangeEvents = filterInferredExchangeEvents(
-      inferExchangeEventsFromSamples(periodSamples, officialExchangeEvents),
-      officialExchangeEvents
+    const exchangeEvents = dedupeExchangeEvents(
+      inferValidatedExchangeEventsFromSamples(chartData.samples)
+        .filter(event => event._time >= meta.start && event._time <= meta.end)
     );
-    const exchangeEvents = dedupeExchangeEvents([...officialExchangeEvents, ...inferredExchangeEvents]);
     const criticalCycles = exchangeEvents
       .map(exchange => criticalCycleForExchange(periodSamples, exchange, criticalPercent))
       .filter(Boolean);
@@ -12785,7 +12826,7 @@ if(false){(function(){
       .sort((a, b) => a.x - b.x);
     const lanes = [];
     return sorted.map(item => {
-      const lane = lanes.findIndex(lastX => Math.abs(item.x - lastX) >= 92);
+      const lane = lanes.findIndex(lastX => Math.abs(item.x - lastX) >= 112);
       if(lane >= 0){
         lanes[lane] = item.x;
         return {
@@ -12795,7 +12836,7 @@ if(false){(function(){
           hiddenLabel:false
         };
       }
-      if(lanes.length < 4){
+      if(lanes.length < 5){
         lanes.push(item.x);
         return {
           ...item,
@@ -12807,7 +12848,7 @@ if(false){(function(){
       return {
         ...item,
         labelX:clampNumber(item.x, 82, 994),
-        level:3,
+        level:4,
         hiddenLabel:true
       };
     });
@@ -12885,7 +12926,17 @@ if(false){(function(){
       const valueAtMarker = points.reduce((best, point) => Math.abs(point.time - item.time) < Math.abs(best.time - item.time) ? point : best, points[0]);
       return `<circle cx="${item.x}" cy="${y(valueAtMarker?.value || 0)}" r="5" class="${item.tone === 'green' ? 'cart-op-marker-green' : 'cart-op-marker-red'}"><title>${escapeHtml(`${item.label} - ${chartEventDateTime(item.time)}`)}</title></circle>`;
     }).join('');
-    const eventLabelSvg = '';
+    const eventLabelSvg = detailed ? layoutChartLabels(exchangeItems)
+      .filter(item => !item.hiddenLabel)
+      .map(item => {
+        const yOffset = top - 30 - item.level * 18;
+        return `
+          <text x="${item.labelX}" y="${yOffset}" text-anchor="middle" class="cart-op-event-label ${item.tone}">
+            <tspan x="${item.labelX}" dy="0">${escapeHtml(item.label)}</tspan>
+            <tspan x="${item.labelX}" dy="13">${escapeHtml(chartEventDateTime(item.time))}</tspan>
+          </text>
+        `;
+      }).join('') : '';
     const stateY = detailed ? 386 : 306;
     const legendY = detailed ? 438 : 0;
     const responseStateSegments = (model.responseSegments || []).map(segment => {
