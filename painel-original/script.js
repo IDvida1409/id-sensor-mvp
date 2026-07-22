@@ -12885,17 +12885,7 @@ if(false){(function(){
       const valueAtMarker = points.reduce((best, point) => Math.abs(point.time - item.time) < Math.abs(best.time - item.time) ? point : best, points[0]);
       return `<circle cx="${item.x}" cy="${y(valueAtMarker?.value || 0)}" r="5" class="${item.tone === 'green' ? 'cart-op-marker-green' : 'cart-op-marker-red'}"><title>${escapeHtml(`${item.label} - ${chartEventDateTime(item.time)}`)}</title></circle>`;
     }).join('');
-    const eventLabelSvg = detailed ? layoutChartLabels(exchangeItems)
-      .filter(item => !item.hiddenLabel)
-      .map(item => {
-        const yOffset = top - 44 - item.level * 18;
-        return `
-          <text x="${item.labelX}" y="${yOffset}" text-anchor="middle" class="cart-op-event-label ${item.tone}">
-            <tspan x="${item.labelX}" dy="0">${escapeHtml(item.label)}</tspan>
-            <tspan x="${item.labelX}" dy="13">${escapeHtml(item.detail || chartEventClock(item.time))}</tspan>
-          </text>
-        `;
-      }).join('') : '';
+    const eventLabelSvg = '';
     const stateY = detailed ? 386 : 306;
     const legendY = detailed ? 438 : 0;
     const responseStateSegments = (model.responseSegments || []).map(segment => {
