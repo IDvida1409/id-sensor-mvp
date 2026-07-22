@@ -12464,6 +12464,12 @@ if(false){(function(){
     return `${date.toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit' })} ${date.toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' })}`;
   }
 
+  function chartEventDayLabel(value){
+    const date = new Date(value || 0);
+    if(Number.isNaN(date.getTime())) return '--/--';
+    return date.toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit' });
+  }
+
   function roomChartBucketPoints(points, start, end, maxPoints){
     if(points.length <= maxPoints) return points;
     const span = Math.max(1, end - start);
@@ -12854,6 +12860,48 @@ if(false){(function(){
     });
   }
 
+  function chartExchangeDisplayItems(events, period, span){
+    const shouldGroupByDay = period === 'month' || (period === 'custom' && span > 7 * 24 * 60 * 60000);
+    if(!shouldGroupByDay){
+      return (events || []).map((event, index) => ({
+        time:event._time,
+        label:`Troca ${index + 1}`,
+        detail:chartEventDateTime(event._time),
+        tooltip:`Troca ${index + 1} - ${chartEventDateTime(event._time)}`,
+        count:1
+      }));
+    }
+
+    const groups = new Map();
+    (events || []).forEach(event => {
+      const date = new Date(event._time || 0);
+      if(Number.isNaN(date.getTime())) return;
+      const key = `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
+      const current = groups.get(key) || [];
+      current.push(event);
+      groups.set(key, current);
+    });
+
+    return Array.from(groups.values())
+      .map(group => {
+        const sorted = group.slice().sort((a, b) => a._time - b._time);
+        const first = sorted[0];
+        const last = sorted[sorted.length - 1];
+        const middleTime = first._time + (last._time - first._time) / 2;
+        const count = sorted.length;
+        return {
+          time:middleTime,
+          label:count > 1 ? `${count} trocas` : '1 troca',
+          detail:chartEventDayLabel(first._time),
+          tooltip:count > 1
+            ? `${count} trocas em ${chartEventDayLabel(first._time)} - ${chartEventDateTime(first._time)} a ${chartEventDateTime(last._time)}`
+            : `1 troca - ${chartEventDateTime(first._time)}`,
+          count
+        };
+      })
+      .sort((a, b) => a.time - b.time);
+  }
+
   function renderRoomOperationalGraphSvg(model, view = 'detail'){
     const detailed = view !== 'summary';
     const left = 72;
@@ -12899,11 +12947,9 @@ if(false){(function(){
         <text x="${gx}" y="${bottom + 26}" text-anchor="middle" class="cart-op-axis">${escapeHtml(chartTickLabel(value, model.period.key, span))}</text>
       `;
     }).join('');
-    const exchangeItems = (model.exchangeEvents || []).map((event, index) => ({
-      x:x(event._time),
-      time:event._time,
-      label:`Troca ${index + 1}`,
-      detail:chartEventDateTime(event._time),
+    const exchangeItems = chartExchangeDisplayItems(model.exchangeEvents || [], model.period.key, span).map(item => ({
+      ...item,
+      x:x(item.time),
       tone:'green'
     }));
     const responseAlertItems = (model.responseSegments || [])
@@ -12924,7 +12970,7 @@ if(false){(function(){
     `).join('');
     const markerSvg = eventItems.map(item => {
       const valueAtMarker = points.reduce((best, point) => Math.abs(point.time - item.time) < Math.abs(best.time - item.time) ? point : best, points[0]);
-      return `<circle cx="${item.x}" cy="${y(valueAtMarker?.value || 0)}" r="5" class="${item.tone === 'green' ? 'cart-op-marker-green' : 'cart-op-marker-red'}"><title>${escapeHtml(`${item.label} - ${chartEventDateTime(item.time)}`)}</title></circle>`;
+      return `<circle cx="${item.x}" cy="${y(valueAtMarker?.value || 0)}" r="${item.count && item.count > 1 ? 6.5 : 5}" class="${item.tone === 'green' ? 'cart-op-marker-green' : 'cart-op-marker-red'}"><title>${escapeHtml(item.tooltip || `${item.label} - ${chartEventDateTime(item.time)}`)}</title></circle>`;
     }).join('');
     const eventLabelSvg = detailed ? layoutChartLabels(exchangeItems)
       .filter(item => !item.hiddenLabel)
@@ -12933,7 +12979,7 @@ if(false){(function(){
         return `
           <text x="${item.labelX}" y="${yOffset}" text-anchor="middle" class="cart-op-event-label ${item.tone}">
             <tspan x="${item.labelX}" dy="0">${escapeHtml(item.label)}</tspan>
-            <tspan x="${item.labelX}" dy="13">${escapeHtml(chartEventDateTime(item.time))}</tspan>
+            <tspan x="${item.labelX}" dy="13">${escapeHtml(item.detail || chartEventDateTime(item.time))}</tspan>
           </text>
         `;
       }).join('') : '';
