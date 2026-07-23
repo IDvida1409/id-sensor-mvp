@@ -12453,6 +12453,18 @@ if(false){(function(){
     return date.toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit' });
   }
 
+  function chartDailyTickValues(start, end){
+    const first = new Date(start || Date.now());
+    first.setHours(0, 0, 0, 0);
+    const last = new Date(end || Date.now());
+    last.setHours(0, 0, 0, 0);
+    const ticks = [];
+    for(let cursor = first.getTime(); cursor <= last.getTime(); cursor = addDaysMs(cursor, 1)){
+      ticks.push(cursor);
+    }
+    return ticks;
+  }
+
   function chartDayPeriodLabel(value){
     const date = new Date(value || 0);
     if(Number.isNaN(date.getTime())) return 'sem período';
@@ -12977,11 +12989,14 @@ if(false){(function(){
         <text x="${left - 14}" y="${gy + 5}" text-anchor="end" class="cart-op-axis">${value}%</text>
       `;
     }).join('');
-    const gridX = Array.from({ length:tickCount + 1 }, (_, index) => model.period.start + (span * index) / tickCount).map(value => {
+    const tickValues = model.period.key === 'poc'
+      ? chartDailyTickValues(model.period.start, model.period.end)
+      : Array.from({ length:tickCount + 1 }, (_, index) => model.period.start + (span * index) / tickCount);
+    const gridX = tickValues.map(value => {
       const gx = x(value);
       return `
-        <line x1="${gx}" y1="${top}" x2="${gx}" y2="${bottom}" class="cart-op-grid"></line>
-        <text x="${gx}" y="${bottom + 26}" text-anchor="middle" class="cart-op-axis">${escapeHtml(chartTickLabel(value, model.period.key, span))}</text>
+        <line x1="${gx}" y1="${top}" x2="${gx}" y2="${bottom}" class="cart-op-grid ${model.period.key === 'poc' ? 'is-day' : ''}"></line>
+        <text x="${gx}" y="${bottom + 26}" text-anchor="middle" class="cart-op-axis ${model.period.key === 'poc' ? 'is-poc-day' : ''}">${escapeHtml(chartTickLabel(value, model.period.key, span))}</text>
       `;
     }).join('');
     const exchangeItems = chartExchangeDisplayItems(model.exchangeEvents || [], model.period.key, span).map(item => ({

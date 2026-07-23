@@ -17972,6 +17972,16 @@ body.analytic-report-open{overflow:hidden}
   font-weight:800;
 }
 
+.cart-op-axis.is-poc-day{
+  font-size:9px;
+  font-weight:850;
+}
+
+.cart-op-grid.is-day{
+  stroke:#e3edf9;
+  stroke-dasharray:2 6;
+}
+
 .cart-op-label{
   font-size:12px;
   font-weight:900;
