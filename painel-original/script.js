@@ -1244,10 +1244,9 @@ function buildGraphModal(d, graphState = {period:'daily', view:'summary'}){
           <div class="graph-workspace-toolbar">
             <div class="graph-workspace-left">
               <div class="graph-workspace-period">
-                ${periodButton('daily','Diário')}
-                ${periodButton('weekly','Semanal')}
-                ${periodButton('monthly','Mensal')}
-                ${periodButton('custom','Histórico')}
+                ${periodButton('daily','Hoje')}
+                ${periodButton('weekly','7 dias')}
+                ${periodButton('monthly','POC')}
               </div>
               ${customRange}
             </div>
@@ -12364,19 +12363,19 @@ if(false){(function(){
     const raw = String(mode || 'chart-detail-day');
     const pieces = raw.split('-');
     const validViews = new Set(['summary', 'detail']);
-    const validPeriods = new Set(['day', 'week', 'month', 'custom']);
+    const validPeriods = new Set(['day', 'week', 'poc', 'month', 'custom']);
     let view = 'detail';
     let period = 'day';
     pieces.slice(1).forEach(piece => {
       if(validViews.has(piece)) view = piece;
-      if(validPeriods.has(piece)) period = piece;
+      if(validPeriods.has(piece)) period = (piece === 'month' || piece === 'custom') ? 'poc' : piece;
     });
     return { view, period, mode:`chart-${view}-${period}` };
   }
 
   function roomChartModeString(view, period){
     const nextView = view === 'summary' ? 'summary' : 'detail';
-    const nextPeriod = ['day', 'week', 'month', 'custom'].includes(period) ? period : 'day';
+    const nextPeriod = ['day', 'week', 'poc'].includes(period) ? period : ((period === 'month' || period === 'custom') ? 'poc' : 'day');
     return `chart-${nextView}-${nextPeriod}`;
   }
 
@@ -12392,6 +12391,8 @@ if(false){(function(){
     return date.getTime();
   }
 
+  const CART_POC_START_MS = new Date('2026-07-03T00:00:00-03:00').getTime();
+
   function roomChartPeriodMeta(period, events, samples = []){
     const now = Date.now();
     if(period === 'week'){
@@ -12404,39 +12405,21 @@ if(false){(function(){
         maxPoints:40
       };
     }
-    if(period === 'month'){
+    if(period === 'poc' || period === 'month' || period === 'custom'){
       return {
-        key:'month',
-        title:'últimos 30 dias',
-        range:'Exibir por: 30 dias',
-        start:now - 30 * 24 * 60 * 60000,
+        key:'poc',
+        title:'POC desde 03/07',
+        range:'Exibir por: POC',
+        start:CART_POC_START_MS,
         end:now,
-        maxPoints:44
-      };
-    }
-    if(period === 'custom'){
-      const eventTimes = (events || [])
-        .map(event => event._time)
-        .filter(Number.isFinite);
-      const sampleTimes = (samples || [])
-        .map(sample => sample.time)
-        .filter(Number.isFinite);
-      const times = [...eventTimes, ...sampleTimes];
-      const start = times.length ? Math.min(...times) : now - 48 * 60 * 60000;
-      return {
-        key:'custom',
-        title:'histórico disponível',
-        range:'Exibir por: histórico',
-        start,
-        end:now,
-        maxPoints:52
+        maxPoints:64
       };
     }
     const start = now - 24 * 60 * 60000;
     return {
       key:'day',
-      title:'ultimas 24 horas',
-      range:'Exibir por: 24 horas',
+      title:'últimas 24 horas',
+      range:'Exibir por: hoje',
       start,
       end:now,
       maxPoints:46
@@ -12472,9 +12455,9 @@ if(false){(function(){
 
   function chartDayPeriodLabel(value){
     const date = new Date(value || 0);
-    if(Number.isNaN(date.getTime())) return 'sem periodo';
+    if(Number.isNaN(date.getTime())) return 'sem período';
     const hour = date.getHours();
-    if(hour >= 7 && hour < 12) return 'manha';
+    if(hour >= 7 && hour < 12) return 'manhã';
     if(hour >= 12 && hour < 18) return 'tarde';
     if(hour >= 18) return 'noite';
     return 'madrugada';
@@ -12835,10 +12818,10 @@ if(false){(function(){
     const eventRows = [
       ...criticalStartEvents.map(event => ({
         type:'critical',
-        label:`Critico - ${event.cartName}`,
+        label:`Entrou em crítico - ${event.cartName}`,
         time:event.time,
         detail:'Sala acima do limite definido.',
-        response:'inicio do ciclo'
+        response:'acima do limite'
       })),
       ...exchangeEvents.map(event => {
         const cycle = criticalCycles.find(item => item.exchange === event) || null;
@@ -12850,10 +12833,10 @@ if(false){(function(){
         const toCart = event.enteringCartName || event.enteringCartId || 'CR';
         return {
           type:'exchange',
-          label:`Troca ${fromCart} -> ${toCart}`,
+          label:`Carrinho trocado ${fromCart} -> ${toCart}`,
           time:event._time,
           detail:event.detail || 'Troca de carrinho registrada.',
-          response:responseMinutes === null ? 'sem alerta no ciclo' : formatCartDurationFromMs(responseMinutes * 60000, '--')
+          response:responseMinutes === null ? 'sem crítico antes da troca' : `retirada em ${formatCartDurationFromMs(responseMinutes * 60000, '--')}`
         };
       })
     ].sort((a, b) => a.time - b.time);
@@ -12916,7 +12899,7 @@ if(false){(function(){
   }
 
   function chartExchangeDisplayItems(events, period, span){
-    const shouldGroupByDay = period === 'week' || period === 'month' || (period === 'custom' && span > 7 * 24 * 60 * 60000);
+    const shouldGroupByDay = period === 'week' || period === 'poc' || period === 'month' || (period === 'custom' && span > 7 * 24 * 60 * 60000);
     if(!shouldGroupByDay){
       return (events || []).map(event => ({
         time:event._time,
@@ -13063,21 +13046,20 @@ if(false){(function(){
 
   function renderRoomChartMode(state, room, view = 'detail', period = 'day'){
     const activeView = view === 'summary' ? 'summary' : 'detail';
-    const activePeriod = ['day', 'week', 'month', 'custom'].includes(period) ? period : 'day';
+    const activePeriod = ['day', 'week', 'poc'].includes(period) ? period : ((period === 'month' || period === 'custom') ? 'poc' : 'day');
     const model = roomOperationalChartModel(state, room, activePeriod);
     const periodOptions = [
-      ['day', 'Diário'],
-      ['week', 'Semanal'],
-      ['month', 'Mensal'],
-      ['custom', 'Histórico']
+      ['day', 'Hoje'],
+      ['week', '7 dias'],
+      ['poc', 'POC']
     ];
     const cards = [
       { label:'Críticos', value:String(model.criticalTotal), red:model.criticalTotal > 0 },
       { label:'Trocas', value:String(model.exchangeTotal), green:model.exchangeTotal > 0 },
-      { label:'Resposta média', value:model.averageResponseLabel, red:model.averageResponseLabel !== '--' },
+      { label:'Resposta média', value:model.averageResponseLabel },
       { label:'Maior tempo crítico', value:model.maxCriticalLabel, red:model.maxCriticalLabel !== '--' },
-      { label:'Pico crítico', value:model.peakCriticalPeriod },
-      { label:'Pico de trocas', value:model.peakExchangePeriod, green:model.peakExchangePeriod !== '--' }
+      { label:'Período com mais críticos', value:model.peakCriticalPeriod, red:model.peakCriticalPeriod !== '--' },
+      { label:'Período com mais trocas', value:model.peakExchangePeriod, green:model.peakExchangePeriod !== '--' }
     ];
     const allEventRows = model.eventRows || [];
     const eventRows = allEventRows.slice(-6);
