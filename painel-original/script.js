@@ -1247,7 +1247,7 @@ function buildGraphModal(d, graphState = {period:'daily', view:'summary'}){
                 ${periodButton('daily','Diário')}
                 ${periodButton('weekly','Semanal')}
                 ${periodButton('monthly','Mensal')}
-                ${periodButton('custom','Personalizado')}
+                ${periodButton('custom','Histórico')}
               </div>
               ${customRange}
             </div>
@@ -12470,6 +12470,30 @@ if(false){(function(){
     return date.toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit' });
   }
 
+  function chartDayPeriodLabel(value){
+    const date = new Date(value || 0);
+    if(Number.isNaN(date.getTime())) return 'sem periodo';
+    const hour = date.getHours();
+    if(hour >= 7 && hour < 12) return 'manha';
+    if(hour >= 12 && hour < 18) return 'tarde';
+    if(hour >= 18) return 'noite';
+    return 'madrugada';
+  }
+
+  function chartBestDayPeriod(events){
+    const counts = new Map();
+    (events || []).forEach(event => {
+      const time = event._time || event.time;
+      if(!Number.isFinite(time)) return;
+      const label = chartDayPeriodLabel(time);
+      counts.set(label, (counts.get(label) || 0) + 1);
+    });
+    const sorted = Array.from(counts.entries()).sort((a, b) => b[1] - a[1]);
+    if(!sorted.length) return '--';
+    const [label, count] = sorted[0];
+    return `${label} (${count})`;
+  }
+
   function roomChartBucketPoints(points, start, end, maxPoints){
     if(points.length <= maxPoints) return points;
     const span = Math.max(1, end - start);
@@ -12772,11 +12796,7 @@ if(false){(function(){
     const exchangeEvent = responsePair?.exchange || exchangeEvents[exchangeEvents.length - 1] || null;
     const alertEvent = responsePair?.alert
       || (!exchangeEvent ? (alertEvents.find(event => isCriticalEvent(event) && !eventLooksLikeRecurrence(event)) || criticalEvents[0] || null) : null);
-    const recurrenceEvent = recurrenceEvents.find(event => !alertEvent || event._time > alertEvent._time)
-      || criticalEvents.find((event, index) => index > 0 && (!alertEvent || event._time > alertEvent._time))
-      || null;
     const alertTime = alertEvent?._time || criticalPoint?.time || null;
-    const recurrenceTime = recurrenceEvent?._time || null;
     const exchangeTime = exchangeEvent?._time || detectedExchangePoint?.time || null;
     const responseLabel = alertTime && exchangeTime && exchangeTime >= alertTime
       ? formatCartDurationFromMs(exchangeTime - alertTime, '--')
@@ -12784,44 +12804,79 @@ if(false){(function(){
     const timeToCritical = criticalPoint
       ? formatCartDurationFromMs(Math.max(0, criticalPoint.time - points[0].time), '--')
       : 'sem crítico';
+    const responseSegments = criticalCycles.map(cycle => {
+      const alert = responsePairForExchange(cycle)?.alert || null;
+      return {
+        exchangeTime:cycle.exchange._time,
+        criticalStart:cycle.criticalStart,
+        alertTime:alert?._time || null,
+        cartId:cycle.cartId
+      };
+    });
+    const responseDurations = responseSegments
+      .filter(segment => segment.alertTime && segment.exchangeTime >= segment.alertTime)
+      .map(segment => segment.exchangeTime - segment.alertTime);
+    const averageResponseLabel = responseDurations.length
+      ? formatCartDurationFromMs(Math.round(responseDurations.reduce((sum, value) => sum + value, 0) / responseDurations.length), '--')
+      : '--';
+    const criticalDurations = criticalCycles
+      .map(cycle => Math.max(0, cycle.criticalEnd - cycle.criticalStart))
+      .filter(Number.isFinite);
+    const maxCriticalLabel = criticalDurations.length
+      ? formatCartDurationFromMs(Math.max(...criticalDurations), '--')
+      : '--';
+    const criticalStartEvents = criticalCycles.map(cycle => ({
+      type:'critical',
+      time:cycle.criticalStart,
+      _time:cycle.criticalStart,
+      cartId:cycle.cartId,
+      cartName:(periodSamples.find(sample => sample.cartId === cycle.cartId)?.cartName || cycle.cartId || 'CR')
+    }));
+    const eventRows = [
+      ...criticalStartEvents.map(event => ({
+        type:'critical',
+        label:`Critico - ${event.cartName}`,
+        time:event.time,
+        detail:'Sala acima do limite definido.',
+        response:'inicio do ciclo'
+      })),
+      ...exchangeEvents.map(event => {
+        const cycle = criticalCycles.find(item => item.exchange === event) || null;
+        const pair = cycle ? responsePairForExchange(cycle) : null;
+        const responseMinutes = pair?.alert
+          ? Math.max(0, Math.round((event._time - pair.alert._time) / 60000))
+          : null;
+        const fromCart = event.cartName || event.cartId || 'CR';
+        const toCart = event.enteringCartName || event.enteringCartId || 'CR';
+        return {
+          type:'exchange',
+          label:`Troca ${fromCart} -> ${toCart}`,
+          time:event._time,
+          detail:event.detail || 'Troca de carrinho registrada.',
+          response:responseMinutes === null ? 'sem alerta no ciclo' : formatCartDurationFromMs(responseMinutes * 60000, '--')
+        };
+      })
+    ].sort((a, b) => a.time - b.time);
     return {
       summary,
       period:meta,
       points,
       criticalPercent:Math.round(criticalPercent || 50),
       alertTime,
-      recurrenceTime,
       exchangeTime,
       exchangeEvents,
       criticalCycles,
-      responseSegments:criticalCycles.map(cycle => {
-        const alert = responsePairForExchange(cycle)?.alert || null;
-        return {
-          exchangeTime:cycle.exchange._time,
-          criticalStart:cycle.criticalStart,
-          alertTime:alert?._time || null,
-          cartId:cycle.cartId
-        };
-      }),
-      eventRows:exchangeEvents.map((event, index) => {
-        const cycle = criticalCycles.find(item => item.exchange === event) || null;
-        const pair = cycle ? responsePairForExchange(cycle) : null;
-        const responseMinutes = pair?.alert
-          ? Math.max(0, Math.round((event._time - pair.alert._time) / 60000))
-          : null;
-        return {
-          type:'exchange',
-          label:`Troca ${index + 1}${event.inferred ? ' identificada' : ''}`,
-          time:event._time,
-          detail:event.detail || event.title || 'Troca de carrinho registrada.',
-          response:responseMinutes === null ? 'sem alerta no ciclo' : formatCartDurationFromMs(responseMinutes * 60000, '--')
-        };
-      }),
+      responseSegments,
+      eventRows,
       responseLabel,
+      averageResponseLabel,
+      maxCriticalLabel,
       timeToCritical,
       alertTotal:alertEvents.filter(event => isCriticalEvent(event) && !eventLooksLikeRecurrence(event)).length || (criticalPoint ? 1 : 0),
-      recurrenceTotal:recurrenceEvents.length,
       exchangeTotal:exchangeEvents.length || (detectedExchangePoint ? 1 : 0),
+      criticalTotal:criticalStartEvents.length || (criticalPoint ? 1 : 0),
+      peakCriticalPeriod:chartBestDayPeriod(criticalStartEvents),
+      peakExchangePeriod:chartBestDayPeriod(exchangeEvents),
       roomName:room.name || roomBlockLabel(room)
     };
   }
@@ -12861,13 +12916,13 @@ if(false){(function(){
   }
 
   function chartExchangeDisplayItems(events, period, span){
-    const shouldGroupByDay = period === 'month' || (period === 'custom' && span > 7 * 24 * 60 * 60000);
+    const shouldGroupByDay = period === 'week' || period === 'month' || (period === 'custom' && span > 7 * 24 * 60 * 60000);
     if(!shouldGroupByDay){
-      return (events || []).map((event, index) => ({
+      return (events || []).map(event => ({
         time:event._time,
-        label:`Troca ${index + 1}`,
+        label:'Troca',
         detail:chartEventDateTime(event._time),
-        tooltip:`Troca ${index + 1} - ${chartEventDateTime(event._time)}`,
+        tooltip:`Troca - ${chartEventDateTime(event._time)}`,
         count:1
       }));
     }
@@ -12905,11 +12960,10 @@ if(false){(function(){
   function renderRoomOperationalGraphSvg(model, view = 'detail'){
     const detailed = view !== 'summary';
     const left = 72;
-    const top = detailed ? 112 : 72;
+    const top = detailed ? 96 : 72;
     const width = 904;
-    const height = detailed ? 206 : 176;
+    const height = detailed ? 242 : 176;
     const bottom = top + height;
-    const endY = detailed ? 470 : 350;
     const span = Math.max(1, model.period.end - model.period.start);
     const x = time => left + (clampNumber(time, model.period.start, model.period.end) - model.period.start) / span * width;
     const y = value => bottom - (clampNumber(value, 0, 100) / 100) * height;
@@ -12962,63 +13016,27 @@ if(false){(function(){
       }));
     const eventItems = [
       ...responseAlertItems,
-      detailed && model.recurrenceTime ? { x:x(model.recurrenceTime), time:model.recurrenceTime, label:'Recorrencia', tone:'red' } : null,
       ...exchangeItems
     ].filter(Boolean);
     const eventSvg = eventItems.map(item => `
-      <line x1="${item.x}" y1="${top - 8}" x2="${item.x}" y2="${detailed ? 428 : bottom}" class="cart-op-event-line ${item.tone}"></line>
+      <line x1="${item.x}" y1="${top}" x2="${item.x}" y2="${bottom}" class="cart-op-event-line ${item.tone}"></line>
     `).join('');
     const markerSvg = eventItems.map(item => {
       const valueAtMarker = points.reduce((best, point) => Math.abs(point.time - item.time) < Math.abs(best.time - item.time) ? point : best, points[0]);
       return `<circle cx="${item.x}" cy="${y(valueAtMarker?.value || 0)}" r="${item.count && item.count > 1 ? 6.5 : 5}" class="${item.tone === 'green' ? 'cart-op-marker-green' : 'cart-op-marker-red'}"><title>${escapeHtml(item.tooltip || `${item.label} - ${chartEventDateTime(item.time)}`)}</title></circle>`;
     }).join('');
-    const eventLabelSvg = detailed ? layoutChartLabels(exchangeItems)
-      .filter(item => !item.hiddenLabel)
-      .map(item => {
-        const yOffset = top - 30 - item.level * 18;
-        return `
-          <text x="${item.labelX}" y="${yOffset}" text-anchor="middle" class="cart-op-event-label ${item.tone}">
-            <tspan x="${item.labelX}" dy="0">${escapeHtml(item.label)}</tspan>
-            <tspan x="${item.labelX}" dy="13">${escapeHtml(item.detail || chartEventDateTime(item.time))}</tspan>
-          </text>
-        `;
-      }).join('') : '';
-    const stateY = detailed ? 386 : 306;
-    const legendY = detailed ? 438 : 0;
-    const responseStateSegments = (model.responseSegments || []).map(segment => {
-      const criticalStartX = x(segment.criticalStart);
-      const alertX = segment.alertTime ? x(segment.alertTime) : null;
-      const exchangeX = x(segment.exchangeTime);
-      const redEndX = alertX || exchangeX;
-      return `
-        <rect x="${criticalStartX}" y="${stateY}" width="${Math.max(0, redEndX - criticalStartX)}" height="16" class="cart-op-state critical"></rect>
-        ${alertX ? `<rect x="${alertX}" y="${stateY}" width="${Math.max(0, exchangeX - alertX)}" height="16" class="cart-op-state exchanged"></rect>` : ''}
-      `;
-    }).join('');
+    const legendY = detailed ? 400 : 0;
     const stateBar = detailed ? `
-      <rect x="${left}" y="${stateY}" width="${width}" height="16" rx="2" class="cart-op-state free"></rect>
-      ${responseStateSegments}
-      <text x="${left}" y="${stateY + 42}" text-anchor="middle" class="cart-op-axis">${escapeHtml(chartTickLabel(model.period.start, model.period.key, span))}</text>
-      <text x="${left + width}" y="${stateY + 42}" text-anchor="middle" class="cart-op-axis">${escapeHtml(chartTickLabel(model.period.end, model.period.key, span))}</text>
       <circle cx="110" cy="${legendY}" r="5" class="cart-op-dot free"></circle>
       <text x="130" y="${legendY + 5}" class="cart-op-legend-text">Livre</text>
       <circle cx="220" cy="${legendY}" r="5" class="cart-op-dot critical"></circle>
       <text x="240" y="${legendY + 5}" class="cart-op-legend-text">Crítico</text>
-      <circle cx="632" cy="${legendY}" r="5" class="cart-op-dot exchanged"></circle>
-      <text x="652" y="${legendY + 5}" class="cart-op-legend-text">Troca concluída</text>
+      <circle cx="360" cy="${legendY}" r="5" class="cart-op-dot exchanged"></circle>
+      <text x="380" y="${legendY + 5}" class="cart-op-legend-text">Troca</text>
 
-      <polyline points="220,${legendY + 14} 220,${legendY + 40} 300,${legendY + 40}" class="cart-op-response-link red"></polyline>
-      <polygon points="300,${legendY + 40} 292,${legendY + 35} 292,${legendY + 45}" class="cart-op-response-arrow red"></polygon>
-      <polyline points="632,${legendY + 14} 632,${legendY + 40} 570,${legendY + 40}" class="cart-op-response-link green"></polyline>
-      <polygon points="570,${legendY + 40} 578,${legendY + 35} 578,${legendY + 45}" class="cart-op-response-arrow green"></polygon>
-      <rect x="300" y="${legendY + 18}" width="270" height="48" rx="6" class="cart-op-response-box"></rect>
-      <circle cx="330" cy="${legendY + 42}" r="9" class="cart-op-response-clock"></circle>
-      <path d="M330 ${legendY + 36} V${legendY + 43} L335 ${legendY + 47}" class="cart-op-response-clock-line"></path>
-      <text x="350" y="${legendY + 38}" class="cart-op-response-title">Tempo de resposta: ${escapeHtml(model.responseLabel)}</text>
-      <text x="350" y="${legendY + 56}" class="cart-op-response-sub">Entre o alerta gerado e a troca concluída.</text>
     ` : '';
     return `
-      <svg class="cart-op-graph-svg ${detailed ? 'is-detail' : 'is-summary'}" viewBox="0 0 1080 ${detailed ? 530 : 370}" role="img" aria-label="Evolução operacional da ocupação da sala">
+      <svg class="cart-op-graph-svg ${detailed ? 'is-detail' : 'is-summary'}" viewBox="0 0 1080 ${detailed ? 430 : 370}" role="img" aria-label="Evolução operacional da ocupação da sala">
         <defs>
           <linearGradient id="cartOpAreaGradient" x1="0" x2="0" y1="0" y2="1">
             <stop offset="0%" stop-color="#1d7cff" stop-opacity=".18"></stop>
@@ -13038,7 +13056,6 @@ if(false){(function(){
           : '').join('')}
         ${eventSvg}
         ${markerSvg}
-        ${eventLabelSvg}
         ${stateBar}
       </svg>
     `;
@@ -13052,17 +13069,18 @@ if(false){(function(){
       ['day', 'Diário'],
       ['week', 'Semanal'],
       ['month', 'Mensal'],
-      ['custom', 'Personalizado']
+      ['custom', 'Histórico']
     ];
     const cards = [
-      { label:'Tempo até crítico', value:model.timeToCritical },
-      { label:'Tempo de retirada', value:model.responseLabel, red:model.responseLabel !== '--' && model.responseLabel !== 'em aberto' },
-      { label:'Alertas críticos', value:String(model.alertTotal), red:model.alertTotal > 0 },
-      { label:'Recorrências', value:String(model.recurrenceTotal), red:model.recurrenceTotal > 0 },
-      { label:'Trocas registradas', value:String(model.exchangeTotal), green:model.exchangeTotal > 0 }
+      { label:'Críticos', value:String(model.criticalTotal), red:model.criticalTotal > 0 },
+      { label:'Trocas', value:String(model.exchangeTotal), green:model.exchangeTotal > 0 },
+      { label:'Resposta média', value:model.averageResponseLabel, red:model.averageResponseLabel !== '--' },
+      { label:'Maior tempo crítico', value:model.maxCriticalLabel, red:model.maxCriticalLabel !== '--' },
+      { label:'Pico crítico', value:model.peakCriticalPeriod },
+      { label:'Pico de trocas', value:model.peakExchangePeriod, green:model.peakExchangePeriod !== '--' }
     ];
     const allEventRows = model.eventRows || [];
-    const eventRows = allEventRows.slice(-3);
+    const eventRows = allEventRows.slice(-6);
     const hiddenEventRows = Math.max(0, allEventRows.length - eventRows.length);
     return `
       <section class="cart-op-chart-shell">
@@ -13100,8 +13118,8 @@ if(false){(function(){
               <small>${escapeHtml(chartEventDateTime(row.time))}</small>
               <em>${escapeHtml(row.response)}</em>
             </span>
-          `).join('') : '<span><strong>Sem trocas no periodo</strong><small>--</small><em>sem resposta</em></span>'}
-          ${hiddenEventRows ? `<span class="is-summary"><strong>Mais ${hiddenEventRows} troca(s)</strong><small>${escapeHtml(model.period.title)}</small><em>Veja a lista completa na telemetria.</em></span>` : ''}
+          `).join('') : '<span><strong>Sem eventos no periodo</strong><small>--</small><em>sem critico ou troca</em></span>'}
+          ${hiddenEventRows ? `<span class="is-summary"><strong>Mais ${hiddenEventRows} evento(s)</strong><small>${escapeHtml(model.period.title)}</small><em>Resumo dos eventos do periodo.</em></span>` : ''}
         </div>
         <div class="cart-op-kpis">
           ${cards.map(card => `
