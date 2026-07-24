@@ -9958,6 +9958,7 @@ if(false){(function(){
     carts: [],
     telemetryEvents:[],
     backendChartSamples:[],
+    backendValidatedExchanges:[],
     alerts:[],
     alertSettings:clone(DEFAULT_CART_ALERT_SETTINGS)
   };
@@ -10108,6 +10109,7 @@ if(false){(function(){
       carts: Array.isArray(state?.carts) ? state.carts : [],
       telemetryEvents: Array.isArray(state?.telemetryEvents) ? state.telemetryEvents : [],
       backendChartSamples: Array.isArray(state?.backendChartSamples) ? state.backendChartSamples : [],
+      backendValidatedExchanges: Array.isArray(state?.backendValidatedExchanges) ? state.backendValidatedExchanges : [],
       alerts: Array.isArray(state?.alerts) ? state.alerts : [],
       backendOperationalMode: state?.backendOperationalMode === true,
       alertSettings: normalizeCartAlertSettings(state?.alertSettings)
@@ -10274,6 +10276,7 @@ if(false){(function(){
         ...(saved?.state || payload),
         telemetryEvents:[],
         backendChartSamples:[],
+        backendValidatedExchanges:[],
         alerts:[]
       }).state;
       cartConfigBackendLoaded = true;
@@ -11356,6 +11359,16 @@ if(false){(function(){
     const nextSampleSignature = JSON.stringify(nextSamples.map(sample => [sample.ts, sample.cartId, sample.fill, sample.status]));
     if(sampleSignature !== nextSampleSignature){
       state.backendChartSamples = nextSamples;
+      changed = true;
+    }
+
+    const nextValidatedExchanges = Array.isArray(operational.chart?.validatedExchanges)
+      ? operational.chart.validatedExchanges
+      : [];
+    const exchangeSignature = JSON.stringify((state.backendValidatedExchanges || []).map(event => [event.key || event.id, event.ts, event.cartId, event.enteringCartId]));
+    const nextExchangeSignature = JSON.stringify(nextValidatedExchanges.map(event => [event.key || event.id, event.ts, event.cartId, event.enteringCartId]));
+    if(exchangeSignature !== nextExchangeSignature){
+      state.backendValidatedExchanges = nextValidatedExchanges;
       changed = true;
     }
 
@@ -12765,8 +12778,17 @@ if(false){(function(){
     const criticalEvents = inRangeEvents.filter(event => isCriticalEvent(event) && !isObstructionEvent(event));
     const alertEvents = inRangeEvents.filter(event => event.type === 'alert' && !isObstructionEvent(event));
     const recurrenceEvents = inRangeEvents.filter(event => eventLooksLikeRecurrence(event) && isCriticalEvent(event));
+    const backendValidatedExchanges = (state.backendValidatedExchanges || [])
+      .map(event => ({
+        ...event,
+        _time:new Date(event.ts || event._time || 0).getTime()
+      }))
+      .filter(event => Number.isFinite(event._time));
+    const sourceExchangeEvents = backendValidatedExchanges.length
+      ? backendValidatedExchanges
+      : inferValidatedExchangeEventsFromSamples(chartData.samples);
     const exchangeEvents = dedupeExchangeEvents(
-      inferValidatedExchangeEventsFromSamples(chartData.samples)
+      sourceExchangeEvents
         .filter(event => event._time >= meta.start && event._time <= meta.end)
     );
     const criticalCycles = exchangeEvents
@@ -15024,6 +15046,7 @@ if(false){(function(){
       alertSettings:saved?.alertSettings || saved?.state?.alertSettings || normalizedSettings,
       telemetryEvents:[],
       backendChartSamples:[],
+      backendValidatedExchanges:Array.isArray(currentState.backendValidatedExchanges) ? currentState.backendValidatedExchanges : [],
       alerts:Array.isArray(currentState.alerts) ? currentState.alerts : []
     }).state;
     cartConfigBackendLoaded = true;
@@ -15051,6 +15074,7 @@ if(false){(function(){
         ...payloadState,
         telemetryEvents:[],
         backendChartSamples:[],
+        backendValidatedExchanges:Array.isArray(currentState.backendValidatedExchanges) ? currentState.backendValidatedExchanges : [],
         alerts:Array.isArray(currentState.alerts) ? currentState.alerts : []
       }).state;
       if(hasCartConfigurationData(currentState) && !hasCartConfigurationData(backendState)){
@@ -16172,7 +16196,7 @@ if(false){(function(){
     const current = readStableAlertState();
     const incoming = state && typeof state === 'object' ? state : {};
     const merged = { ...current, ...incoming };
-    ['rooms', 'carts', 'telemetryEvents', 'backendChartSamples', 'alerts'].forEach(key => {
+    ['rooms', 'carts', 'telemetryEvents', 'backendChartSamples', 'backendValidatedExchanges', 'alerts'].forEach(key => {
       if(!Array.isArray(incoming[key]) && Array.isArray(current[key])){
         merged[key] = current[key];
       }

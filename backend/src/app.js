@@ -103,6 +103,7 @@ const EINSTEIN_CART_CRITICAL_FIRST_ALERT_MS = Number(process.env.EINSTEIN_CART_C
 const EINSTEIN_CART_ALERT_RECURRENCE_MS = Number(process.env.EINSTEIN_CART_ALERT_RECURRENCE_MS || 30 * 60 * 1000);
 const EINSTEIN_CART_EXCHANGE_CONFIRM_READINGS = Number(process.env.EINSTEIN_CART_EXCHANGE_CONFIRM_READINGS || 2);
 const EINSTEIN_CART_EXCHANGE_OLD_SILENCE_MS = Number(process.env.EINSTEIN_CART_EXCHANGE_OLD_SILENCE_MS || 4 * 60 * 1000);
+const EINSTEIN_CART_EXCHANGE_MIN_RETURN_MS = Number(process.env.EINSTEIN_CART_EXCHANGE_MIN_RETURN_MS || 30 * 60 * 1000);
 const EINSTEIN_CART_SENSORS = [
   { id: 'c01', name: 'C01', sensorId: 'de08dbf47311', roomId: EINSTEIN_CART_ROOM_ID, roomName: EINSTEIN_CART_ROOM_NAME },
   { id: 'c02', name: 'C02', sensorId: 'c4894994a485', roomId: EINSTEIN_CART_ROOM_ID, roomName: EINSTEIN_CART_ROOM_NAME }
@@ -1825,6 +1826,73 @@ function createOperationalAlert(alert) {
   };
 }
 
+function dedupeOperationalExchangeEvents(events) {
+  return (Array.isArray(events) ? events : [])
+    .filter((event) => event && Number.isFinite(Number(event._time)))
+    .sort((a, b) => Number(a._time) - Number(b._time))
+    .reduce((acc, event) => {
+      const duplicate = acc.some((item) => Math.abs(Number(item._time) - Number(event._time)) <= 15 * 60 * 1000);
+      if (!duplicate) acc.push(event);
+      return acc;
+    }, []);
+}
+
+function validatedOperationalExchangesFromSamples(samples) {
+  const sorted = (Array.isArray(samples) ? samples : [])
+    .map((sample) => ({
+      ...sample,
+      _time: new Date(sample?.ts || 0).getTime()
+    }))
+    .filter((sample) => sample && sample.cartId && Number.isFinite(sample._time))
+    .sort((a, b) => a._time - b._time);
+
+  const exchanges = [];
+  let previous = null;
+  for (const sample of sorted) {
+    if (!previous) {
+      previous = sample;
+      continue;
+    }
+    if (sample.cartId === previous.cartId) {
+      previous = sample;
+      continue;
+    }
+
+    const returningOld = sorted.find((item) => item.cartId === previous.cartId && item._time > sample._time) || null;
+    const returnGap = returningOld ? returningOld._time - sample._time : null;
+    if (returnGap !== null && returnGap <= EINSTEIN_CART_EXCHANGE_MIN_RETURN_MS) {
+      previous = sample;
+      continue;
+    }
+
+    const event = {
+      id: `validated-exchange-${previous.cartId}-${sample.cartId}-${sample.ts || sample._time}`,
+      key: `validated-exchange|${previous.cartId}|${sample.cartId}|${sample.ts || sample._time}`,
+      source: 'backend',
+      clientId: EINSTEIN_CART_CLIENT_ID,
+      ts: sample.ts || new Date(sample._time).toISOString(),
+      _time: sample._time,
+      type: 'exchange',
+      inferred: true,
+      validated: true,
+      roomId: sample.roomId || previous.roomId || EINSTEIN_CART_ROOM_ID,
+      roomName: sample.roomName || previous.roomName || EINSTEIN_CART_ROOM_NAME,
+      cartId: previous.cartId,
+      cartName: previous.cartName || previous.cartId,
+      enteringCartId: sample.cartId,
+      enteringCartName: sample.cartName || sample.cartId,
+      title: 'Troca de carrinho validada',
+      detail: `${previous.cartName || previous.cartId} saiu; ${sample.cartName || sample.cartId} entrou. ${returningOld ? `${previous.cartName || previous.cartId} voltou depois de ${durationLabelFromMinutes(Math.round(returnGap / 60000))}.` : `${previous.cartName || previous.cartId} ainda não voltou a comunicar.`}`,
+      fill: 0,
+      distanceMm: finiteNumberOrNull(sample.distanceMm)
+    };
+    exchanges.push(event);
+    previous = sample;
+  }
+
+  return dedupeOperationalExchangeEvents(exchanges).map(({ _time, ...event }) => event);
+}
+
 function isOfficialOperationalReading(reading) {
   return reading?.officialReading === true || reading?.officialReading === 1;
 }
@@ -2139,7 +2207,8 @@ function buildEinsteinCartOperationalDataset(db, options = {}) {
       .sort((a, b) => new Date(a.ts || 0) - new Date(b.ts || 0))
       .slice(-Math.max(1, Math.min(5000, Number(options.telemetryLimit || 240)))),
     chart: {
-      samples: samples.slice(-Math.max(1, Math.min(10000, Number(options.sampleLimit || 500))))
+      samples: samples.slice(-Math.max(1, Math.min(10000, Number(options.sampleLimit || 500)))),
+      validatedExchanges: validatedOperationalExchangesFromSamples(samples)
     }
   };
 }
