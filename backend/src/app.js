@@ -13,6 +13,7 @@ const { getDb } = require('./db/database');
 const { seedDatabase } = require('./db/seed');
 const { id, activationCode } = require('./utils/ids');
 const { buildDeviceCard } = require('./services/deviceCard');
+const { buildCartAnalyticReportHtml } = require('./services/cartAnalyticReport');
 const { sendActivationEmail } = require('./services/emailService');
 const { gatewayStatusSummary, getMqttBridgeStatus, parseMokoRawPayload } = require('./services/mqttBridge');
 const { sendExpoPush } = require('./services/pushService');
@@ -1735,7 +1736,7 @@ function collectorReadingsHistory(db, options = {}) {
 }
 
 function operationalReadingsHistory(db, options = {}) {
-  const limit = Math.max(1, Math.min(10000, Number(options.limit || 2000)));
+  const limit = Math.max(1, Math.min(60000, Number(options.limit || 2000)));
   const macFilters = Array.isArray(options.macFilters) && options.macFilters.length
     ? options.macFilters.filter(Boolean)
     : EINSTEIN_CART_SENSORS.map((sensor) => sensor.sensorId);
@@ -2207,7 +2208,7 @@ function buildEinsteinCartOperationalDataset(db, options = {}) {
       .sort((a, b) => new Date(a.ts || 0) - new Date(b.ts || 0))
       .slice(-Math.max(1, Math.min(5000, Number(options.telemetryLimit || 240)))),
     chart: {
-      samples: samples.slice(-Math.max(1, Math.min(10000, Number(options.sampleLimit || 500)))),
+      samples: samples.slice(-Math.max(1, Math.min(60000, Number(options.sampleLimit || 500)))),
       validatedExchanges: validatedOperationalExchangesFromSamples(samples)
     }
   };
@@ -3501,6 +3502,22 @@ addRoute('GET', '/api/cart-tracking/chart', async ({ query, res }) => {
     room: dataset.room,
     chart: dataset.chart
   });
+});
+
+addRoute('GET', '/relatorios/carrinhos/einstein', async ({ res }) => {
+  const dataset = buildEinsteinCartOperationalDataset(getDb(), {
+    limit: 60000,
+    alertLimit: 500,
+    telemetryLimit: 5000,
+    sampleLimit: 60000
+  });
+  const body = buildCartAnalyticReportHtml(dataset);
+  res.writeHead(200, {
+    'Content-Type': 'text/html; charset=utf-8',
+    'Cache-Control': 'no-store',
+    'Content-Length': Buffer.byteLength(body)
+  });
+  res.end(body);
 });
 
 addRoute('GET', '/api/cart-tracking/calibration/:mac', async ({ params, res }) => {
