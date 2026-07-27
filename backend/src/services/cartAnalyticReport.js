@@ -311,13 +311,43 @@ function buildOccupancyChart(metrics) {
   const x = (time) => left + ((time - startMs) / span) * plotW;
   const y = (fill) => top + (1 - clamp(fill, 0, 100) / 100) * plotH;
   const samples = buildDailyOccupancyPoints(metrics, startMs, endMs);
-  const points = samples.map((sample) => `${x(sample.time).toFixed(1)},${y(sample.fill).toFixed(1)}`).join(' ');
-  const areaPoints = `${left},${y(0).toFixed(1)} ${points} ${x(samples[samples.length - 1].time).toFixed(1)},${y(0).toFixed(1)}`;
   const ticks = buildAxisTicks(startMs, endMs);
   const yTicks = [0, 25, 50, 75, 100];
-  const exchangeDots = metrics.exchanges.map((exchange) => {
-    const cx = x(exchange._time).toFixed(1);
-    return `<line x1="${cx}" y1="${top}" x2="${cx}" y2="${top + plotH + 16}" stroke="#0ca66c" stroke-width="1.1" stroke-dasharray="5 5"/><circle cx="${cx}" cy="${y(100).toFixed(1)}" r="3.4" fill="#0ca66c" stroke="#fff" stroke-width="1.7"/>`;
+  const exchangesByDay = new Map();
+  for (const exchange of metrics.exchanges) {
+    const day = localDayStartMs(exchange.ts);
+    if (day === null) continue;
+    exchangesByDay.set(day, (exchangesByDay.get(day) || 0) + 1);
+  }
+  const maxDailyExchanges = Math.max(...Array.from(exchangesByDay.values()), 1);
+  const slots = Math.max(1, samples.length);
+  const slotW = plotW / slots;
+  const barW = Math.max(6, slotW * 0.42);
+  const bars = samples.map((sample, index) => {
+    const dayExchanges = exchangesByDay.get(sample.time) || 0;
+    const greenPercent = dayExchanges ? Math.min(18, 5 + (dayExchanges / maxDailyExchanges) * 13) : 0;
+    const fill = clamp(sample.fill, 0, 100);
+    const normalPercent = Math.min(fill, metrics.criticalPercent);
+    const criticalPercent = Math.max(0, fill - metrics.criticalPercent);
+    const normalHeight = (normalPercent / 100) * plotH;
+    const exchangeHeight = (greenPercent / 100) * plotH;
+    const criticalHeight = Math.max(0, (criticalPercent / 100) * plotH - exchangeHeight);
+    const center = left + slotW * (index + 0.5);
+    const bx = center - barW / 2;
+    let cursor = top + plotH;
+    const parts = [];
+    if (normalHeight > 0.5) {
+      parts.push(`<rect x="${bx.toFixed(1)}" y="${(cursor - normalHeight).toFixed(1)}" width="${barW.toFixed(1)}" height="${normalHeight.toFixed(1)}" fill="#1269d3"/>`);
+      cursor -= normalHeight;
+    }
+    if (exchangeHeight > 0.5) {
+      parts.push(`<rect x="${bx.toFixed(1)}" y="${(cursor - exchangeHeight).toFixed(1)}" width="${barW.toFixed(1)}" height="${exchangeHeight.toFixed(1)}" fill="#0ca66c"/>`);
+      cursor -= exchangeHeight;
+    }
+    if (criticalHeight > 0.5) {
+      parts.push(`<rect x="${bx.toFixed(1)}" y="${(cursor - criticalHeight).toFixed(1)}" width="${barW.toFixed(1)}" height="${criticalHeight.toFixed(1)}" fill="#ef334e"/>`);
+    }
+    return parts.join('');
   }).join('');
   const grid = yTicks.map((tick) => `
     <line x1="${left}" y1="${y(tick).toFixed(1)}" x2="${left + plotW}" y2="${y(tick).toFixed(1)}" stroke="#d8e6f6" stroke-dasharray="4 6"/>
@@ -339,12 +369,10 @@ function buildOccupancyChart(metrics) {
       </defs>
       <rect x="0" y="0" width="${width}" height="${height}" fill="#fff"/>
       <g class="axis-labels">${grid}${xGrid}</g>
-      <polygon points="${areaPoints}" fill="url(#area)"/>
       <line x1="${left}" y1="${criticalY.toFixed(1)}" x2="${left + plotW}" y2="${criticalY.toFixed(1)}" stroke="#ef334e" stroke-width="1.2" stroke-dasharray="5 5"/>
       <rect class="critical-label-bg" x="${left + 8}" y="${(criticalY - 17).toFixed(1)}" width="88" height="13" rx="3" fill="#fff" opacity=".96"/>
       <text x="${left + 12}" y="${(criticalY - 7).toFixed(1)}" fill="#ef334e" font-size="8.2" font-weight="900">Limite crítico ${metrics.criticalPercent}%</text>
-      <polyline points="${points}" fill="none" stroke="#1269d3" stroke-width="3.5" stroke-linejoin="round"/>
-      ${exchangeDots}
+      ${bars}
     </svg>
   `;
 }
@@ -378,8 +406,11 @@ function buildCartAnalyticReportHtml(dataset) {
   const busiestExchanges = [...metrics.activity].sort((a, b) => b.exchanges - a.exchanges)[0] || { label: '--', exchanges: 0 };
   const periodRanges = { Madrugada: '00h às 06h', Manhã: '06h às 12h', Tarde: '12h às 18h', Noite: '18h às 00h' };
   const totalOperationalMinutes = Math.max(1, metrics.freeMinutes + metrics.criticalMinutes);
-  const freeWidth = Math.max(0, (metrics.freeMinutes / totalOperationalMinutes) * 100);
-  const criticalWidth = Math.max(0, (metrics.criticalMinutes / totalOperationalMinutes) * 100);
+  const responseVisualMinutes = Math.max(0, metrics.avgResponseMinutes);
+  const conditionTotalMinutes = Math.max(1, metrics.freeMinutes + metrics.criticalMinutes + responseVisualMinutes);
+  const freeWidth = Math.max(0, (metrics.freeMinutes / conditionTotalMinutes) * 100);
+  const responseWidth = Math.max(0, (responseVisualMinutes / conditionTotalMinutes) * 100);
+  const criticalWidth = Math.max(0, (metrics.criticalMinutes / conditionTotalMinutes) * 100);
   const withAlert = metrics.responseWindows.length;
   const alertsPerDay = formatDecimal(metrics.criticalAlerts.length / Math.max(1, metrics.dayCount));
   const exchangesPerDay = formatDecimal(metrics.exchanges.length / Math.max(1, metrics.dayCount));
@@ -401,7 +432,7 @@ function buildCartAnalyticReportHtml(dataset) {
     .device-strip{margin-top:14px;border:1px solid #bfd4ef;border-radius:5px;display:block;padding:15px 18px}.device-strip h2{margin:0 0 9px;color:#064ca8;font-size:15.5px}.device-meta{display:grid;grid-template-columns:115px 120px 1fr;align-items:start;gap:16px;color:#3d5069;font-size:9px;font-weight:800;padding-top:9px;border-top:1px solid #e4edf8}.device-meta span{display:inline-flex;flex-direction:column;gap:3px}.device-meta b{display:inline;margin:0;color:#657891;font-size:8px;text-transform:uppercase}.device-meta .scope-item strong{color:var(--navy);font-size:9.5px;line-height:1.3}
     .kpis{display:grid;grid-template-columns:repeat(7,1fr);margin-top:12px;border:1px solid var(--line);border-radius:5px;overflow:hidden}.kpi{min-height:62px;padding:10px 7px;text-align:center;border-right:1px solid var(--line)}.kpi:last-child{border-right:0}.kpi small{display:block;color:#62758d;font-size:8px;font-weight:900}.kpi strong{display:block;margin-top:4px;color:#1577ff;font-size:17px;line-height:1}.kpi strong.red{color:var(--red)}.kpi strong.green{color:var(--green)}.kpi strong.orange{color:var(--orange)}.kpi span{display:block;margin-top:5px;color:#6d7e94;font-size:7.5px;font-weight:800}
     .section{margin-top:12px;border:1px solid #bfd4ef;border-radius:5px;padding:12px;break-inside:avoid}.section-title{display:flex;gap:8px;margin-bottom:9px}.section-title b{width:18px;height:18px;display:grid;place-items:center;border-radius:4px;background:#0753b5;color:#fff;font-size:9px}.section-title h3{margin:0;color:#0753b5;font-size:10.5px;line-height:1.15;text-transform:uppercase}.section-title p{margin:3px 0 0;color:#687b94;font-size:8.4px;font-weight:700;line-height:1.35}
-    .history-grid{display:grid;grid-template-columns:1fr;gap:10px}.chart-card{min-height:315px;padding:8px 0 2px}.chart-head{display:flex;justify-content:center;gap:20px;color:#425776;font-size:7.8px;font-weight:900;margin-bottom:2px}.chart-head i,.legend i{display:inline-block;width:12px;height:3px;margin-right:4px;vertical-align:2px;border-radius:3px;background:var(--blue)}.chart-head .crit i{background:var(--red)}.chart-head .exchange i{background:var(--green)}.axis-labels text{fill:#082a5d;font-size:8px;font-weight:900}.reading-box{border-top:1px solid var(--line);padding-top:9px;display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.reading-box h4{grid-column:1/-1;margin:0 0 2px;padding-bottom:5px;color:var(--navy);font-size:9px;text-transform:uppercase;border-bottom:1px solid var(--line)}.reading-box div{min-height:42px;padding:7px 8px;border:1px solid var(--line);border-radius:4px;background:#fbfdff}.reading-box small{display:block;color:#64768f;font-size:7.8px;font-weight:900}.reading-box strong{display:block;margin-top:2px;color:var(--navy);font-size:12px}.reading-box .red{color:var(--red)}.reading-box .green{color:var(--green)}.two-col{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}.condition-bar{height:26px;display:flex;overflow:hidden;border-radius:5px;border:1px solid rgba(5,38,88,.08);margin:14px 0 10px}.condition-bar span{display:block}.condition-bar .normal{background:var(--blue)}.condition-bar .critical{background:var(--red)}.legend{display:grid;grid-template-columns:1fr 1fr;gap:7px 10px;color:#53647b;font-size:7.2px;font-weight:800}.legend div{display:grid;grid-template-columns:9px 1fr auto;align-items:center;gap:5px}.legend i{width:9px;height:9px;border-radius:2px;margin:0}.legend i.blue{background:var(--blue)}.legend i.red{background:var(--red)}.legend i.green{background:var(--green)}.legend i.attention{background:var(--orange)}.legend i.critical{background:var(--red)}.condition-total{text-align:center;padding-top:9px;margin-top:10px;border-top:1px solid var(--line)}.condition-total small{color:#708097;font-size:7px;font-weight:800}.condition-total strong{display:block;margin-top:2px;color:var(--navy);font-size:14px}
+    .history-grid{display:grid;grid-template-columns:1fr;gap:10px}.chart-card{min-height:315px;padding:8px 0 2px}.chart-head{display:flex;justify-content:center;gap:20px;color:#425776;font-size:7.8px;font-weight:900;margin-bottom:2px}.chart-head i,.legend i{display:inline-block;width:12px;height:8px;margin-right:4px;vertical-align:-1px;border-radius:2px;background:var(--blue)}.chart-head .crit i{background:var(--red)}.chart-head .exchange i{background:var(--green)}.axis-labels text{fill:#082a5d;font-size:8px;font-weight:900}.reading-box{border-top:1px solid var(--line);padding-top:9px;display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.reading-box h4{grid-column:1/-1;margin:0 0 2px;padding-bottom:5px;color:var(--navy);font-size:9px;text-transform:uppercase;border-bottom:1px solid var(--line)}.reading-box div{min-height:42px;padding:7px 8px;border:1px solid var(--line);border-radius:4px;background:#fbfdff}.reading-box small{display:block;color:#64768f;font-size:7.8px;font-weight:900}.reading-box strong{display:block;margin-top:2px;color:var(--navy);font-size:12px}.reading-box .red{color:var(--red)}.reading-box .green{color:var(--green)}.two-col{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}.condition-bar{height:26px;display:flex;overflow:hidden;border-radius:5px;border:1px solid rgba(5,38,88,.08);margin:14px 0 10px}.condition-bar span{display:block}.condition-bar .normal{background:var(--blue)}.condition-bar .attention{background:var(--orange)}.condition-bar .critical{background:var(--red)}.legend{display:grid;grid-template-columns:1fr 1fr;gap:7px 10px;color:#53647b;font-size:7.2px;font-weight:800}.legend div{display:grid;grid-template-columns:9px 1fr auto;align-items:center;gap:5px}.legend i{width:9px;height:9px;border-radius:2px;margin:0}.legend i.blue{background:var(--blue)}.legend i.red{background:var(--red)}.legend i.green{background:var(--green)}.legend i.attention{background:var(--orange)}.legend i.critical{background:var(--red)}.condition-total{text-align:center;padding-top:9px;margin-top:10px;border-top:1px solid var(--line)}.condition-total small{color:#708097;font-size:7px;font-weight:800}.condition-total strong{display:block;margin-top:2px;color:var(--navy);font-size:14px}
     .mini-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.mini{border:1px solid var(--line);border-radius:4px;min-height:48px;display:grid;place-items:center;text-align:center;padding:7px 6px;background:#fff}.mini small{color:#60738c;font-size:7.2px;font-weight:900;text-transform:uppercase}.mini strong{color:var(--blue);font-size:14px;margin-top:2px}.green{color:var(--green)!important}.red{color:var(--red)!important}.orange{color:var(--orange)!important}
     table{width:100%;border-collapse:collapse;font-size:8px;color:#263c5d}th,td{padding:7px 8px;border:1px solid var(--line);text-align:center;white-space:nowrap}th{background:#f5f9ff;color:#395171;font-size:7.2px;text-transform:uppercase}td:first-child,th:first-child{text-align:left}td strong{color:var(--navy)}.note{margin-top:9px;padding:8px 9px;color:#546881;background:var(--soft);border-left:3px solid var(--blue);border-radius:4px;font-size:8.2px;font-weight:700;line-height:1.45}.analysis{display:grid;gap:7px;color:#344b68;font-size:8.6px;line-height:1.5;font-weight:700}.analysis p{margin:0}.signature{margin:18px 0 10px;display:flex;align-items:flex-end;justify-content:space-between;gap:40px}.signature .line{width:260px;text-align:center;color:#53647b;font-size:8px;font-weight:800}.signature .line:before{content:"";display:block;height:28px;border-bottom:1px solid #53647b;margin-bottom:5px}.generated{text-align:right;color:#718197;font-size:7.5px;font-weight:800}.generated strong{display:block;color:var(--navy);font-size:9px;margin-top:2px}footer{margin:10px -28px -28px;margin-top:auto;padding:11px 28px;min-height:42px;display:flex;align-items:center;justify-content:space-between;background:var(--navy);color:#dce9fb;font-size:8px;font-weight:800}.powered{display:flex;align-items:center;gap:8px}.powered img{width:64px;height:24px;object-fit:contain;padding:3px 5px;border-radius:4px;background:#fff}
     @media print{body{background:#fff}.sheet{box-shadow:none;margin:0;width:794px}}
@@ -445,8 +476,8 @@ function buildCartAnalyticReportHtml(dataset) {
       <div class="history-grid">
         <div class="chart-card">
           <div class="chart-head">
-            <span><i></i>Ocupação</span>
-            <span class="crit"><i></i>Limite crítico</span>
+            <span><i></i>Dentro do limite</span>
+            <span class="crit"><i></i>Em crítico</span>
             <span class="exchange"><i></i>Troca</span>
           </div>
           ${buildOccupancyChart(metrics)}
@@ -466,6 +497,7 @@ function buildCartAnalyticReportHtml(dataset) {
         <div class="section-title"><b>2</b><div><h3>Tempo operacional da sala</h3><p>Mostra quanto tempo a sala permaneceu abaixo do limite, em condição crítica e aguardando retirada após alerta crítico.</p></div></div>
         <div class="condition-bar">
           <span class="normal" style="width:${freeWidth}%"></span>
+          <span class="attention" style="width:${responseWidth}%"></span>
           <span class="critical" style="width:${criticalWidth}%"></span>
         </div>
         <div class="legend">
