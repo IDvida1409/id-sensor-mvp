@@ -64,6 +64,15 @@ function formatTime(value) {
   }).format(new Date(time));
 }
 
+function formatDecimal(value, digits = 1) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return '0';
+  return number.toLocaleString('pt-BR', {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits
+  });
+}
+
 function dateParts(value) {
   const time = parseTime(value);
   if (time === null) return null;
@@ -79,6 +88,12 @@ function dateParts(value) {
     month: Number(byType.month),
     day: Number(byType.day)
   };
+}
+
+function reportDayKey(value) {
+  const parts = dateParts(value);
+  if (!parts) return '';
+  return `${parts.year}-${String(parts.month).padStart(2, '0')}-${String(parts.day).padStart(2, '0')}`;
 }
 
 function localDayStartMs(value) {
@@ -204,6 +219,18 @@ function buildReportMetrics(dataset) {
   const periodStart = firstSample;
   const periodEnd = generatedAt;
   const criticalAlerts = alerts.filter((alert) => alert.type === 'critical');
+  const firstDayKey = reportDayKey(periodStart);
+  const lastDayKey = reportDayKey(lastSample);
+  const dayCount = Math.max(
+    1,
+    Math.round(((localDayStartMs(lastSample) ?? Date.now()) - (localDayStartMs(periodStart) ?? Date.now())) / (24 * 60 * 60 * 1000)) + 1
+  );
+  const firstDayExchanges = exchanges.filter((exchange) => reportDayKey(exchange.ts) === firstDayKey).length;
+  const lastDayExchanges = exchanges.filter((exchange) => reportDayKey(exchange.ts) === lastDayKey).length;
+  const firstDayAlerts = criticalAlerts.filter((alert) => reportDayKey(alert.ts) === firstDayKey).length;
+  const lastDayAlerts = criticalAlerts.filter((alert) => reportDayKey(alert.ts) === lastDayKey).length;
+  const firstDayPeak = fills.filter((_, index) => reportDayKey(samples[index]?.ts) === firstDayKey);
+  const lastDayPeak = fills.filter((_, index) => reportDayKey(samples[index]?.ts) === lastDayKey);
 
   return {
     generatedAt,
@@ -223,7 +250,14 @@ function buildReportMetrics(dataset) {
     maxResponseMinutes: responseMinutes.length ? Math.max(...responseMinutes) : 0,
     responseWindows,
     activity: activityByPeriod(alerts, exchanges),
-    lastSample
+    lastSample,
+    dayCount,
+    firstDayExchanges,
+    lastDayExchanges,
+    firstDayAlerts,
+    lastDayAlerts,
+    firstDayPeak: firstDayPeak.length ? Math.max(...firstDayPeak) : 0,
+    lastDayPeak: lastDayPeak.length ? Math.max(...lastDayPeak) : 0
   };
 }
 
@@ -260,11 +294,11 @@ function buildDailyOccupancyPoints(metrics, startMs, endMs) {
 }
 
 function buildOccupancyChart(metrics) {
-  const width = 820;
-  const height = 350;
-  const left = 34;
-  const right = 18;
-  const top = 28;
+  const width = 760;
+  const height = 300;
+  const left = 38;
+  const right = 20;
+  const top = 20;
   const bottom = 54;
   const plotW = width - left - right;
   const plotH = height - top - bottom;
@@ -296,7 +330,7 @@ function buildOccupancyChart(metrics) {
   const criticalY = y(metrics.criticalPercent);
 
   return `
-    <svg viewBox="0 0 ${width} ${height}" width="100%" height="365" role="img" aria-label="Evolução da ocupação dos carrinhos">
+    <svg viewBox="0 0 ${width} ${height}" width="100%" height="315" role="img" aria-label="Evolução da ocupação dos carrinhos">
       <defs>
         <linearGradient id="area" x1="0" x2="0" y1="0" y2="1">
           <stop offset="0%" stop-color="#1577ff" stop-opacity=".22"/>
@@ -307,8 +341,8 @@ function buildOccupancyChart(metrics) {
       <g class="axis-labels">${grid}${xGrid}</g>
       <polygon points="${areaPoints}" fill="url(#area)"/>
       <line x1="${left}" y1="${criticalY.toFixed(1)}" x2="${left + plotW}" y2="${criticalY.toFixed(1)}" stroke="#ef334e" stroke-width="1.2" stroke-dasharray="5 5"/>
-      <rect class="critical-label-bg" x="${left + 8}" y="${(criticalY - 20).toFixed(1)}" width="116" height="16" rx="3" fill="#fff" opacity=".96"/>
-      <text x="${left + 12}" y="${(criticalY - 8).toFixed(1)}" fill="#ef334e" font-weight="900">Limite crítico ${metrics.criticalPercent}%</text>
+      <rect class="critical-label-bg" x="${left + 8}" y="${(criticalY - 17).toFixed(1)}" width="88" height="13" rx="3" fill="#fff" opacity=".96"/>
+      <text x="${left + 12}" y="${(criticalY - 7).toFixed(1)}" fill="#ef334e" font-size="8.2" font-weight="900">Limite crítico ${metrics.criticalPercent}%</text>
       <polyline points="${points}" fill="none" stroke="#1269d3" stroke-width="3.5" stroke-linejoin="round"/>
       ${exchangeDots}
     </svg>
@@ -316,27 +350,21 @@ function buildOccupancyChart(metrics) {
 }
 
 function buildActivityRows(metrics) {
+  const periodTimes = {
+    Madrugada: '00h-06h',
+    Manhã: '06h-12h',
+    Tarde: '12h-18h',
+    Noite: '18h-00h'
+  };
+  const maxExchanges = Math.max(...metrics.activity.map((period) => period.exchanges), 0);
   return metrics.activity.map((period) => `
     <tr>
-      <td>${escapeHtml(period.label)}</td>
+      <td><strong>${escapeHtml(period.label)}</strong><br>${periodTimes[period.label] || ''}</td>
       <td>${period.alerts}</td>
       <td>${period.exchanges}</td>
-      <td>${period.total}</td>
+      <td>${period.exchanges === 0 ? 'Sem trocas registradas' : period.exchanges === maxExchanges ? 'Maior atividade' : period.exchanges <= 4 ? 'Baixa atividade' : 'Alta atividade'}</td>
     </tr>
   `).join('');
-}
-
-function buildExchangeSummary(metrics) {
-  const withAlert = metrics.responseWindows.length;
-  const noAlert = Math.max(0, metrics.exchanges.length - withAlert);
-  return `
-    <div class="mini-grid two">
-      <div><small>Total de trocas</small><strong class="green">${metrics.exchanges.length}</strong><span>No período</span></div>
-      <div><small>Trocas após alerta</small><strong class="red">${withAlert}</strong><span>Com tempo de retirada calculado</span></div>
-      <div><small>Trocas sem alerta anterior</small><strong>${noAlert}</strong><span>Sem alerta crítico no intervalo</span></div>
-      <div><small>Maior tempo até retirada</small><strong class="orange">${formatDuration(metrics.maxResponseMinutes)}</strong><span>Após alerta crítico</span></div>
-    </div>
-  `;
 }
 
 function buildCartAnalyticReportHtml(dataset) {
@@ -346,6 +374,15 @@ function buildCartAnalyticReportHtml(dataset) {
     ? 'Foram registradas ocorrências críticas'
     : 'Não foram registradas ocorrências críticas';
   const busiest = [...metrics.activity].sort((a, b) => b.total - a.total)[0] || { label: '--', total: 0 };
+  const busiestAlerts = [...metrics.activity].sort((a, b) => b.alerts - a.alerts)[0] || { label: '--', alerts: 0 };
+  const busiestExchanges = [...metrics.activity].sort((a, b) => b.exchanges - a.exchanges)[0] || { label: '--', exchanges: 0 };
+  const periodRanges = { Madrugada: '00h às 06h', Manhã: '06h às 12h', Tarde: '12h às 18h', Noite: '18h às 00h' };
+  const totalOperationalMinutes = Math.max(1, metrics.freeMinutes + metrics.criticalMinutes);
+  const freeWidth = Math.max(0, (metrics.freeMinutes / totalOperationalMinutes) * 100);
+  const criticalWidth = Math.max(0, (metrics.criticalMinutes / totalOperationalMinutes) * 100);
+  const withAlert = metrics.responseWindows.length;
+  const alertsPerDay = formatDecimal(metrics.criticalAlerts.length / Math.max(1, metrics.dayCount));
+  const exchangesPerDay = formatDecimal(metrics.exchanges.length / Math.max(1, metrics.dayCount));
 
   return `<!doctype html>
 <html lang="pt-BR">
@@ -363,9 +400,9 @@ function buildCartAnalyticReportHtml(dataset) {
     h1{margin:0;color:var(--navy);font-size:20px;line-height:1.1;text-transform:uppercase}.subtitle{margin:5px 0 0;color:#60738d;font-size:10px;font-weight:700}.period{text-align:right;color:#5d7088;font-size:9px;font-weight:800}.period strong{display:block;margin-top:3px;color:var(--navy);font-size:10px}.badge{display:inline-grid;place-items:center;margin-top:8px;width:102px;height:18px;border-radius:4px;background:var(--navy);color:#fff;font-size:9px;font-weight:900}
     .device-strip{margin-top:14px;border:1px solid #bfd4ef;border-radius:5px;display:block;padding:15px 18px}.device-strip h2{margin:0 0 9px;color:#064ca8;font-size:15.5px}.device-meta{display:grid;grid-template-columns:115px 120px 1fr;align-items:start;gap:16px;color:#3d5069;font-size:9px;font-weight:800;padding-top:9px;border-top:1px solid #e4edf8}.device-meta span{display:inline-flex;flex-direction:column;gap:3px}.device-meta b{display:inline;margin:0;color:#657891;font-size:8px;text-transform:uppercase}.device-meta .scope-item strong{color:var(--navy);font-size:9.5px;line-height:1.3}
     .kpis{display:grid;grid-template-columns:repeat(7,1fr);margin-top:12px;border:1px solid var(--line);border-radius:5px;overflow:hidden}.kpi{min-height:62px;padding:10px 7px;text-align:center;border-right:1px solid var(--line)}.kpi:last-child{border-right:0}.kpi small{display:block;color:#62758d;font-size:8px;font-weight:900}.kpi strong{display:block;margin-top:4px;color:#1577ff;font-size:17px;line-height:1}.kpi strong.red{color:var(--red)}.kpi strong.green{color:var(--green)}.kpi strong.orange{color:var(--orange)}.kpi span{display:block;margin-top:5px;color:#6d7e94;font-size:7.5px;font-weight:800}
-    .section{margin-top:12px;border:1px solid #bfd4ef;border-radius:5px;padding:12px;break-inside:avoid}.section-title{display:flex;gap:8px;margin-bottom:9px}.section-title b{width:18px;height:18px;display:grid;place-items:center;border-radius:4px;background:#0753b5;color:#fff;font-size:9px}.section-title h3{margin:0;color:#0753b5;font-size:11px;line-height:1.15;text-transform:uppercase}.section-title p{margin:3px 0 0;color:#687b94;font-size:8.5px;font-weight:700;line-height:1.35}
-    .history-grid{display:grid;grid-template-columns:1fr;gap:10px}.chart-card{min-height:365px;padding:6px 0 0}.chart-head{display:flex;justify-content:center;gap:20px;color:#425776;font-size:7.8px;font-weight:900;margin-bottom:2px}.chart-head i,.legend i{display:inline-block;width:12px;height:3px;margin-right:4px;vertical-align:2px;border-radius:3px;background:var(--blue)}.chart-head .crit i{background:var(--red)}.chart-head .exchange i{background:var(--green)}.axis-labels text{fill:#082a5d;font-size:8px;font-weight:900}.reading-box{border-top:1px solid var(--line);padding-top:9px;display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.reading-box h4{grid-column:1/-1;margin:0 0 2px;padding-bottom:5px;color:var(--navy);font-size:9px;text-transform:uppercase;border-bottom:1px solid var(--line)}.reading-box div{min-height:42px;padding:7px 8px;border:1px solid var(--line);border-radius:4px;background:#fbfdff}.reading-box small{display:block;color:#64768f;font-size:7.8px;font-weight:900}.reading-box strong{display:block;margin-top:2px;color:var(--navy);font-size:12px}.reading-box .red{color:var(--red)}.reading-box .green{color:var(--green)}.mini-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.mini-grid div{border:1px solid var(--line);border-radius:4px;min-height:48px;display:grid;place-items:center;text-align:center;padding:7px 6px;background:#fff}.mini-grid small{color:#60738c;font-size:7.2px;font-weight:900;text-transform:uppercase}.mini-grid strong{color:var(--blue);font-size:14px;margin-top:2px}.mini-grid.two{grid-template-columns:repeat(4,1fr)}.green{color:var(--green)!important}.red{color:var(--red)!important}.orange{color:var(--orange)!important}
-    .bar-wrap{height:28px;border-radius:5px;overflow:hidden;background:#eef5fd;border:1px solid var(--line);display:flex}.bar{height:100%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:8px;font-weight:900}.bar.free{background:#1269d3}.bar.critical{background:#ef334e}
+    .section{margin-top:12px;border:1px solid #bfd4ef;border-radius:5px;padding:12px;break-inside:avoid}.section-title{display:flex;gap:8px;margin-bottom:9px}.section-title b{width:18px;height:18px;display:grid;place-items:center;border-radius:4px;background:#0753b5;color:#fff;font-size:9px}.section-title h3{margin:0;color:#0753b5;font-size:10.5px;line-height:1.15;text-transform:uppercase}.section-title p{margin:3px 0 0;color:#687b94;font-size:8.4px;font-weight:700;line-height:1.35}
+    .history-grid{display:grid;grid-template-columns:1fr;gap:10px}.chart-card{min-height:315px;padding:8px 0 2px}.chart-head{display:flex;justify-content:center;gap:20px;color:#425776;font-size:7.8px;font-weight:900;margin-bottom:2px}.chart-head i,.legend i{display:inline-block;width:12px;height:3px;margin-right:4px;vertical-align:2px;border-radius:3px;background:var(--blue)}.chart-head .crit i{background:var(--red)}.chart-head .exchange i{background:var(--green)}.axis-labels text{fill:#082a5d;font-size:8px;font-weight:900}.reading-box{border-top:1px solid var(--line);padding-top:9px;display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.reading-box h4{grid-column:1/-1;margin:0 0 2px;padding-bottom:5px;color:var(--navy);font-size:9px;text-transform:uppercase;border-bottom:1px solid var(--line)}.reading-box div{min-height:42px;padding:7px 8px;border:1px solid var(--line);border-radius:4px;background:#fbfdff}.reading-box small{display:block;color:#64768f;font-size:7.8px;font-weight:900}.reading-box strong{display:block;margin-top:2px;color:var(--navy);font-size:12px}.reading-box .red{color:var(--red)}.reading-box .green{color:var(--green)}.two-col{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}.condition-bar{height:26px;display:flex;overflow:hidden;border-radius:5px;border:1px solid rgba(5,38,88,.08);margin:14px 0 10px}.condition-bar span{display:block}.condition-bar .normal{background:var(--blue)}.condition-bar .critical{background:var(--red)}.legend{display:grid;grid-template-columns:1fr 1fr;gap:7px 10px;color:#53647b;font-size:7.2px;font-weight:800}.legend div{display:grid;grid-template-columns:9px 1fr auto;align-items:center;gap:5px}.legend i{width:9px;height:9px;border-radius:2px;margin:0}.legend i.blue{background:var(--blue)}.legend i.red{background:var(--red)}.legend i.green{background:var(--green)}.legend i.attention{background:var(--orange)}.legend i.critical{background:var(--red)}.condition-total{text-align:center;padding-top:9px;margin-top:10px;border-top:1px solid var(--line)}.condition-total small{color:#708097;font-size:7px;font-weight:800}.condition-total strong{display:block;margin-top:2px;color:var(--navy);font-size:14px}
+    .mini-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.mini{border:1px solid var(--line);border-radius:4px;min-height:48px;display:grid;place-items:center;text-align:center;padding:7px 6px;background:#fff}.mini small{color:#60738c;font-size:7.2px;font-weight:900;text-transform:uppercase}.mini strong{color:var(--blue);font-size:14px;margin-top:2px}.green{color:var(--green)!important}.red{color:var(--red)!important}.orange{color:var(--orange)!important}
     table{width:100%;border-collapse:collapse;font-size:8px;color:#263c5d}th,td{padding:7px 8px;border:1px solid var(--line);text-align:center;white-space:nowrap}th{background:#f5f9ff;color:#395171;font-size:7.2px;text-transform:uppercase}td:first-child,th:first-child{text-align:left}td strong{color:var(--navy)}.note{margin-top:9px;padding:8px 9px;color:#546881;background:var(--soft);border-left:3px solid var(--blue);border-radius:4px;font-size:8.2px;font-weight:700;line-height:1.45}.analysis{display:grid;gap:7px;color:#344b68;font-size:8.6px;line-height:1.5;font-weight:700}.analysis p{margin:0}.signature{margin:18px 0 10px;display:flex;align-items:flex-end;justify-content:space-between;gap:40px}.signature .line{width:260px;text-align:center;color:#53647b;font-size:8px;font-weight:800}.signature .line:before{content:"";display:block;height:28px;border-bottom:1px solid #53647b;margin-bottom:5px}.generated{text-align:right;color:#718197;font-size:7.5px;font-weight:800}.generated strong{display:block;color:var(--navy);font-size:9px;margin-top:2px}footer{margin:10px -28px -28px;margin-top:auto;padding:11px 28px;min-height:42px;display:flex;align-items:center;justify-content:space-between;background:var(--navy);color:#dce9fb;font-size:8px;font-weight:800}.powered{display:flex;align-items:center;gap:8px}.powered img{width:64px;height:24px;object-fit:contain;padding:3px 5px;border-radius:4px;background:#fff}
     @media print{body{background:#fff}.sheet{box-shadow:none;margin:0;width:794px}}
   </style>
@@ -424,68 +461,107 @@ function buildCartAnalyticReportHtml(dataset) {
       </div>
     </section>
 
+    <div class="two-col">
+      <section class="section">
+        <div class="section-title"><b>2</b><div><h3>Tempo operacional da sala</h3><p>Mostra quanto tempo a sala permaneceu abaixo do limite, em condição crítica e aguardando retirada após alerta crítico.</p></div></div>
+        <div class="condition-bar">
+          <span class="normal" style="width:${freeWidth}%"></span>
+          <span class="critical" style="width:${criticalWidth}%"></span>
+        </div>
+        <div class="legend">
+          <div><i class="blue"></i><span>Dentro do limite</span><strong>${formatDuration(metrics.freeMinutes)}</strong></div>
+          <div><i class="red"></i><span>Em crítico</span><strong>${formatDuration(metrics.criticalMinutes)}</strong></div>
+          <div><i class="attention"></i><span>Tempo médio até a retirada</span><strong>${formatDuration(metrics.avgResponseMinutes)}</strong></div>
+          <div><i class="critical"></i><span>Maior tempo até a retirada</span><strong>${formatDuration(metrics.maxResponseMinutes)}</strong></div>
+        </div>
+        <div class="condition-total">
+          <small>Período operacional analisado</small>
+          <strong>${formatDuration(totalOperationalMinutes)}</strong>
+        </div>
+        <p class="note">Dentro do limite indica ocupação abaixo de ${metrics.criticalPercent}%. O tempo até a retirada considera o intervalo entre o alerta crítico e a troca do carrinho.</p>
+      </section>
+
+      <section class="section">
+        <div class="section-title"><b>3</b><div><h3>Alertas e trocas por horário</h3><p>Mostra a incidência de alertas críticos e trocas por faixa do dia.</p></div></div>
+        <table>
+          <thead><tr><th>Período</th><th>Alertas críticos</th><th>Trocas</th><th>Interpretação</th></tr></thead>
+          <tbody>${buildActivityRows(metrics)}</tbody>
+        </table>
+      </section>
+    </div>
+
     <section class="section">
-      <div class="section-title"><b>2</b><div><h3>Tempo operacional da sala</h3><p>Mostra quanto tempo a sala ficou livre e quanto tempo permaneceu acima do limite crítico.</p></div></div>
-      <div class="bar-wrap">
-        <div class="bar free" style="width:${Math.max(4, (metrics.freeMinutes / Math.max(1, metrics.freeMinutes + metrics.criticalMinutes)) * 100)}%">Livre</div>
-        <div class="bar critical" style="width:${Math.max(4, (metrics.criticalMinutes / Math.max(1, metrics.freeMinutes + metrics.criticalMinutes)) * 100)}%">Crítico</div>
-      </div>
-      <div class="mini-grid two" style="margin-top:8px">
-        <div><small>Tempo livre</small><strong>${formatDuration(metrics.freeMinutes)}</strong><span>Abaixo do limite crítico</span></div>
-        <div><small>Tempo em crítico</small><strong class="red">${formatDuration(metrics.criticalMinutes)}</strong><span>Acima do limite configurado</span></div>
-        <div><small>Tempo médio até retirada</small><strong class="orange">${formatDuration(metrics.avgResponseMinutes)}</strong><span>Após alerta crítico</span></div>
-        <div><small>Maior tempo até retirada</small><strong class="red">${formatDuration(metrics.maxResponseMinutes)}</strong><span>Após alerta crítico</span></div>
+      <div class="section-title"><b>4</b><div><h3>Trocas de carrinho</h3><p>Mostra o total de trocas e o tempo em que os carrinhos permaneceram acima do limite após alerta crítico.</p></div></div>
+      <div class="two-col" style="margin-top:0">
+        <div class="mini-grid">
+          <div class="mini"><small>Total de trocas</small><strong class="green">${metrics.exchanges.length}</strong></div>
+          <div class="mini"><small>Trocas após alerta crítico</small><strong class="red">${withAlert}</strong></div>
+          <div class="mini"><small>Tempo médio até a retirada</small><strong class="orange">${formatDuration(metrics.avgResponseMinutes)}</strong></div>
+          <div class="mini"><small>Maior tempo até a retirada</small><strong class="red">${formatDuration(metrics.maxResponseMinutes)}</strong></div>
+          <div class="mini"><small>Tempo em crítico</small><strong class="red">${formatDuration(metrics.criticalMinutes)}</strong></div>
+          <div class="mini"><small>Alertas críticos</small><strong class="red">${metrics.criticalAlerts.length}</strong></div>
+        </div>
+        <div class="note" style="margin-top:0">
+          <strong>Tempo até a retirada:</strong> Este indicador mostra quanto tempo os carrinhos permaneceram acima do limite crítico até a troca registrada.
+        </div>
       </div>
     </section>
 
-    <section class="section">
-      <div class="section-title"><b>3</b><div><h3>Alertas e trocas por horário</h3><p>Mostra em quais períodos houve maior concentração de alertas críticos e trocas.</p></div></div>
-      <table>
-        <thead><tr><th>Período</th><th>Alertas críticos</th><th>Trocas</th><th>Total operacional</th></tr></thead>
-        <tbody>${buildActivityRows(metrics)}</tbody>
-      </table>
-    </section>
+    <div class="two-col">
+      <section class="section">
+        <div class="section-title"><b>5</b><div><h3>Tempo após alerta crítico</h3><p>Consolida o tempo em que os carrinhos permaneceram acima do limite após alerta crítico.</p></div></div>
+        <div class="legend">
+          <div><i class="red"></i><span>Alertas críticos</span><strong>${metrics.criticalAlerts.length}</strong></div>
+          <div><i class="green"></i><span>Com retirada registrada</span><strong>${withAlert}</strong></div>
+          <div><i class="attention"></i><span>Tempo médio até a retirada</span><strong>${formatDuration(metrics.avgResponseMinutes)}</strong></div>
+          <div><i class="critical"></i><span>Maior tempo até a retirada</span><strong>${formatDuration(metrics.maxResponseMinutes)}</strong></div>
+        </div>
+        <p class="note">Quanto maior esse tempo, maior foi o período com carrinho acima do limite crítico na sala.</p>
+      </section>
 
-    <section class="section">
-      <div class="section-title"><b>4</b><div><h3>Trocas de carrinho</h3><p>Consolida as trocas registradas e o tempo entre alerta crítico e retirada.</p></div></div>
-      ${buildExchangeSummary(metrics)}
-      <p class="note">As trocas são exibidas no gráfico pelos pontos verdes. A contagem é recalculada com os dados disponíveis no momento da abertura do relatório.</p>
-    </section>
-
-    <section class="section">
-      <div class="section-title"><b>5</b><div><h3>Tempo após alerta crítico</h3><p>Mostra quanto tempo a operação levou para retirar o carrinho após o alerta crítico.</p></div></div>
-      <div class="mini-grid two">
-        <div><small>Alertas críticos</small><strong class="red">${metrics.criticalAlerts.length}</strong><span>Enviados no período</span></div>
-        <div><small>Retiradas após alerta</small><strong class="green">${metrics.responseWindows.length}</strong><span>Com tempo calculado</span></div>
-        <div><small>Tempo médio</small><strong class="orange">${formatDuration(metrics.avgResponseMinutes)}</strong><span>Até a troca</span></div>
-        <div><small>Maior exposição</small><strong class="red">${formatDuration(metrics.maxResponseMinutes)}</strong><span>Após alerta crítico</span></div>
-      </div>
-    </section>
-
-    <section class="section">
-      <div class="section-title"><b>6</b><div><h3>Horários de maior atividade</h3><p>Identifica o período com mais pressão operacional, combinando alertas críticos e trocas.</p></div></div>
-      <div class="analysis">
-        <p>Período de maior movimento: <strong>${escapeHtml(busiest.label)}</strong>, com ${busiest.total} evento(s) operacional(is).</p>
-        <p>Esse indicador ajuda a verificar se a equipe de retirada está concentrada nos horários de maior demanda da sala.</p>
-      </div>
-    </section>
+      <section class="section">
+        <div class="section-title"><b>6</b><div><h3>Horários de maior atividade</h3><p>Mostra as faixas do dia com maior concentração de alertas críticos e trocas.</p></div></div>
+        <table>
+          <tbody>
+            <tr><td><strong>Período com mais alertas críticos</strong></td><td>${escapeHtml(busiestAlerts.label)}</td></tr>
+            <tr><td><strong>Período com mais trocas</strong></td><td>${escapeHtml(busiestExchanges.label)}</td></tr>
+            <tr><td><strong>Faixa de maior atividade</strong></td><td>${escapeHtml(periodRanges[busiest.label] || busiest.label)}</td></tr>
+            <tr><td><strong>Observação</strong></td><td>${metrics.activity.find((period) => period.label === 'Madrugada')?.exchanges ? 'Houve trocas registradas na madrugada' : 'Não houve trocas registradas na madrugada'}</td></tr>
+          </tbody>
+        </table>
+      </section>
+    </div>
 
     <section class="section">
       <div class="section-title"><b>7</b><div><h3>Indicadores do período</h3><p>Consolida os principais indicadores operacionais do período analisado.</p></div></div>
-      <div class="mini-grid two">
-        <div><small>Leituras consideradas</small><strong>${metrics.samples.length}</strong><span>Leituras oficiais</span></div>
-        <div><small>Primeira leitura</small><strong>${formatDateShort(metrics.periodStart)}</strong><span>${formatTime(metrics.periodStart)}</span></div>
-        <div><small>Última leitura</small><strong>${formatDateShort(metrics.lastSample)}</strong><span>${formatTime(metrics.lastSample)}</span></div>
-        <div><small>Relatório gerado</small><strong>${formatDateShort(metrics.generatedAt)}</strong><span>${formatTime(metrics.generatedAt)}</span></div>
+      <div class="two-col" style="margin-top:0">
+        <div class="mini-grid">
+          <div class="mini"><small>Alertas críticos</small><strong class="red">${metrics.criticalAlerts.length}</strong></div>
+          <div class="mini"><small>Trocas</small><strong class="green">${metrics.exchanges.length}</strong></div>
+          <div class="mini"><small>Alertas por dia</small><strong>${alertsPerDay}</strong></div>
+          <div class="mini"><small>Trocas por dia</small><strong>${exchangesPerDay}</strong></div>
+          <div class="mini"><small>Ocupação média</small><strong>${metrics.avgFill}%</strong></div>
+          <div class="mini"><small>Tempo em crítico</small><strong class="red">${formatDuration(metrics.criticalMinutes)}</strong></div>
+        </div>
+        <table>
+          <thead><tr><th>Indicador</th><th>Primeiro dia</th><th>Último dia</th><th>Total no período</th></tr></thead>
+          <tbody>
+            <tr><td>Dias analisados</td><td>${formatDateShort(metrics.periodStart)}</td><td>${formatDateShort(metrics.lastSample)}</td><td>${metrics.dayCount} dias</td></tr>
+            <tr><td>Trocas</td><td>${metrics.firstDayExchanges}</td><td>${metrics.lastDayExchanges}</td><td>${metrics.exchanges.length}</td></tr>
+            <tr><td>Alertas críticos</td><td>${metrics.firstDayAlerts}</td><td>${metrics.lastDayAlerts}</td><td>${metrics.criticalAlerts.length}</td></tr>
+            <tr><td>Pico</td><td>${metrics.firstDayPeak}%</td><td>${metrics.lastDayPeak}%</td><td>${metrics.maxFill}%</td></tr>
+          </tbody>
+        </table>
       </div>
     </section>
 
     <section class="section">
-      <div class="section-title"><b>8</b><div><h3>Análise do período</h3><p>Resumo objetivo da ocupação, dos alertas críticos e das trocas registradas neste relatório.</p></div></div>
+      <div class="section-title"><b>8</b><div><h3>Análise do período</h3><p>Resumo objetivo da ocupação, dos alertas e das trocas registradas neste relatório.</p></div></div>
       <div class="analysis">
-        <p>A sala teve ocupação média de ${metrics.avgFill}% e pico de ${metrics.maxFill}% no período analisado.</p>
-        <p>Foram enviados ${metrics.criticalAlerts.length} alertas críticos e registradas ${metrics.exchanges.length} trocas de carrinho.</p>
-        <p>O tempo médio até a retirada após alerta crítico foi de ${formatDuration(metrics.avgResponseMinutes)}.</p>
+        <p><strong>Ocupação:</strong> A sala registrou pico de ${metrics.maxFill}% e ocupação média de ${metrics.avgFill}%. O tempo acumulado em condição crítica foi de ${formatDuration(metrics.criticalMinutes)}.</p>
+        <p><strong>Alertas:</strong> Foram registrados ${metrics.criticalAlerts.length} alertas críticos no período, quando a ocupação atingiu ou ultrapassou o limite configurado.</p>
+        <p><strong>Retirada:</strong> Foram registradas ${metrics.exchanges.length} trocas. O tempo médio até a retirada foi de ${formatDuration(metrics.avgResponseMinutes)}, com maior tempo registrado de ${formatDuration(metrics.maxResponseMinutes)}.</p>
+        <p><strong>Operação:</strong> ${escapeHtml(busiest.label)} concentrou ${busiest.alerts} alertas críticos e ${busiest.exchanges} trocas, indicando maior demanda de acompanhamento nesse período.</p>
       </div>
     </section>
 
