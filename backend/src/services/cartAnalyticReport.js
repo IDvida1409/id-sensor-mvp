@@ -272,6 +272,16 @@ function buildAxisTicks(startMs, endMs) {
   return ticks;
 }
 
+function buildDayTicks(startMs, endMs) {
+  const ticks = [];
+  let cursor = startMs;
+  while (cursor <= endMs) {
+    ticks.push(cursor);
+    cursor = addDays(cursor, 1);
+  }
+  return ticks.length ? ticks : [startMs];
+}
+
 function buildDailyOccupancyPoints(metrics, startMs, endMs) {
   const byDay = new Map();
   for (const sample of metrics.samples) {
@@ -299,19 +309,16 @@ function buildOccupancyChart(metrics) {
   const left = 38;
   const right = 20;
   const top = 20;
-  const bottom = 54;
+  const bottom = 68;
   const plotW = width - left - right;
   const plotH = height - top - bottom;
   const startMs = localDayStartMs(metrics.periodStart) ?? parseTime(metrics.periodStart) ?? Date.now();
-  const endMs = Math.max(
-    addDays(localDayStartMs(metrics.periodEnd) ?? Date.now(), 1),
-    parseTime(metrics.periodEnd) || Date.now()
-  );
+  const endMs = localDayStartMs(metrics.lastSample || metrics.periodEnd) ?? localDayStartMs(metrics.periodEnd) ?? Date.now();
   const span = Math.max(1, endMs - startMs);
   const x = (time) => left + ((time - startMs) / span) * plotW;
   const y = (fill) => top + (1 - clamp(fill, 0, 100) / 100) * plotH;
   const samples = buildDailyOccupancyPoints(metrics, startMs, endMs);
-  const ticks = buildAxisTicks(startMs, endMs);
+  const ticks = buildDayTicks(startMs, endMs);
   const yTicks = [0, 25, 50, 75, 100];
   const exchangesByDay = new Map();
   for (const exchange of metrics.exchanges) {
@@ -370,9 +377,9 @@ function buildOccupancyChart(metrics) {
       <rect x="0" y="0" width="${width}" height="${height}" fill="#fff"/>
       <g class="axis-labels">${grid}${xGrid}</g>
       <line x1="${left}" y1="${criticalY.toFixed(1)}" x2="${left + plotW}" y2="${criticalY.toFixed(1)}" stroke="#ef334e" stroke-width="1.2" stroke-dasharray="5 5"/>
-      <rect class="critical-label-bg" x="${left + 8}" y="${(criticalY - 17).toFixed(1)}" width="88" height="13" rx="3" fill="#fff" opacity=".96"/>
-      <text x="${left + 12}" y="${(criticalY - 7).toFixed(1)}" fill="#ef334e" font-size="8.2" font-weight="900">Limite crítico ${metrics.criticalPercent}%</text>
       ${bars}
+      <line x1="${left}" y1="${top + plotH + 45}" x2="${left + 54}" y2="${top + plotH + 45}" stroke="#ef334e" stroke-width="1.2" stroke-dasharray="5 5"/>
+      <text x="${left + 62}" y="${top + plotH + 48}" fill="#61738c" font-size="8.2" font-weight="800">Limite estabelecido como crítico: ${metrics.criticalPercent}%</text>
     </svg>
   `;
 }
