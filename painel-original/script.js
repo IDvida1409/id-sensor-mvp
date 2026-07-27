@@ -14816,8 +14816,8 @@ if(false){(function(){
         <div class="cart-analytic-report-preview-modal" role="dialog" aria-modal="true" aria-label="Pré-visualização do relatório analítico">
           <div class="cart-analytic-report-preview-toolbar">
             <div>
-              <strong>Relatório Analítico</strong>
-              <small>Pré-visualização dinâmica com dados atualizados do backend</small>
+              <strong>Pré-visualização do relatório</strong>
+              <small>Versão HTML para aprovação visual</small>
             </div>
             <div class="cart-analytic-report-preview-actions">
               <button type="button" class="cart-analytic-report-download" id="cartAnalyticReportDownloadBtn">Baixar PDF</button>
