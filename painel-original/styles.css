@@ -14999,6 +14999,103 @@ body.analytic-report-open{overflow:hidden}
   width:min(760px,calc(100vw - 44px));
 }
 
+.cart-analytic-report-preview-overlay{
+  align-items:center;
+  background:rgba(7,19,41,.58);
+  display:flex;
+  inset:0;
+  justify-content:center;
+  padding:18px;
+  position:fixed;
+  z-index:12060;
+}
+
+.cart-analytic-report-preview-overlay[hidden]{
+  display:none !important;
+}
+
+.cart-analytic-report-preview-modal{
+  background:#f6f9fd;
+  border:1px solid #d5e2f2;
+  border-radius:8px;
+  box-shadow:0 26px 70px rgba(5,18,38,.32);
+  display:grid;
+  grid-template-rows:auto 1fr;
+  height:min(94vh,980px);
+  overflow:hidden;
+  width:min(1180px,calc(100vw - 36px));
+}
+
+.cart-analytic-report-preview-toolbar{
+  align-items:center;
+  background:#fff;
+  border-bottom:1px solid #d8e5f3;
+  display:flex;
+  justify-content:space-between;
+  min-height:64px;
+  padding:12px 18px;
+}
+
+.cart-analytic-report-preview-toolbar strong{
+  color:#10213a;
+  display:block;
+  font-size:18px;
+  font-weight:950;
+}
+
+.cart-analytic-report-preview-toolbar small{
+  color:#697991;
+  display:block;
+  font-size:12px;
+  font-weight:850;
+  margin-top:2px;
+}
+
+.cart-analytic-report-preview-actions{
+  align-items:center;
+  display:flex;
+  gap:10px;
+}
+
+.cart-analytic-report-download{
+  align-items:center;
+  appearance:none;
+  background:#1677ff;
+  border:1px solid #1677ff;
+  border-radius:8px;
+  box-shadow:0 10px 22px rgba(22,119,255,.22);
+  color:#fff;
+  cursor:pointer;
+  display:inline-flex;
+  font:inherit;
+  font-size:13px;
+  font-weight:950;
+  height:40px;
+  padding:0 18px;
+}
+
+.cart-analytic-report-close{
+  appearance:none;
+  background:#eef3f9;
+  border:1px solid #d8e4f1;
+  border-radius:50%;
+  color:#2d3b4f;
+  cursor:pointer;
+  font:inherit;
+  font-size:20px;
+  font-weight:950;
+  height:42px;
+  line-height:1;
+  width:42px;
+}
+
+.cart-analytic-report-preview-modal iframe{
+  background:#e8f0f8;
+  border:0;
+  height:100%;
+  width:100%;
+}
+
 .cart-room-insight-head h2,
 .cart-transit-modal-head h2{
   font-size:20px;

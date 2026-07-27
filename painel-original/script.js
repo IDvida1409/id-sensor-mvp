@@ -13339,7 +13339,7 @@ if(false){(function(){
           <span><small>Eventos</small><strong>${events.length}</strong></span>
         </div>
         <div class="graph-report-list">
-          <button class="graph-report-btn" disabled>Exportar PDF</button>
+          <button class="graph-report-btn" type="button" data-cart-analytic-report-preview>Exportar PDF</button>
           <button class="graph-report-btn" disabled>Exportar Excel</button>
         </div>
       </details>
@@ -13356,6 +13356,31 @@ if(false){(function(){
   function closeCartReportModal(){
     const overlay = document.getElementById('cartReportModalOverlay');
     if(overlay) overlay.hidden = true;
+  }
+
+  function openCartAnalyticReportPreview(){
+    const overlay = document.getElementById('cartAnalyticReportPreviewOverlay');
+    const frame = document.getElementById('cartAnalyticReportPreviewFrame');
+    if(!overlay || !frame) return;
+    frame.src = `/relatorios/carrinhos/einstein?t=${Date.now()}`;
+    overlay.hidden = false;
+  }
+
+  function closeCartAnalyticReportPreview(){
+    const overlay = document.getElementById('cartAnalyticReportPreviewOverlay');
+    const frame = document.getElementById('cartAnalyticReportPreviewFrame');
+    if(frame) frame.src = 'about:blank';
+    if(overlay) overlay.hidden = true;
+  }
+
+  function printCartAnalyticReportPreview(){
+    const frame = document.getElementById('cartAnalyticReportPreviewFrame');
+    if(!frame?.contentWindow) {
+      window.open('/relatorios/carrinhos/einstein', '_blank', 'noopener');
+      return;
+    }
+    frame.contentWindow.focus();
+    frame.contentWindow.print();
   }
 
   function sortedCartAlerts(state){
@@ -14787,6 +14812,21 @@ if(false){(function(){
           <div id="cartReportModalContent"></div>
         </div>
       </div>
+      <div class="cart-analytic-report-preview-overlay" id="cartAnalyticReportPreviewOverlay" hidden>
+        <div class="cart-analytic-report-preview-modal" role="dialog" aria-modal="true" aria-label="Pré-visualização do relatório analítico">
+          <div class="cart-analytic-report-preview-toolbar">
+            <div>
+              <strong>Relatório Analítico</strong>
+              <small>Pré-visualização dinâmica com dados atualizados do backend</small>
+            </div>
+            <div class="cart-analytic-report-preview-actions">
+              <button type="button" class="cart-analytic-report-download" id="cartAnalyticReportDownloadBtn">Baixar PDF</button>
+              <button type="button" class="cart-analytic-report-close" id="cartAnalyticReportPreviewCloseBtn" aria-label="Fechar">x</button>
+            </div>
+          </div>
+          <iframe id="cartAnalyticReportPreviewFrame" title="Relatório Analítico dos Carrinhos"></iframe>
+        </div>
+      </div>
       <div class="cart-alert-modal-overlay" id="cartAlertModalOverlay" hidden>
         <div class="cart-alert-modal">
           <button type="button" class="cart-detail-close" id="cartAlertModalCloseBtn">x</button>
@@ -14875,7 +14915,13 @@ if(false){(function(){
     document.getElementById('cartReportModalCloseBtn')?.addEventListener('click', closeCartReportModal);
     document.getElementById('cartReportModalOverlay')?.addEventListener('click', event => {
       if(event.target.id === 'cartReportModalOverlay') closeCartReportModal();
+      if(event.target.closest('[data-cart-analytic-report-preview]')) openCartAnalyticReportPreview();
     });
+    document.getElementById('cartAnalyticReportPreviewCloseBtn')?.addEventListener('click', closeCartAnalyticReportPreview);
+    document.getElementById('cartAnalyticReportPreviewOverlay')?.addEventListener('click', event => {
+      if(event.target.id === 'cartAnalyticReportPreviewOverlay') closeCartAnalyticReportPreview();
+    });
+    document.getElementById('cartAnalyticReportDownloadBtn')?.addEventListener('click', printCartAnalyticReportPreview);
     document.getElementById('cartAlertModalCloseBtn')?.addEventListener('click', closeCartAlertModal);
     document.getElementById('cartAlertModalContent')?.addEventListener('click', handleCartAlertModalClick);
     document.getElementById('cartCalibrationToggle')?.addEventListener('click', toggleCartCalibrationPanel);
