@@ -238,13 +238,34 @@ function buildAxisTicks(startMs, endMs) {
   return ticks;
 }
 
+function buildDailyOccupancyPoints(metrics, startMs, endMs) {
+  const byDay = new Map();
+  for (const sample of metrics.samples) {
+    const day = localDayStartMs(sample.ts);
+    if (day === null) continue;
+    const fill = nearestFillBucket(sample.fill);
+    const current = byDay.get(day);
+    byDay.set(day, current === undefined ? fill : Math.max(current, fill));
+  }
+
+  const points = [];
+  let cursor = startMs;
+  let lastFill = 0;
+  while (cursor <= endMs) {
+    if (byDay.has(cursor)) lastFill = byDay.get(cursor);
+    points.push({ time: cursor, fill: lastFill });
+    cursor = addDays(cursor, 1);
+  }
+  return points.length ? points : [{ time: startMs, fill: 0 }];
+}
+
 function buildOccupancyChart(metrics) {
-  const width = 820;
-  const height = 330;
-  const left = 48;
-  const right = 22;
+  const width = 760;
+  const height = 300;
+  const left = 45;
+  const right = 30;
   const top = 26;
-  const bottom = 58;
+  const bottom = 64;
   const plotW = width - left - right;
   const plotH = height - top - bottom;
   const startMs = localDayStartMs(metrics.periodStart) ?? parseTime(metrics.periodStart) ?? Date.now();
@@ -255,18 +276,14 @@ function buildOccupancyChart(metrics) {
   const span = Math.max(1, endMs - startMs);
   const x = (time) => left + ((time - startMs) / span) * plotW;
   const y = (fill) => top + (1 - clamp(fill, 0, 100) / 100) * plotH;
-  const samples = metrics.samples.length ? metrics.samples : [{ ts: metrics.periodStart, fill: 0, _time: startMs }];
-  const points = samples.map((sample) => `${x(sample._time).toFixed(1)},${y(nearestFillBucket(sample.fill)).toFixed(1)}`).join(' ');
-  const areaPoints = `${left},${y(0).toFixed(1)} ${points} ${x(samples[samples.length - 1]._time).toFixed(1)},${y(0).toFixed(1)}`;
+  const samples = buildDailyOccupancyPoints(metrics, startMs, endMs);
+  const points = samples.map((sample) => `${x(sample.time).toFixed(1)},${y(sample.fill).toFixed(1)}`).join(' ');
+  const areaPoints = `${left},${y(0).toFixed(1)} ${points} ${x(samples[samples.length - 1].time).toFixed(1)},${y(0).toFixed(1)}`;
   const ticks = buildAxisTicks(startMs, endMs);
   const yTicks = [0, 25, 50, 75, 100];
   const exchangeDots = metrics.exchanges.map((exchange) => {
     const cx = x(exchange._time).toFixed(1);
-    return `<line x1="${cx}" y1="${top}" x2="${cx}" y2="${top + plotH}" stroke="#0ca66c" stroke-width="1.1" stroke-dasharray="4 5"/><circle cx="${cx}" cy="${y(100).toFixed(1)}" r="4.2" fill="#0ca66c" stroke="#fff" stroke-width="1.6"/>`;
-  }).join('');
-  const criticalAlertDots = metrics.criticalAlerts.map((alert) => {
-    const cx = x(alert._time).toFixed(1);
-    return `<line x1="${cx}" y1="${top}" x2="${cx}" y2="${top + plotH}" stroke="#ef334e" stroke-width="1.1" stroke-dasharray="4 5"/><circle cx="${cx}" cy="${y(100).toFixed(1)}" r="3.8" fill="#ef334e" stroke="#fff" stroke-width="1.4"/>`;
+    return `<line x1="${cx}" y1="${top}" x2="${cx}" y2="${top + plotH + 16}" stroke="#0ca66c" stroke-width="1.1" stroke-dasharray="5 5"/><circle cx="${cx}" cy="${y(100).toFixed(1)}" r="3.4" fill="#0ca66c" stroke="#fff" stroke-width="1.7"/>`;
   }).join('');
   const grid = yTicks.map((tick) => `
     <line x1="${left}" y1="${y(tick).toFixed(1)}" x2="${left + plotW}" y2="${y(tick).toFixed(1)}" stroke="#d8e6f6" stroke-dasharray="4 6"/>
@@ -279,14 +296,19 @@ function buildOccupancyChart(metrics) {
   const criticalY = y(metrics.criticalPercent);
 
   return `
-    <svg class="main-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Evolução da ocupação dos carrinhos">
+    <svg viewBox="0 0 ${width} ${height}" width="100%" height="315" role="img" aria-label="Evolução da ocupação dos carrinhos">
+      <defs>
+        <linearGradient id="area" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stop-color="#1577ff" stop-opacity=".22"/>
+          <stop offset="100%" stop-color="#1577ff" stop-opacity=".06"/>
+        </linearGradient>
+      </defs>
       <rect x="0" y="0" width="${width}" height="${height}" fill="#fff"/>
       <g class="axis-labels">${grid}${xGrid}</g>
-      <polygon points="${areaPoints}" fill="#cfe4fb" opacity=".8"/>
-      <line x1="${left}" y1="${criticalY.toFixed(1)}" x2="${left + plotW}" y2="${criticalY.toFixed(1)}" stroke="#ef334e" stroke-width="1.5" stroke-dasharray="6 6"/>
+      <polygon points="${areaPoints}" fill="url(#area)"/>
+      <line x1="${left}" y1="${criticalY.toFixed(1)}" x2="${left + plotW}" y2="${criticalY.toFixed(1)}" stroke="#ef334e" stroke-width="1.2" stroke-dasharray="5 5"/>
       <text x="${left + 12}" y="${(criticalY - 8).toFixed(1)}" fill="#ef334e" font-weight="900">Limite crítico ${metrics.criticalPercent}%</text>
-      <polyline points="${points}" fill="none" stroke="#1269d3" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/>
-      ${criticalAlertDots}
+      <polyline points="${points}" fill="none" stroke="#1269d3" stroke-width="3.5" stroke-linejoin="round"/>
       ${exchangeDots}
     </svg>
   `;
@@ -331,21 +353,20 @@ function buildCartAnalyticReportHtml(dataset) {
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Relatório Analítico - Carrinhos</title>
   <style>
-    :root{--navy:#072b63;--blue:#1269d3;--soft:#f4f8fd;--line:#d9e5f3;--muted:#61738c;--green:#0ca66c;--red:#ef334e;--orange:#e9850e}
+    :root{--navy:#072b63;--blue:#1269d3;--blue-2:#1577ff;--soft:#f4f8fd;--line:#d9e5f3;--muted:#61738c;--green:#0ca66c;--red:#ef334e;--orange:#e9850e;--gray:#7d8ca3}
     *{box-sizing:border-box}
     body{margin:0;background:#e8f0f8;color:#10284f;font-family:Arial,Helvetica,sans-serif}
     .sheet{width:794px;min-height:1123px;margin:22px auto;background:#fff;border-top:8px solid var(--navy);box-shadow:0 16px 55px rgba(10,30,60,.18);padding:24px 28px 28px}
     .report-header{display:grid;grid-template-columns:auto 1fr auto;gap:18px;align-items:center;padding-bottom:16px;border-bottom:1px solid var(--line)}
-    .logo-row{display:flex;align-items:center;gap:15px}.logo-row img{object-fit:contain}.idvida{width:82px;height:36px}.einstein{width:88px;height:36px;border-left:1px solid var(--line);padding-left:13px}
+    .logo-row{display:flex;align-items:center;gap:16px}.logo-row img{object-fit:contain}.idvida{width:82px;height:36px}.einstein{width:104px;height:36px;border-left:1px solid var(--line);padding-left:14px}
     h1{margin:0;color:var(--navy);font-size:20px;line-height:1.1;text-transform:uppercase}.subtitle{margin:5px 0 0;color:#60738d;font-size:10px;font-weight:700}.period{text-align:right;color:#5d7088;font-size:9px;font-weight:800}.period strong{display:block;margin-top:3px;color:var(--navy);font-size:10px}.badge{display:inline-grid;place-items:center;margin-top:8px;width:102px;height:18px;border-radius:4px;background:var(--navy);color:#fff;font-size:9px;font-weight:900}
-    .device-strip{margin-top:14px;border:1px solid #bfd4ef;border-radius:5px;padding:16px 18px;display:grid;grid-template-columns:1fr 1.35fr;gap:28px;align-items:center}.device-strip h2{margin:0 0 11px;color:#064ca8;font-size:18px}.device-meta{display:flex;gap:28px;color:#10284f;font-size:10px;font-weight:900}.device-meta b,.scope b{display:block;color:#657891;font-size:8px;text-transform:uppercase;margin-bottom:5px}.scope strong{display:block;color:var(--navy);font-size:14px;line-height:1.25}.scope span{display:block;margin-top:8px;color:#63758e;font-size:10px;font-weight:700;line-height:1.45}
+    .device-strip{margin-top:14px;border:1px solid #bfd4ef;border-radius:5px;display:block;padding:15px 18px}.device-strip h2{margin:0 0 9px;color:#064ca8;font-size:15.5px}.device-meta{display:grid;grid-template-columns:115px 120px 1fr;align-items:start;gap:16px;color:#3d5069;font-size:9px;font-weight:800;padding-top:9px;border-top:1px solid #e4edf8}.device-meta span{display:inline-flex;flex-direction:column;gap:3px}.device-meta b{display:inline;margin:0;color:#657891;font-size:8px;text-transform:uppercase}.device-meta .scope-item strong{color:var(--navy);font-size:9.5px;line-height:1.3}
     .kpis{display:grid;grid-template-columns:repeat(7,1fr);margin-top:12px;border:1px solid var(--line);border-radius:5px;overflow:hidden}.kpi{min-height:62px;padding:10px 7px;text-align:center;border-right:1px solid var(--line)}.kpi:last-child{border-right:0}.kpi small{display:block;color:#62758d;font-size:8px;font-weight:900}.kpi strong{display:block;margin-top:4px;color:#1577ff;font-size:17px;line-height:1}.kpi strong.red{color:var(--red)}.kpi strong.green{color:var(--green)}.kpi strong.orange{color:var(--orange)}.kpi span{display:block;margin-top:5px;color:#6d7e94;font-size:7.5px;font-weight:800}
     .section{margin-top:12px;border:1px solid #bfd4ef;border-radius:5px;padding:12px;break-inside:avoid}.section-title{display:flex;gap:8px;margin-bottom:9px}.section-title b{width:18px;height:18px;display:grid;place-items:center;border-radius:4px;background:#0753b5;color:#fff;font-size:9px}.section-title h3{margin:0;color:#0753b5;font-size:11px;line-height:1.15;text-transform:uppercase}.section-title p{margin:3px 0 0;color:#687b94;font-size:8.5px;font-weight:700;line-height:1.35}
-    .chart-card{padding:2px 0 4px}.chart-head{display:flex;justify-content:center;gap:24px;color:#425776;font-size:8px;font-weight:900;margin:2px 0 4px}.legend{display:inline-flex;align-items:center;gap:5px}.legend i{display:block;width:16px;height:4px;border-radius:99px}.blue{background:#1269d3}.red-line{background:#ef334e}.green-line{background:#0ca66c}.main-chart{display:block;width:100%;height:auto}.axis-labels text{fill:#082a5d;font-size:8px;font-weight:900}
-    .reading-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;border-top:1px solid var(--line);padding-top:10px}.reading-grid div,.mini-grid div{border:1px solid var(--line);border-radius:5px;padding:9px 10px;background:#fff}.reading-grid small,.mini-grid small{display:block;color:#62758d;font-size:8px;font-weight:900}.reading-grid strong,.mini-grid strong{display:block;margin-top:4px;color:var(--navy);font-size:14px}.reading-grid span,.mini-grid span{display:block;margin-top:4px;color:#687b94;font-size:7.8px;font-weight:800;line-height:1.3}.mini-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.mini-grid.two{grid-template-columns:repeat(4,1fr)}.green{color:var(--green)!important}.red{color:var(--red)!important}.orange{color:var(--orange)!important}
+    .history-grid{display:grid;grid-template-columns:1fr;gap:10px}.chart-card{min-height:315px;padding:8px 0 2px}.chart-head{display:flex;justify-content:center;gap:20px;color:#425776;font-size:7.8px;font-weight:900;margin-bottom:2px}.chart-head i,.legend i{display:inline-block;width:12px;height:3px;margin-right:4px;vertical-align:2px;border-radius:3px;background:var(--blue)}.chart-head .crit i{background:var(--red)}.chart-head .exchange i{background:var(--green)}.axis-labels text{fill:#082a5d;font-size:8px;font-weight:900}.reading-box{border-top:1px solid var(--line);padding-top:9px;display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.reading-box h4{grid-column:1/-1;margin:0 0 2px;padding-bottom:5px;color:var(--navy);font-size:9px;text-transform:uppercase;border-bottom:1px solid var(--line)}.reading-box div{min-height:42px;padding:7px 8px;border:1px solid var(--line);border-radius:4px;background:#fbfdff}.reading-box small{display:block;color:#64768f;font-size:7.8px;font-weight:900}.reading-box strong{display:block;margin-top:2px;color:var(--navy);font-size:12px}.reading-box .red{color:var(--red)}.reading-box .green{color:var(--green)}.mini-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.mini-grid div{border:1px solid var(--line);border-radius:4px;min-height:48px;display:grid;place-items:center;text-align:center;padding:7px 6px;background:#fff}.mini-grid small{color:#60738c;font-size:7.2px;font-weight:900;text-transform:uppercase}.mini-grid strong{color:var(--blue);font-size:14px;margin-top:2px}.mini-grid.two{grid-template-columns:repeat(4,1fr)}.green{color:var(--green)!important}.red{color:var(--red)!important}.orange{color:var(--orange)!important}
     .bar-wrap{height:28px;border-radius:5px;overflow:hidden;background:#eef5fd;border:1px solid var(--line);display:flex}.bar{height:100%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:8px;font-weight:900}.bar.free{background:#1269d3}.bar.critical{background:#ef334e}
-    table{width:100%;border-collapse:collapse;font-size:8.5px}th,td{border:1px solid var(--line);padding:7px 8px;text-align:left}th{background:#f5f9fe;color:#526982;text-transform:uppercase;font-size:7.5px}td{font-weight:800;color:#10284f}.note{margin-top:8px;color:#667992;font-size:8.4px;font-weight:700;line-height:1.45}.analysis{display:grid;gap:7px}.analysis p{margin:0;color:#10284f;font-size:9px;font-weight:800;line-height:1.45}.powered{margin-top:18px;display:flex;align-items:center;justify-content:flex-end;gap:8px;color:#73839a;font-size:8px;font-weight:900}.powered img{width:64px;height:auto}
-    @media print{body{background:#fff}.sheet{margin:0;box-shadow:none}}
+    table{width:100%;border-collapse:collapse;font-size:8px;color:#263c5d}th,td{padding:7px 8px;border:1px solid var(--line);text-align:center;white-space:nowrap}th{background:#f5f9ff;color:#395171;font-size:7.2px;text-transform:uppercase}td:first-child,th:first-child{text-align:left}td strong{color:var(--navy)}.note{margin-top:9px;padding:8px 9px;color:#546881;background:var(--soft);border-left:3px solid var(--blue);border-radius:4px;font-size:8.2px;font-weight:700;line-height:1.45}.analysis{display:grid;gap:7px;color:#344b68;font-size:8.6px;line-height:1.5;font-weight:700}.analysis p{margin:0}.signature{margin:18px 0 10px;display:flex;align-items:flex-end;justify-content:space-between;gap:40px}.signature .line{width:260px;text-align:center;color:#53647b;font-size:8px;font-weight:800}.signature .line:before{content:"";display:block;height:28px;border-bottom:1px solid #53647b;margin-bottom:5px}.generated{text-align:right;color:#718197;font-size:7.5px;font-weight:800}.generated strong{display:block;color:var(--navy);font-size:9px;margin-top:2px}footer{margin:10px -28px -28px;padding:11px 28px;min-height:42px;display:flex;align-items:center;justify-content:space-between;background:var(--navy);color:#dce9fb;font-size:8px;font-weight:800}.powered{display:flex;align-items:center;gap:8px}.powered img{width:64px;height:24px;object-fit:contain;padding:3px 5px;border-radius:4px;background:#fff}
+    @media print{body{background:#fff}.sheet{box-shadow:none;margin:0;width:794px}}
   </style>
 </head>
 <body>
@@ -363,17 +384,11 @@ function buildCartAnalyticReportHtml(dataset) {
     </header>
 
     <section class="device-strip">
-      <div>
-        <h2>Hospital Einstein</h2>
-        <div class="device-meta">
-          <span><b>Sala</b>2° Bloco A</span>
-          <span><b>Limite crítico</b>${metrics.criticalPercent}%</span>
-        </div>
-      </div>
-      <div class="scope">
-        <b>Escopo do relatório</b>
-        <strong>Ocupação dos carrinhos, alertas críticos e tempo de retirada após alerta.</strong>
-        <span>Consolida o comportamento operacional da sala no período analisado.</span>
+      <h2>Hospital Einstein</h2>
+      <div class="device-meta">
+        <span><b>Sala</b>2° Bloco A</span>
+        <span><b>Limite crítico</b>${metrics.criticalPercent}%</span>
+        <span class="scope-item"><b>Escopo do relatório</b><strong>Ocupação dos carrinhos, alertas críticos e tempo de retirada após alerta.</strong></span>
       </div>
     </section>
 
@@ -389,15 +404,22 @@ function buildCartAnalyticReportHtml(dataset) {
 
     <section class="section">
       <div class="section-title"><b>1</b><div><h3>Evolução da ocupação</h3><p>Mostra a ocupação dos carrinhos, o limite crítico configurado, os alertas críticos e as trocas registradas.</p></div></div>
-      <div class="chart-card">
-        <div class="chart-head"><span class="legend"><i class="blue"></i>Ocupação</span><span class="legend"><i class="red-line"></i>Limite crítico</span><span class="legend"><i class="green-line"></i>Troca</span></div>
-        ${buildOccupancyChart(metrics)}
-      </div>
-      <div class="reading-grid">
-        <div><small>Status do período</small><strong class="${metrics.criticalAlerts.length ? 'red' : 'green'}">${escapeHtml(statusText)}</strong><span>Histórico consolidado</span></div>
-        <div><small>Ocupação média</small><strong>${metrics.avgFill}%</strong><span>Faixas oficiais</span></div>
-        <div><small>Pico registrado</small><strong>${metrics.maxFill}%</strong><span>Maior ocupação</span></div>
-        <div><small>Tempo em crítico</small><strong class="red">${formatDuration(metrics.criticalMinutes)}</strong><span>Tempo acumulado</span></div>
+      <div class="history-grid">
+        <div class="chart-card">
+          <div class="chart-head">
+            <span><i></i>Ocupação</span>
+            <span class="crit"><i></i>Limite crítico</span>
+            <span class="exchange"><i></i>Troca</span>
+          </div>
+          ${buildOccupancyChart(metrics)}
+        </div>
+        <aside class="reading-box">
+          <h4>Leitura da ocupação</h4>
+          <div><small>Status do período</small><strong class="${metrics.criticalAlerts.length ? 'red' : 'green'}">${escapeHtml(statusText)}</strong></div>
+          <div><small>Ocupação média</small><strong>${metrics.avgFill}%</strong></div>
+          <div><small>Pico registrado</small><strong>${metrics.maxFill}%</strong></div>
+          <div><small>Tempo em crítico</small><strong class="red">${formatDuration(metrics.criticalMinutes)}</strong></div>
+        </aside>
       </div>
     </section>
 
@@ -466,7 +488,16 @@ function buildCartAnalyticReportHtml(dataset) {
       </div>
     </section>
 
-    <div class="powered"><span>Powered by</span><img src="/assets/idvida-logo.png" alt="IDvida"></div>
+    <section class="signature">
+      <div class="line">Assinatura do responsável<br><small>Nome e identificação</small></div>
+      <div class="generated">Relatório gerado em<strong>${formatDate(metrics.generatedAt)} ${formatTime(metrics.generatedAt)}</strong><span>ID: RA-CR-2A-POC</span></div>
+    </section>
+
+    <footer>
+      <div class="powered"><span>Powered by</span><img src="/assets/idvida-logo.png" alt="IDvida"></div>
+      <strong>ID Sensor - Relatório Analítico</strong>
+      <span>Página 1 de 1</span>
+    </footer>
   </main>
 </body>
 </html>`;

@@ -3506,10 +3506,10 @@ addRoute('GET', '/api/cart-tracking/chart', async ({ query, res }) => {
 
 addRoute('GET', '/relatorios/carrinhos/einstein', async ({ res }) => {
   const dataset = buildEinsteinCartOperationalDataset(getDb(), {
-    limit: 60000,
+    limit: 12000,
     alertLimit: 500,
     telemetryLimit: 5000,
-    sampleLimit: 60000
+    sampleLimit: 12000
   });
   const body = buildCartAnalyticReportHtml(dataset);
   res.writeHead(200, {
