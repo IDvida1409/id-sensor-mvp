@@ -13359,7 +13359,14 @@ if(false){(function(){
   }
 
   function openCartAnalyticReportPreview(){
-    window.open(`/relatorios/carrinhos/einstein?t=${Date.now()}`, '_blank', 'noopener');
+    const overlay = document.getElementById('cartAnalyticReportPreviewOverlay');
+    const frame = document.getElementById('cartAnalyticReportPreviewFrame');
+    if(!overlay || !frame){
+      window.open(`/relatorios/carrinhos/einstein?t=${Date.now()}`, '_blank', 'noopener');
+      return;
+    }
+    frame.src = `/relatorios/carrinhos/einstein?t=${Date.now()}`;
+    overlay.hidden = false;
   }
 
   function closeCartAnalyticReportPreview(){
@@ -13372,7 +13379,7 @@ if(false){(function(){
   function printCartAnalyticReportPreview(){
     const frame = document.getElementById('cartAnalyticReportPreviewFrame');
     if(!frame?.contentWindow) {
-      window.open('/relatorios/carrinhos/einstein', '_blank', 'noopener');
+      window.open(`/relatorios/carrinhos/einstein?t=${Date.now()}`, '_blank', 'noopener');
       return;
     }
     frame.contentWindow.focus();
