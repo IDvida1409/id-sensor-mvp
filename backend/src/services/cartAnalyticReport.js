@@ -320,6 +320,12 @@ function buildOccupancyChart(metrics) {
   const samples = buildDailyOccupancyPoints(metrics, startMs, endMs);
   const ticks = buildDayTicks(startMs, endMs);
   const yTicks = [0, 25, 50, 75, 100];
+  const slots = Math.max(1, ticks.length);
+  const slotW = plotW / slots;
+  const xDay = (time) => {
+    const dayIndex = Math.round((time - startMs) / (24 * 60 * 60 * 1000));
+    return left + slotW * (dayIndex + 0.5);
+  };
   const exchangesByDay = new Map();
   for (const exchange of metrics.exchanges) {
     const day = localDayStartMs(exchange.ts);
@@ -327,8 +333,6 @@ function buildOccupancyChart(metrics) {
     exchangesByDay.set(day, (exchangesByDay.get(day) || 0) + 1);
   }
   const maxDailyExchanges = Math.max(...Array.from(exchangesByDay.values()), 1);
-  const slots = Math.max(1, samples.length);
-  const slotW = plotW / slots;
   const barW = Math.max(6, slotW * 0.42);
   const bars = samples.map((sample, index) => {
     const dayExchanges = exchangesByDay.get(sample.time) || 0;
@@ -339,7 +343,7 @@ function buildOccupancyChart(metrics) {
     const normalHeight = (normalPercent / 100) * plotH;
     const exchangeHeight = (greenPercent / 100) * plotH;
     const criticalHeight = Math.max(0, (criticalPercent / 100) * plotH - exchangeHeight);
-    const center = left + slotW * (index + 0.5);
+    const center = xDay(sample.time);
     const bx = center - barW / 2;
     let cursor = top + plotH;
     const parts = [];
@@ -361,8 +365,8 @@ function buildOccupancyChart(metrics) {
     <text x="${left - 10}" y="${(y(tick) + 3).toFixed(1)}" text-anchor="end">${tick}%</text>
   `).join('');
   const xGrid = ticks.map((tick) => `
-    <line x1="${x(tick).toFixed(1)}" y1="${top}" x2="${x(tick).toFixed(1)}" y2="${top + plotH}" stroke="#d8e6f6" stroke-dasharray="4 6"/>
-    <text x="${x(tick).toFixed(1)}" y="${top + plotH + 22}" text-anchor="middle">${formatDateShort(tick)}</text>
+    <line x1="${xDay(tick).toFixed(1)}" y1="${top}" x2="${xDay(tick).toFixed(1)}" y2="${top + plotH}" stroke="#d8e6f6" stroke-dasharray="4 6"/>
+    <text x="${xDay(tick).toFixed(1)}" y="${top + plotH + 22}" text-anchor="middle">${formatDateShort(tick)}</text>
   `).join('');
   const criticalY = y(metrics.criticalPercent);
 
