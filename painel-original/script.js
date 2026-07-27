@@ -13339,7 +13339,7 @@ if(false){(function(){
           <span><small>Eventos</small><strong>${events.length}</strong></span>
         </div>
         <div class="graph-report-list">
-          <button class="graph-report-btn" type="button" data-cart-analytic-report-preview>Exportar PDF</button>
+          <button class="graph-report-btn" type="button" data-cart-analytic-report-preview>Abrir relatório</button>
           <button class="graph-report-btn" disabled>Exportar Excel</button>
         </div>
       </details>
@@ -13359,11 +13359,7 @@ if(false){(function(){
   }
 
   function openCartAnalyticReportPreview(){
-    const overlay = document.getElementById('cartAnalyticReportPreviewOverlay');
-    const frame = document.getElementById('cartAnalyticReportPreviewFrame');
-    if(!overlay || !frame) return;
-    frame.src = `/relatorios/carrinhos/einstein?t=${Date.now()}`;
-    overlay.hidden = false;
+    window.open(`/relatorios/carrinhos/einstein?t=${Date.now()}`, '_blank', 'noopener');
   }
 
   function closeCartAnalyticReportPreview(){
