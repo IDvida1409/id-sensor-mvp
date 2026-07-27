@@ -13340,6 +13340,7 @@ if(false){(function(){
         </div>
         <div class="graph-report-list">
           <button class="graph-report-btn" type="button" data-cart-analytic-report-preview>Abrir relatório</button>
+          <button class="graph-report-btn" type="button" data-cart-analytic-report-pdf>Baixar PDF</button>
           <button class="graph-report-btn" disabled>Exportar Excel</button>
         </div>
       </details>
@@ -13359,14 +13360,20 @@ if(false){(function(){
   }
 
   function openCartAnalyticReportPreview(){
-    const overlay = document.getElementById('cartAnalyticReportPreviewOverlay');
-    const frame = document.getElementById('cartAnalyticReportPreviewFrame');
-    if(!overlay || !frame){
-      window.open(`/relatorios/carrinhos/einstein?t=${Date.now()}`, '_blank', 'noopener');
-      return;
-    }
-    frame.src = `/relatorios/carrinhos/einstein?t=${Date.now()}`;
-    overlay.hidden = false;
+    window.open(`/relatorios/carrinhos/einstein?t=${Date.now()}`, '_blank', 'noopener');
+  }
+
+  function downloadCartAnalyticReportPdf(){
+    const reportWindow = window.open(`/relatorios/carrinhos/einstein?t=${Date.now()}&print=1`, '_blank', 'noopener');
+    if(!reportWindow) return;
+    window.setTimeout(() => {
+      try{
+        reportWindow.focus();
+        reportWindow.print();
+      }catch(error){
+        // A nova aba ainda permite usar Ctrl+P / salvar como PDF se o navegador bloquear a chamada.
+      }
+    }, 900);
   }
 
   function closeCartAnalyticReportPreview(){
@@ -14919,6 +14926,7 @@ if(false){(function(){
     document.getElementById('cartReportModalOverlay')?.addEventListener('click', event => {
       if(event.target.id === 'cartReportModalOverlay') closeCartReportModal();
       if(event.target.closest('[data-cart-analytic-report-preview]')) openCartAnalyticReportPreview();
+      if(event.target.closest('[data-cart-analytic-report-pdf]')) downloadCartAnalyticReportPdf();
     });
     document.getElementById('cartAnalyticReportPreviewCloseBtn')?.addEventListener('click', closeCartAnalyticReportPreview);
     document.getElementById('cartAnalyticReportPreviewOverlay')?.addEventListener('click', event => {
