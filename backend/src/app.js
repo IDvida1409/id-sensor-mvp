@@ -2931,6 +2931,9 @@ function telemetryEventFromRow(event) {
 function buildOperationalTelemetry(db, row) {
   const status = String(row.status || 'normal').toLowerCase();
   const telemetryWindowStart = new Date(Date.now() - (24 * 60 * 60 * 1000)).toISOString();
+  const telemetryOrder = db.dialect === 'postgres'
+    ? 'ORDER BY ocorrido_em DESC, id DESC'
+    : 'ORDER BY ocorrido_em DESC, rowid DESC';
   const alerts = db.prepare(`
     SELECT *
     FROM alerts
@@ -2945,7 +2948,7 @@ function buildOperationalTelemetry(db, row) {
     FROM telemetry_events
     WHERE dispositivo_id = ?
       AND ocorrido_em >= ?
-    ORDER BY ocorrido_em DESC, rowid DESC
+    ${telemetryOrder}
     LIMIT 12
   `).all(row.id, telemetryWindowStart);
 
