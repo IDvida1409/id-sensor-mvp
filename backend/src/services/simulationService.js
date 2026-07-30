@@ -177,6 +177,11 @@ function updateDevice(db, row, next, updatedAt = nowIso()) {
   );
 }
 
+function isMaintenanceDevice(row) {
+  const status = String(row?.status || '').toLowerCase();
+  return status === 'manutencao' || status === 'maint';
+}
+
 function closeSimulationAlertsForDevice(db, deviceId, endedAt = nowIso()) {
   db.prepare(`
     UPDATE alerts
@@ -364,6 +369,7 @@ function plannedStateFor(row, stage) {
 
 function resetOperationalDevices(db) {
   activeDeviceRows(db).forEach((row) => {
+    if (isMaintenanceDevice(row)) return;
     updateDevice(db, row, normalStateFor(row));
     closeSimulationAlertsForDevice(db, row.id);
   });
@@ -374,15 +380,20 @@ function normalizeOperationalDevices(db) {
   let normalizationCount = 0;
 
   activeDeviceRows(db).forEach((row) => {
+    if (isMaintenanceDevice(row)) return;
+
     const previousStatus = String(row.status || 'normal').toLowerCase();
+    if (previousStatus === 'normal') {
+      closeSimulationAlertsForDevice(db, row.id, normalizedAt);
+      return;
+    }
+
     const next = normalStateFor(row);
 
     // Preserve the simulated excursion and append the normalized reading.
     next.chart_json = chartWith(row, next.temp);
     closeSimulationAlertsForDevice(db, row.id, normalizedAt);
     updateDevice(db, row, next, normalizedAt);
-
-    if (previousStatus === 'normal') return;
 
     if (previousStatus === 'critico') {
       recordTelemetryEvent(db, row, {
@@ -437,6 +448,8 @@ function applySimulationStage(db, stage) {
   let occurrenceCount = 0;
 
   rows.forEach((row) => {
+    if (isMaintenanceDevice(row)) return;
+
     const next = plannedStateFor(row, stage);
     const isOccurrence = next.status === 'atencao' || next.status === 'critico' || next.status === 'offline';
 
@@ -470,7 +483,10 @@ function runSimulationTick(db, options = {}) {
 
 function advanceSimulationIfNeeded(db) {
   const state = ensureSimulationState(db);
-  if (!state.enabled) return serializeSimulationState(state);
+  if (!state.enabled) {
+    normalizeOperationalDevices(db);
+    return serializeSimulationState(state);
+  }
 
   const startedAt = state.started_at ? Date.parse(state.started_at) : 0;
   const elapsedMs = startedAt ? Date.now() - startedAt : 0;
