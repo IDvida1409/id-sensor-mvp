@@ -12478,6 +12478,17 @@ if(false){(function(){
     return ticks;
   }
 
+  function chartDateLabelStep(totalTicks){
+    if(totalTicks <= 15) return 1;
+    if(totalTicks <= 45) return 3;
+    if(totalTicks <= 90) return 7;
+    return 14;
+  }
+
+  function shouldShowChartDateLabel(index, totalTicks, step){
+    return index === 0 || index === totalTicks - 1 || index % step === 0;
+  }
+
   function chartDayPeriodLabel(value){
     const date = new Date(value || 0);
     if(Number.isNaN(date.getTime())) return 'sem período';
@@ -13014,11 +13025,13 @@ if(false){(function(){
     const tickValues = model.period.key === 'poc'
       ? chartDailyTickValues(model.period.start, model.period.end)
       : Array.from({ length:tickCount + 1 }, (_, index) => model.period.start + (span * index) / tickCount);
-    const gridX = tickValues.map(value => {
+    const labelStep = chartDateLabelStep(tickValues.length);
+    const gridX = tickValues.map((value, index) => {
       const gx = x(value);
+      const showLabel = model.period.key !== 'poc' || shouldShowChartDateLabel(index, tickValues.length, labelStep);
       return `
         <line x1="${gx}" y1="${top}" x2="${gx}" y2="${bottom}" class="cart-op-grid ${model.period.key === 'poc' ? 'is-day' : ''}"></line>
-        <text x="${gx}" y="${bottom + 26}" text-anchor="middle" class="cart-op-axis ${model.period.key === 'poc' ? 'is-poc-day' : ''}">${escapeHtml(chartTickLabel(value, model.period.key, span))}</text>
+        ${showLabel ? `<text x="${gx}" y="${bottom + 26}" text-anchor="middle" class="cart-op-axis ${model.period.key === 'poc' ? 'is-poc-day' : ''}">${escapeHtml(chartTickLabel(value, model.period.key, span))}</text>` : ''}
       `;
     }).join('');
     const exchangeItems = chartExchangeDisplayItems(model.exchangeEvents || [], model.period.key, span).map(item => ({

@@ -282,6 +282,17 @@ function buildDayTicks(startMs, endMs) {
   return ticks.length ? ticks : [startMs];
 }
 
+function chartDateLabelStep(totalTicks) {
+  if (totalTicks <= 15) return 1;
+  if (totalTicks <= 45) return 3;
+  if (totalTicks <= 90) return 7;
+  return 14;
+}
+
+function shouldShowChartDateLabel(index, totalTicks, step) {
+  return index === 0 || index === totalTicks - 1 || index % step === 0;
+}
+
 function buildDailyOccupancyPoints(metrics, startMs, endMs) {
   const byDay = new Map();
   for (const sample of metrics.samples) {
@@ -364,10 +375,17 @@ function buildOccupancyChart(metrics) {
     <line x1="${left}" y1="${y(tick).toFixed(1)}" x2="${left + plotW}" y2="${y(tick).toFixed(1)}" stroke="#d8e6f6" stroke-dasharray="4 6"/>
     <text x="${left - 10}" y="${(y(tick) + 3).toFixed(1)}" text-anchor="end">${tick}%</text>
   `).join('');
-  const xGrid = ticks.map((tick) => `
-    <line x1="${xDay(tick).toFixed(1)}" y1="${top}" x2="${xDay(tick).toFixed(1)}" y2="${top + plotH}" stroke="#d8e6f6" stroke-dasharray="4 6"/>
-    <text x="${xDay(tick).toFixed(1)}" y="${top + plotH + 22}" text-anchor="middle">${formatDateShort(tick)}</text>
-  `).join('');
+  const labelStep = chartDateLabelStep(ticks.length);
+  const xGrid = ticks.map((tick, index) => {
+    const dayX = xDay(tick).toFixed(1);
+    const label = shouldShowChartDateLabel(index, ticks.length, labelStep)
+      ? `<text x="${dayX}" y="${top + plotH + 22}" text-anchor="middle">${formatDateShort(tick)}</text>`
+      : '';
+    return `
+      <line x1="${dayX}" y1="${top}" x2="${dayX}" y2="${top + plotH}" stroke="#d8e6f6" stroke-dasharray="4 6"/>
+      ${label}
+    `;
+  }).join('');
   const criticalY = y(metrics.criticalPercent);
 
   return `
