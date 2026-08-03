@@ -2455,7 +2455,7 @@ function getSealInfo(d){
 }
 
 function getCalibHTML(d){
-  if(!d || d.certificateHidden || d.hasCertificate !== true) return '';
+  if(!d || d.certificateHidden || d.hasCertificate === false) return '';
   const info = getSealInfo(d);
   const certificateUrl = d.certificateFile || SAMPLE_CERTIFICATE_FILE;
   const certificateName = d.certificateFileName || certificateUrl;
