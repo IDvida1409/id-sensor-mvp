@@ -105,6 +105,10 @@ const EINSTEIN_CART_ALERT_RECURRENCE_MS = Number(process.env.EINSTEIN_CART_ALERT
 const EINSTEIN_CART_EXCHANGE_CONFIRM_READINGS = Number(process.env.EINSTEIN_CART_EXCHANGE_CONFIRM_READINGS || 2);
 const EINSTEIN_CART_EXCHANGE_OLD_SILENCE_MS = Number(process.env.EINSTEIN_CART_EXCHANGE_OLD_SILENCE_MS || 4 * 60 * 1000);
 const EINSTEIN_CART_EXCHANGE_MIN_RETURN_MS = Number(process.env.EINSTEIN_CART_EXCHANGE_MIN_RETURN_MS || 30 * 60 * 1000);
+const EINSTEIN_CART_HISTORY_LIMIT = Number(process.env.EINSTEIN_CART_HISTORY_LIMIT || 60000);
+const EINSTEIN_CART_SAMPLE_LIMIT = Number(process.env.EINSTEIN_CART_SAMPLE_LIMIT || EINSTEIN_CART_HISTORY_LIMIT);
+const EINSTEIN_CART_TELEMETRY_LIMIT = Number(process.env.EINSTEIN_CART_TELEMETRY_LIMIT || 12000);
+const EINSTEIN_CART_ALERT_LIMIT = Number(process.env.EINSTEIN_CART_ALERT_LIMIT || 1000);
 const EINSTEIN_CART_SENSORS = [
   { id: 'c01', name: 'C01', sensorId: 'de08dbf47311', roomId: EINSTEIN_CART_ROOM_ID, roomName: EINSTEIN_CART_ROOM_NAME },
   { id: 'c02', name: 'C02', sensorId: 'c4894994a485', roomId: EINSTEIN_CART_ROOM_ID, roomName: EINSTEIN_CART_ROOM_NAME }
@@ -1956,7 +1960,7 @@ function buildEinsteinCartOperationalDataset(db, options = {}) {
     ? options.macFilters.filter((sensorId) => operationalSensors.has(sensorId))
     : EINSTEIN_CART_SENSORS.map((sensor) => sensor.sensorId);
   const readings = operationalReadingsHistory(db, {
-    limit: options.limit || 2000,
+    limit: options.limit || EINSTEIN_CART_HISTORY_LIMIT,
     macFilters: requestedSensors
   });
   const telemetryEvents = [];
@@ -2203,12 +2207,12 @@ function buildEinsteinCartOperationalDataset(db, options = {}) {
     latestReadings,
     alerts: alerts
       .sort((a, b) => new Date(b.ts || 0) - new Date(a.ts || 0))
-      .slice(0, Math.max(1, Math.min(500, Number(options.alertLimit || 120)))),
+      .slice(0, Math.max(1, Math.min(EINSTEIN_CART_ALERT_LIMIT, Number(options.alertLimit || EINSTEIN_CART_ALERT_LIMIT)))),
     telemetryEvents: telemetryEvents
       .sort((a, b) => new Date(a.ts || 0) - new Date(b.ts || 0))
-      .slice(-Math.max(1, Math.min(5000, Number(options.telemetryLimit || 240)))),
+      .slice(-Math.max(1, Math.min(EINSTEIN_CART_TELEMETRY_LIMIT, Number(options.telemetryLimit || EINSTEIN_CART_TELEMETRY_LIMIT)))),
     chart: {
-      samples: samples.slice(-Math.max(1, Math.min(60000, Number(options.sampleLimit || 500)))),
+      samples: samples.slice(-Math.max(1, Math.min(EINSTEIN_CART_SAMPLE_LIMIT, Number(options.sampleLimit || EINSTEIN_CART_SAMPLE_LIMIT)))),
       validatedExchanges: validatedOperationalExchangesFromSamples(samples)
     }
   };
@@ -3438,10 +3442,10 @@ addRoute('GET', '/api/cart-tracking/operational', async ({ query, res }) => {
 
   ok(res, buildEinsteinCartOperationalDataset(getDb(), {
     macFilters,
-    limit: query.limit || 2000,
-    alertLimit: query.alertLimit || 120,
-    telemetryLimit: query.telemetryLimit || 240,
-    sampleLimit: query.sampleLimit || 500
+    limit: query.limit || EINSTEIN_CART_HISTORY_LIMIT,
+    alertLimit: query.alertLimit || EINSTEIN_CART_ALERT_LIMIT,
+    telemetryLimit: query.telemetryLimit || EINSTEIN_CART_TELEMETRY_LIMIT,
+    sampleLimit: query.sampleLimit || EINSTEIN_CART_SAMPLE_LIMIT
   }));
 });
 
@@ -3458,8 +3462,8 @@ addRoute('GET', '/api/cart-tracking/alerts', async ({ query, res }) => {
     .filter(Boolean);
   const dataset = buildEinsteinCartOperationalDataset(getDb(), {
     macFilters,
-    limit: query.limit || 2000,
-    alertLimit: query.alertLimit || 120
+    limit: query.limit || EINSTEIN_CART_HISTORY_LIMIT,
+    alertLimit: query.alertLimit || EINSTEIN_CART_ALERT_LIMIT
   });
 
   ok(res, {
@@ -3476,8 +3480,8 @@ addRoute('GET', '/api/cart-tracking/telemetry', async ({ query, res }) => {
     .filter(Boolean);
   const dataset = buildEinsteinCartOperationalDataset(getDb(), {
     macFilters,
-    limit: query.limit || 2000,
-    telemetryLimit: query.telemetryLimit || 240
+    limit: query.limit || EINSTEIN_CART_HISTORY_LIMIT,
+    telemetryLimit: query.telemetryLimit || EINSTEIN_CART_TELEMETRY_LIMIT
   });
 
   ok(res, {
@@ -3495,8 +3499,8 @@ addRoute('GET', '/api/cart-tracking/chart', async ({ query, res }) => {
     .filter(Boolean);
   const dataset = buildEinsteinCartOperationalDataset(getDb(), {
     macFilters,
-    limit: query.limit || 2000,
-    sampleLimit: query.sampleLimit || 500
+    limit: query.limit || EINSTEIN_CART_HISTORY_LIMIT,
+    sampleLimit: query.sampleLimit || EINSTEIN_CART_SAMPLE_LIMIT
   });
 
   ok(res, {
@@ -3509,10 +3513,10 @@ addRoute('GET', '/api/cart-tracking/chart', async ({ query, res }) => {
 
 addRoute('GET', '/relatorios/carrinhos/einstein', async ({ res }) => {
   const dataset = buildEinsteinCartOperationalDataset(getDb(), {
-    limit: 12000,
-    alertLimit: 500,
-    telemetryLimit: 5000,
-    sampleLimit: 12000
+    limit: EINSTEIN_CART_HISTORY_LIMIT,
+    alertLimit: EINSTEIN_CART_ALERT_LIMIT,
+    telemetryLimit: EINSTEIN_CART_TELEMETRY_LIMIT,
+    sampleLimit: EINSTEIN_CART_SAMPLE_LIMIT
   });
   const body = buildCartAnalyticReportHtml(dataset);
   res.writeHead(200, {

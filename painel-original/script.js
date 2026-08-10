@@ -11249,10 +11249,10 @@ if(false){(function(){
     if(Array.isArray(macFilters) && macFilters.length){
       params.set('mac', macFilters.join(','));
     }
-    params.set('limit', '10000');
+    params.set('limit', '60000');
     params.set('alertLimit', String(CART_ALERT_LIMIT));
-    params.set('telemetryLimit', '5000');
-    params.set('sampleLimit', '10000');
+    params.set('telemetryLimit', '12000');
+    params.set('sampleLimit', '60000');
     return `?${params.toString()}`;
   }
 
