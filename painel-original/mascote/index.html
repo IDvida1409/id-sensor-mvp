@@ -372,6 +372,23 @@
       padding: 10px 12px;
     }
 
+    .install-steps {
+      background: rgba(255, 255, 255, .76);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      color: var(--ink);
+      display: grid;
+      font-size: 12px;
+      gap: 7px;
+      line-height: 1.3;
+      padding: 10px 12px;
+    }
+
+    .install-steps strong {
+      color: var(--deep);
+      font-size: 12px;
+    }
+
     @keyframes greet {
       0%, 100% { transform: translateY(-1px) rotate(-.25deg) scale(1.002); }
       50% { transform: translateY(-7px) rotate(.35deg) scale(1.008); }
@@ -414,7 +431,7 @@
       </div>
       <div class="actions">
         <button class="primary" id="activateBtn" type="button">Ativar Mascote IDvida</button>
-        <a class="quiet download" href="https://id-sensor-mvp.onrender.com/mascote/downloads/Mascote-IDvida-Desktop.zip" download>Baixar helper desktop</a>
+        <a class="quiet download" id="downloadBtn" href="https://id-sensor-mvp.onrender.com/mascote/downloads/Mascote-IDvida-Desktop.zip" download>Baixar ZIP do helper</a>
         <button class="quiet" id="closeBtn" type="button">Fechar mascote</button>
       </div>
     </header>
@@ -473,6 +490,13 @@
             <div class="step" id="stepAlert"><span>3</span><span>Alerta simulado</span></div>
             <div class="log" id="log">Clique em Ativar Mascote IDvida para iniciar o teste.</div>
             <div class="notice">Para aparecer fora do navegador em outro computador, baixe o helper desktop e instale uma vez. Sem helper, esta página mostra apenas a prévia web.</div>
+            <div class="install-steps">
+              <strong>Depois de baixar o ZIP:</strong>
+              <span>1. Clique em Extrair tudo.</span>
+              <span>2. Abra a pasta extraída.</span>
+              <span>3. Execute INSTALAR-MASCOTE-IDVIDA.bat.</span>
+              <span>4. Volte aqui e clique em Ativar Mascote IDvida.</span>
+            </div>
           </div>
         </aside>
 
@@ -498,6 +522,7 @@
     const API = 'http://127.0.0.1:17323';
     const PROTOCOL_URL = 'idvida-mascote://start';
     const activateBtn = document.getElementById('activateBtn');
+    const downloadBtn = document.getElementById('downloadBtn');
     const closeBtn = document.getElementById('closeBtn');
     const helperStatus = document.getElementById('helperStatus');
     const webStatus = document.getElementById('webStatus');
@@ -695,6 +720,10 @@
     });
 
     closeBtn.addEventListener('click', closeMascot);
+    downloadBtn.addEventListener('click', () => {
+      setBadge(helperStatus, 'Instalação', 'warn');
+      setText('Download iniciado. Baixar não instala: extraia o ZIP e execute INSTALAR-MASCOTE-IDVIDA.bat.');
+    });
     resetPanel();
   </script>
 </body>
