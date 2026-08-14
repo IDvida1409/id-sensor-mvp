@@ -2665,10 +2665,14 @@ function safePanelPath(urlPath) {
 function servePanelFile(req, res, pathname) {
   if (req.method !== 'GET' && req.method !== 'HEAD') return false;
 
-  const filePath = safePanelPath(pathname);
+  let filePath = safePanelPath(pathname);
   if (!filePath) {
     fail(res, 403, 'Arquivo não autorizado.');
     return true;
+  }
+
+  if (fs.existsSync(filePath) && fs.statSync(filePath).isDirectory()) {
+    filePath = path.join(filePath, 'index.html');
   }
 
   if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) return false;
