@@ -389,6 +389,90 @@
       font-size: 12px;
     }
 
+    .web-companion {
+      cursor: grab;
+      display: none;
+      height: 188px;
+      left: 22px;
+      position: fixed;
+      top: 22px;
+      touch-action: none;
+      user-select: none;
+      width: 318px;
+      z-index: 50;
+    }
+
+    .web-companion.is-active {
+      display: block;
+    }
+
+    .web-companion.is-dragging {
+      cursor: grabbing;
+    }
+
+    .web-companion .pet {
+      bottom: 0;
+      height: 146px;
+      position: absolute;
+      right: 0;
+      width: 146px;
+    }
+
+    .web-companion .pet::after {
+      bottom: 2px;
+      height: 12px;
+      width: 64%;
+    }
+
+    .web-companion .bubble {
+      background: rgba(255, 255, 255, .74);
+      border-color: rgba(35, 174, 234, .56);
+      box-shadow: 0 8px 18px rgba(6, 29, 56, .10);
+      font-size: 11px;
+      line-height: 1.25;
+      pointer-events: none;
+      right: 124px;
+      top: 46px;
+      width: 174px;
+    }
+
+    .web-companion .bubble.is-alert {
+      border-color: rgba(244, 165, 28, .68);
+      width: 204px;
+    }
+
+    .web-close {
+      align-items: center;
+      background: rgba(255, 255, 255, .82);
+      border: 1px solid rgba(216, 227, 238, .9);
+      border-radius: 999px;
+      color: var(--deep);
+      cursor: pointer;
+      display: inline-flex;
+      font-size: 11px;
+      font-weight: 800;
+      height: 24px;
+      justify-content: center;
+      min-height: 24px;
+      padding: 0;
+      position: absolute;
+      right: 8px;
+      top: 24px;
+      width: 24px;
+      z-index: 5;
+    }
+
+    .web-companion img {
+      -webkit-user-drag: none;
+      pointer-events: none;
+      user-select: none;
+    }
+
+    .web-body.compact {
+      min-height: auto;
+      padding: 14px 16px;
+    }
+
     @keyframes greet {
       0%, 100% { transform: translateY(-1px) rotate(-.25deg) scale(1.002); }
       50% { transform: translateY(-7px) rotate(.35deg) scale(1.008); }
@@ -431,6 +515,7 @@
       </div>
       <div class="actions">
         <button class="primary" id="activateBtn" type="button">Ativar Mascote IDvida</button>
+        <button class="quiet" id="desktopBtn" type="button">Ativar desktop</button>
         <a class="quiet download" id="downloadBtn" href="https://id-sensor-mvp.onrender.com/mascote/downloads/Mascote-IDvida-Desktop.zip" download>Baixar ZIP do helper</a>
         <button class="quiet" id="closeBtn" type="button">Fechar mascote</button>
       </div>
@@ -502,28 +587,34 @@
 
         <section class="web-demo" aria-label="Prévia web do mascote">
           <div class="web-head">
-            <div class="title">Prévia web</div>
+            <div class="title">Mascote web</div>
             <div class="badge ok" id="webStatus">Pronta</div>
           </div>
-          <div class="web-body">
-            <div class="web-stage">
-              <div class="bubble" id="bubble">Oi, vou monitorar por aqui</div>
-              <div class="pet" id="pet" data-state="greet">
-                <img class="sprite" id="sprite" src="/mascote/assets/frames-v5-final/greet-01.png" alt="Mascote IDvida animado">
-              </div>
-            </div>
+          <div class="web-body compact">
+            <div class="notice">Sem instalar nada, o mascote aparece dentro desta aba e pode ser arrastado pela tela do navegador.</div>
           </div>
         </section>
       </div>
     </main>
+
+    <div class="web-companion" id="webCompanion" aria-label="Mascote IDvida web" aria-live="polite">
+      <button class="web-close" id="webCloseBtn" type="button" title="Fechar mascote web">X</button>
+      <div class="bubble" id="bubble">Oi, vou monitorar por aqui</div>
+      <div class="pet" id="pet" data-state="greet">
+        <img class="sprite" id="sprite" src="/mascote/assets/frames-v5-final/greet-01.png" alt="Mascote IDvida animado">
+      </div>
+    </div>
   </div>
 
   <script>
     const API = 'http://127.0.0.1:17323';
     const PROTOCOL_URL = 'idvida-mascote://start';
     const activateBtn = document.getElementById('activateBtn');
+    const desktopBtn = document.getElementById('desktopBtn');
     const downloadBtn = document.getElementById('downloadBtn');
     const closeBtn = document.getElementById('closeBtn');
+    const webCompanion = document.getElementById('webCompanion');
+    const webCloseBtn = document.getElementById('webCloseBtn');
     const helperStatus = document.getElementById('helperStatus');
     const webStatus = document.getElementById('webStatus');
     const generalStatus = document.getElementById('generalStatus');
@@ -562,6 +653,8 @@
     let timers = [];
     let frameTimer = 0;
     let frameIndex = 0;
+    let desktopReady = false;
+    let dragState = null;
 
     function clearTimers() {
       timers.forEach((timer) => window.clearTimeout(timer));
@@ -587,10 +680,58 @@
       }
     }
 
-    function setWebMascotState(name) {
+    function clamp(value, min, max) {
+      return Math.min(Math.max(value, min), max);
+    }
+
+    function saveWebCompanionPosition(left, top) {
+      try {
+        window.localStorage.setItem('idvidaMascotWebPosition', JSON.stringify({ left, top }));
+      } catch (error) {}
+    }
+
+    function readWebCompanionPosition() {
+      try {
+        return JSON.parse(window.localStorage.getItem('idvidaMascotWebPosition') || 'null');
+      } catch (error) {
+        return null;
+      }
+    }
+
+    function moveWebCompanion(left, top, persist = true) {
+      const rect = webCompanion.getBoundingClientRect();
+      const width = rect.width || 318;
+      const height = rect.height || 188;
+      const nextLeft = clamp(left, 8, Math.max(8, window.innerWidth - width - 8));
+      const nextTop = clamp(top, 8, Math.max(8, window.innerHeight - height - 8));
+      webCompanion.style.left = `${nextLeft}px`;
+      webCompanion.style.top = `${nextTop}px`;
+      if (persist) saveWebCompanionPosition(nextLeft, nextTop);
+    }
+
+    function showWebMascot() {
+      const wasActive = webCompanion.classList.contains('is-active');
+      webCompanion.classList.add('is-active');
+
+      if (!wasActive) {
+        const saved = readWebCompanionPosition();
+        const left = Number.isFinite(saved?.left) ? saved.left : window.innerWidth - 318 - 22;
+        const top = Number.isFinite(saved?.top) ? saved.top : window.innerHeight - 188 - 22;
+        moveWebCompanion(left, top, false);
+      }
+    }
+
+    function hideWebMascot() {
+      webCompanion.classList.remove('is-active', 'is-dragging');
+      bubble.classList.remove('is-visible');
+      dragState = null;
+    }
+
+    function setWebMascotState(name, shouldShow = true) {
       const state = states[name];
       window.clearInterval(frameTimer);
       frameIndex = 0;
+      if (shouldShow) showWebMascot();
       pet.dataset.state = name;
       bubble.textContent = state.bubble;
       bubble.classList.toggle('is-alert', state.alert);
@@ -604,6 +745,32 @@
       window.setTimeout(() => {
         if (name !== 'alert') bubble.classList.remove('is-visible');
       }, name === 'alert' ? 9000 : 3600);
+    }
+
+    function startWebDrag(event) {
+      if (event.target.closest('button')) return;
+      event.preventDefault();
+      showWebMascot();
+      const rect = webCompanion.getBoundingClientRect();
+      dragState = {
+        offsetX: event.clientX - rect.left,
+        offsetY: event.clientY - rect.top
+      };
+      webCompanion.classList.add('is-dragging');
+      webCompanion.setPointerCapture(event.pointerId);
+    }
+
+    function moveWebDrag(event) {
+      if (!dragState) return;
+      event.preventDefault();
+      moveWebCompanion(event.clientX - dragState.offsetX, event.clientY - dragState.offsetY);
+    }
+
+    function endWebDrag(event) {
+      if (!dragState) return;
+      dragState = null;
+      webCompanion.classList.remove('is-dragging');
+      try { webCompanion.releasePointerCapture(event.pointerId); } catch (error) {}
     }
 
     async function requestMascot(path) {
@@ -645,7 +812,8 @@
       setBadge(deviceStatus, 'Online', 'ok');
       setBadge(webStatus, 'Pronta', 'ok');
       setStep('');
-      setWebMascotState('greet');
+      setWebMascotState('greet', false);
+      hideWebMascot();
     }
 
     async function activateDesktopIfAvailable() {
@@ -660,20 +828,35 @@
       return true;
     }
 
+    async function activateDesktopMode() {
+      desktopBtn.disabled = true;
+      setBadge(helperStatus, 'Conectando', 'warn');
+      setText('Tentando abrir o mascote na área de trabalho...');
+      setWebMascotState('greet', true);
+
+      try {
+        desktopReady = await activateDesktopIfAvailable();
+        if (desktopReady) {
+          await requestMascot('/activate');
+          setText('Mascote desktop ativado. O mascote web continua disponível na aba.');
+        }
+      } finally {
+        desktopBtn.disabled = false;
+      }
+    }
+
     async function activateMascot() {
       clearTimers();
       resetPanel();
       activateBtn.disabled = true;
-      setBadge(helperStatus, 'Conectando', 'warn');
-      setText('Abrindo o Mascote IDvida...');
+      setBadge(helperStatus, 'Modo web', 'offline');
+      setText('Abrindo o Mascote IDvida dentro do navegador...');
+      desktopReady = false;
+      setWebMascotState('greet', true);
+      setBadge(webStatus, 'Web ativo', 'ok');
 
-      const desktopReady = await activateDesktopIfAvailable();
-
-      if (desktopReady) await requestMascot('/activate');
       setStep('greet');
-      setText(desktopReady
-        ? 'Mascote ativado na área de trabalho e nesta prévia.'
-        : 'Prévia web ativada. O link público funciona mesmo sem instalação local.');
+      setText('Mascote web ativado. Arraste ele para qualquer ponto da tela do navegador.');
 
       timers.push(window.setTimeout(async () => {
         setStep('monitor');
@@ -699,9 +882,10 @@
 
     async function closeMascot() {
       clearTimers();
-      setWebMascotState('monitor');
+      hideWebMascot();
+      setBadge(webStatus, 'Fechado', 'offline');
       setBadge(helperStatus, 'Fechado', 'offline');
-      setText('Prévia web mantida. Se houver mascote desktop aberto, vou tentar fechar.');
+      setText('Mascote web fechado. Se houver mascote desktop aberto, vou tentar fechar também.');
       try {
         await requestMascot('/close');
       } catch (error) {
@@ -720,6 +904,26 @@
     });
 
     closeBtn.addEventListener('click', closeMascot);
+    desktopBtn.addEventListener('click', () => {
+      activateDesktopMode().catch((error) => {
+        desktopBtn.disabled = false;
+        setBadge(helperStatus, 'Modo web', 'offline');
+        setText(`Desktop não disponível: ${error.message}. O mascote web continua funcionando.`);
+      });
+    });
+    webCloseBtn.addEventListener('click', hideWebMascot);
+    webCompanion.addEventListener('pointerdown', startWebDrag);
+    webCompanion.addEventListener('pointermove', moveWebDrag);
+    webCompanion.addEventListener('pointerup', endWebDrag);
+    webCompanion.addEventListener('pointercancel', endWebDrag);
+    window.addEventListener('pointermove', moveWebDrag);
+    window.addEventListener('pointerup', endWebDrag);
+    window.addEventListener('pointercancel', endWebDrag);
+    window.addEventListener('resize', () => {
+      if (!webCompanion.classList.contains('is-active')) return;
+      const rect = webCompanion.getBoundingClientRect();
+      moveWebCompanion(rect.left, rect.top, false);
+    });
     downloadBtn.addEventListener('click', () => {
       setBadge(helperStatus, 'Instalação', 'warn');
       setText('Download iniciado. Baixar não instala: extraia o ZIP e execute INSTALAR-MASCOTE-IDVIDA.bat.');
