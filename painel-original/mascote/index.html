@@ -65,7 +65,8 @@
       gap: 10px;
     }
 
-    button {
+    button,
+    .download {
       align-items: center;
       border: 0;
       border-radius: 8px;
@@ -80,7 +81,12 @@
       white-space: nowrap;
     }
 
-    button:active {
+    .download {
+      text-decoration: none;
+    }
+
+    button:active,
+    .download:active {
       transform: translateY(1px);
     }
 
@@ -408,6 +414,7 @@
       </div>
       <div class="actions">
         <button class="primary" id="activateBtn" type="button">Ativar Mascote IDvida</button>
+        <a class="quiet download" href="https://id-sensor-mvp.onrender.com/mascote/downloads/Mascote-IDvida-Desktop.zip" download>Baixar helper desktop</a>
         <button class="quiet" id="closeBtn" type="button">Fechar mascote</button>
       </div>
     </header>
@@ -465,7 +472,7 @@
             <div class="step" id="stepMonitor"><span>2</span><span>Monitoramento normal</span></div>
             <div class="step" id="stepAlert"><span>3</span><span>Alerta simulado</span></div>
             <div class="log" id="log">Clique em Ativar Mascote IDvida para iniciar o teste.</div>
-            <div class="notice">Em computadores sem helper instalado, a demonstração aparece dentro desta página. Com o helper instalado, o mascote também aparece na área de trabalho.</div>
+            <div class="notice">Para aparecer fora do navegador em outro computador, baixe o helper desktop e instale uma vez. Sem helper, esta página mostra apenas a prévia web.</div>
           </div>
         </aside>
 
@@ -621,7 +628,7 @@
       const ready = await ensureHelperStarted();
       if (!ready) {
         setBadge(helperStatus, 'Modo web', 'offline');
-        setText('Demonstração web ativa. Para aparecer na área de trabalho, este computador precisa do helper instalado.');
+        setText('Este computador ainda não tem o helper desktop. A prévia web continua funcionando; baixe e instale o helper para o mascote aparecer fora do navegador.');
         return false;
       }
       setBadge(helperStatus, 'Desktop ativo', 'ok');
