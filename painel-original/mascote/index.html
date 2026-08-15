@@ -392,13 +392,13 @@
     .web-companion {
       cursor: grab;
       display: none;
-      height: 198px;
+      height: 245px;
       left: 22px;
       position: fixed;
       top: 22px;
       touch-action: none;
       user-select: none;
-      width: 330px;
+      width: 390px;
       z-index: 50;
     }
 
@@ -412,10 +412,16 @@
 
     .web-companion .pet {
       bottom: 0;
-      height: 164px;
+      height: 218px;
       position: absolute;
       right: 0;
-      width: 164px;
+      width: 238px;
+    }
+
+    .web-companion .pet[data-state="origin"],
+    .web-companion .pet[data-state="close"] {
+      height: 218px;
+      width: 270px;
     }
 
     .web-companion .pet::after {
@@ -431,9 +437,9 @@
       font-size: 11px;
       line-height: 1.25;
       pointer-events: none;
-      right: 140px;
-      top: 46px;
-      width: 174px;
+      right: 212px;
+      top: 62px;
+      width: 158px;
     }
 
     .web-companion .bubble.is-alert {
@@ -570,9 +576,12 @@
             <div class="badge offline" id="helperStatus">Aguardando</div>
           </div>
           <div class="side-body">
-            <div class="step" id="stepGreet"><span>1</span><span>Saudação discreta</span></div>
+            <div class="step" id="stepOrigin"><span>1</span><span>Origem no IDSense</span></div>
             <div class="step" id="stepMonitor"><span>2</span><span>Monitoramento normal</span></div>
-            <div class="step" id="stepAlert"><span>3</span><span>Alerta simulado</span></div>
+            <div class="step" id="stepTour"><span>3</span><span>Apontar no painel</span></div>
+            <div class="step" id="stepTalk"><span>4</span><span>Falando com o usuário</span></div>
+            <div class="step" id="stepAlert"><span>5</span><span>Alerta simulado</span></div>
+            <div class="step" id="stepClose"><span>6</span><span>Voltar ao IDSense</span></div>
             <div class="log" id="log">Clique em Ativar Mascote IDvida para iniciar o teste.</div>
             <div class="notice">Para aparecer fora do navegador em outro computador, baixe o helper desktop e instale uma vez. Sem helper, esta página mostra apenas a prévia web.</div>
             <div class="install-steps">
@@ -600,8 +609,8 @@
     <div class="web-companion" id="webCompanion" aria-label="Mascote IDvida web" aria-live="polite">
       <button class="web-close" id="webCloseBtn" type="button" title="Fechar mascote web">X</button>
       <div class="bubble" id="bubble">Oi, vou monitorar por aqui</div>
-      <div class="pet" id="pet" data-state="greet">
-        <img class="sprite" id="sprite" src="/mascote/assets/frames-v6-motion/greet-01.png" alt="Mascote IDvida animado">
+      <div class="pet" id="pet" data-state="origin">
+        <img class="sprite" id="sprite" src="/mascote/assets/scenes-v1/origin-01.png" alt="Mascote IDvida animado">
       </div>
     </div>
   </div>
@@ -624,41 +633,58 @@
     const sprite = document.getElementById('sprite');
     const bubble = document.getElementById('bubble');
     const steps = {
-      greet: document.getElementById('stepGreet'),
+      origin: document.getElementById('stepOrigin'),
       monitor: document.getElementById('stepMonitor'),
-      alert: document.getElementById('stepAlert')
+      tour: document.getElementById('stepTour'),
+      talk: document.getElementById('stepTalk'),
+      alert: document.getElementById('stepAlert'),
+      close: document.getElementById('stepClose')
     };
 
-    const spriteRoot = '/mascote/assets/frames-v6-motion';
+    const spriteRoot = '/mascote/assets/scenes-v1';
 
     function frameRange(prefix, count) {
       return Array.from({ length: count }, (_, index) => `${prefix}-${String(index + 1).padStart(2, '0')}.png`);
     }
 
     const states = {
-      greet: {
-        frames: frameRange('greet', 14),
-        frameMs: 620,
-        bubble: 'Oi, vou monitorar por aqui',
-        alert: false
+      origin: {
+        frames: frameRange('origin', 6),
+        frameMs: 1000,
+        bubble: 'Saindo do IDSense...',
+        alert: false,
+        bubbleMs: 4200
       },
       monitor: {
-        frames: frameRange('monitor', 16),
-        frameMs: 980,
+        frames: frameRange('monitor', 4),
+        frameMs: 1200,
         bubble: 'Tudo certo por aqui',
         alert: false
       },
+      tour: {
+        frames: frameRange('tour', 4),
+        frameMs: 900,
+        bubble: 'Posso apontar cada área do painel.',
+        alert: false
+      },
+      talk: {
+        frames: frameRange('talk', 4),
+        frameMs: 850,
+        bubble: 'Depois eu explico o tour aqui.',
+        alert: false
+      },
       alert: {
-        frames: frameRange('alert', 14),
-        frameMs: 720,
+        frames: frameRange('alert', 4),
+        frameMs: 850,
         bubble: 'Geladeira 2 está há 30 min sem comunicação.',
         alert: true
       },
-      talk: {
-        frames: frameRange('talk', 12),
-        frameMs: 700,
-        bubble: 'Vou explicar esta parte do painel.',
-        alert: false
+      close: {
+        frames: frameRange('close', 4),
+        frameMs: 1000,
+        bubble: 'Voltando para o IDSense.',
+        alert: false,
+        bubbleMs: 5200
       }
     };
 
@@ -712,8 +738,8 @@
 
     function moveWebCompanion(left, top, persist = true) {
       const rect = webCompanion.getBoundingClientRect();
-      const width = rect.width || 318;
-      const height = rect.height || 188;
+      const width = rect.width || 390;
+      const height = rect.height || 245;
       const nextLeft = clamp(left, 8, Math.max(8, window.innerWidth - width - 8));
       const nextTop = clamp(top, 8, Math.max(8, window.innerHeight - height - 8));
       webCompanion.style.left = `${nextLeft}px`;
@@ -727,8 +753,8 @@
 
       if (!wasActive) {
         const saved = readWebCompanionPosition();
-        const left = Number.isFinite(saved?.left) ? saved.left : window.innerWidth - 330 - 22;
-        const top = Number.isFinite(saved?.top) ? saved.top : window.innerHeight - 198 - 22;
+        const left = Number.isFinite(saved?.left) ? saved.left : window.innerWidth - 390 - 22;
+        const top = Number.isFinite(saved?.top) ? saved.top : window.innerHeight - 245 - 22;
         moveWebCompanion(left, top, false);
       }
     }
@@ -756,7 +782,7 @@
 
       window.setTimeout(() => {
         if (name !== 'alert') bubble.classList.remove('is-visible');
-      }, name === 'alert' ? 9000 : 3600);
+      }, state.bubbleMs || (name === 'alert' ? 9000 : 3600));
     }
 
     function startWebDrag(event) {
@@ -824,7 +850,7 @@
       setBadge(deviceStatus, 'Online', 'ok');
       setBadge(webStatus, 'Pronta', 'ok');
       setStep('');
-      setWebMascotState('greet', false);
+      setWebMascotState('origin', false);
       hideWebMascot();
     }
 
@@ -844,7 +870,7 @@
       desktopBtn.disabled = true;
       setBadge(helperStatus, 'Conectando', 'warn');
       setText('Tentando abrir o mascote na área de trabalho...');
-      setWebMascotState('greet', true);
+      setWebMascotState('origin', true);
 
       try {
         desktopReady = await activateDesktopIfAvailable();
@@ -864,18 +890,30 @@
       setBadge(helperStatus, 'Modo web', 'offline');
       setText('Abrindo o Mascote IDvida dentro do navegador...');
       desktopReady = false;
-      setWebMascotState('greet', true);
+      setWebMascotState('origin', true);
       setBadge(webStatus, 'Web ativo', 'ok');
 
-      setStep('greet');
-      setText('Mascote web ativado. Arraste ele para qualquer ponto da tela do navegador.');
+      setStep('origin');
+      setText('O mascote sai do IDSense e entra na tela. Arraste ele para qualquer ponto do navegador.');
 
       timers.push(window.setTimeout(async () => {
         setStep('monitor');
         setWebMascotState('monitor');
         setText('Monitoramento normal. O balão é discreto e some sozinho.');
         if (desktopReady) await requestMascot('/monitor');
-      }, 10000));
+      }, 7600));
+
+      timers.push(window.setTimeout(() => {
+        setStep('tour');
+        setWebMascotState('tour');
+        setText('Teste visual: pose de apontar para uma área do painel. O tour real vem depois.');
+      }, 15200));
+
+      timers.push(window.setTimeout(() => {
+        setStep('talk');
+        setWebMascotState('talk');
+        setText('Teste visual: pose de fala para quando ele explicar uma função.');
+      }, 22800));
 
       timers.push(window.setTimeout(async () => {
         setStep('alert');
@@ -889,20 +927,25 @@
         }
         activateBtn.disabled = false;
         activateBtn.textContent = 'Reiniciar simulação';
-      }, 30000));
+      }, 30400));
     }
 
     async function closeMascot() {
       clearTimers();
-      hideWebMascot();
+      setStep('close');
+      setWebMascotState('close', true);
       setBadge(webStatus, 'Fechado', 'offline');
       setBadge(helperStatus, 'Fechado', 'offline');
-      setText('Mascote web fechado. Se houver mascote desktop aberto, vou tentar fechar também.');
+      setText('Fechando: ele volta para o IDSense antes de sumir.');
       try {
         await requestMascot('/close');
       } catch (error) {
-        setText('Mascote desktop não encontrado. A prévia web continua disponível.');
+        setText('Fechando: ele volta para o IDSense antes de sumir.');
       }
+      window.setTimeout(() => {
+        hideWebMascot();
+        window.clearInterval(frameTimer);
+      }, 4300);
       activateBtn.disabled = false;
       activateBtn.textContent = 'Ativar Mascote IDvida';
     }
@@ -923,7 +966,7 @@
         setText(`Desktop não disponível: ${error.message}. O mascote web continua funcionando.`);
       });
     });
-    webCloseBtn.addEventListener('click', hideWebMascot);
+    webCloseBtn.addEventListener('click', closeMascot);
     webCompanion.addEventListener('pointerdown', startWebDrag);
     webCompanion.addEventListener('pointermove', moveWebDrag);
     webCompanion.addEventListener('pointerup', endWebDrag);
