@@ -392,13 +392,13 @@
     .web-companion {
       cursor: grab;
       display: none;
-      height: 188px;
+      height: 198px;
       left: 22px;
       position: fixed;
       top: 22px;
       touch-action: none;
       user-select: none;
-      width: 318px;
+      width: 330px;
       z-index: 50;
     }
 
@@ -412,10 +412,10 @@
 
     .web-companion .pet {
       bottom: 0;
-      height: 146px;
+      height: 164px;
       position: absolute;
       right: 0;
-      width: 146px;
+      width: 164px;
     }
 
     .web-companion .pet::after {
@@ -431,7 +431,7 @@
       font-size: 11px;
       line-height: 1.25;
       pointer-events: none;
-      right: 124px;
+      right: 140px;
       top: 46px;
       width: 174px;
     }
@@ -601,7 +601,7 @@
       <button class="web-close" id="webCloseBtn" type="button" title="Fechar mascote web">X</button>
       <div class="bubble" id="bubble">Oi, vou monitorar por aqui</div>
       <div class="pet" id="pet" data-state="greet">
-        <img class="sprite" id="sprite" src="/mascote/assets/frames-v5-final/greet-01.png" alt="Mascote IDvida animado">
+        <img class="sprite" id="sprite" src="/mascote/assets/frames-v6-motion/greet-01.png" alt="Mascote IDvida animado">
       </div>
     </div>
   </div>
@@ -629,24 +629,36 @@
       alert: document.getElementById('stepAlert')
     };
 
+    const spriteRoot = '/mascote/assets/frames-v6-motion';
+
+    function frameRange(prefix, count) {
+      return Array.from({ length: count }, (_, index) => `${prefix}-${String(index + 1).padStart(2, '0')}.png`);
+    }
+
     const states = {
       greet: {
-        frames: ['greet-01.png', 'greet-02.png', 'greet-03.png', 'greet-02.png'],
-        frameMs: 1200,
+        frames: frameRange('greet', 14),
+        frameMs: 620,
         bubble: 'Oi, vou monitorar por aqui',
         alert: false
       },
       monitor: {
-        frames: ['monitor-01.png', 'monitor-02.png', 'monitor-03.png', 'monitor-02.png'],
-        frameMs: 2500,
+        frames: frameRange('monitor', 16),
+        frameMs: 980,
         bubble: 'Tudo certo por aqui',
         alert: false
       },
       alert: {
-        frames: ['alert-01.png', 'alert-02.png', 'alert-03.png', 'alert-02.png'],
-        frameMs: 1300,
+        frames: frameRange('alert', 14),
+        frameMs: 720,
         bubble: 'Geladeira 2 está há 30 min sem comunicação.',
         alert: true
+      },
+      talk: {
+        frames: frameRange('talk', 12),
+        frameMs: 700,
+        bubble: 'Vou explicar esta parte do painel.',
+        alert: false
       }
     };
 
@@ -715,8 +727,8 @@
 
       if (!wasActive) {
         const saved = readWebCompanionPosition();
-        const left = Number.isFinite(saved?.left) ? saved.left : window.innerWidth - 318 - 22;
-        const top = Number.isFinite(saved?.top) ? saved.top : window.innerHeight - 188 - 22;
+        const left = Number.isFinite(saved?.left) ? saved.left : window.innerWidth - 330 - 22;
+        const top = Number.isFinite(saved?.top) ? saved.top : window.innerHeight - 198 - 22;
         moveWebCompanion(left, top, false);
       }
     }
@@ -736,10 +748,10 @@
       bubble.textContent = state.bubble;
       bubble.classList.toggle('is-alert', state.alert);
       bubble.classList.add('is-visible');
-      sprite.src = `/mascote/assets/frames-v5-final/${state.frames[0]}`;
+      sprite.src = `${spriteRoot}/${state.frames[0]}`;
       frameTimer = window.setInterval(() => {
         frameIndex = (frameIndex + 1) % state.frames.length;
-        sprite.src = `/mascote/assets/frames-v5-final/${state.frames[frameIndex]}`;
+        sprite.src = `${spriteRoot}/${state.frames[frameIndex]}`;
       }, state.frameMs);
 
       window.setTimeout(() => {
