@@ -17037,4 +17037,462 @@ if(false){(function(){
   };
 })();
 
+/* ===== SCRIPT BLOCK 47 | assistente-apresentacao-texto ===== */
+(function(){
+  const TOUR_BUTTON_ID = 'assistantTourBtn';
+  const TOUR_LAYER_ID = 'assistantTourLayer';
+  const MOVE_DURATION_MS = 820;
+  const READ_PAUSE_MS = 620;
+  let activeTourToken = null;
+  let activeKeyHandler = null;
+
+  function panelRoleForTour(){
+    return String(
+      window.activePanelSession?.role ||
+      document.body?.dataset?.authRole ||
+      document.body?.dataset?.panelRole ||
+      window.currentRole ||
+      ''
+    ).toLowerCase();
+  }
+
+  function isAssistantTourAllowed(){
+    const body = document.body;
+    const role = panelRoleForTour();
+    const label = String(document.getElementById('currentUserLabel')?.textContent || '').toLowerCase();
+    const isCartPanel = body?.classList.contains('cart-profile-mode') || body?.classList.contains('cart-tracking-open') || role === 'cart';
+    return !isCartPanel && (role === 'master' || (!role && label.includes('idvida master')));
+  }
+
+  function syncAssistantTourButton(){
+    const button = document.getElementById(TOUR_BUTTON_ID);
+    if(!button) return;
+    const allowed = isAssistantTourAllowed();
+    button.hidden = !allowed;
+    button.disabled = !allowed;
+    button.title = allowed ? 'Iniciar apresentação do painel' : 'Disponível apenas para IDvida Master';
+  }
+
+  function delay(ms, token){
+    return new Promise(resolve => {
+      const startedAt = performance.now();
+      function tick(){
+        if(token?.aborted) return resolve(false);
+        if(performance.now() - startedAt >= ms) return resolve(true);
+        window.setTimeout(tick, 40);
+      }
+      tick();
+    });
+  }
+
+  function waitForCondition(check, token, timeout = 5000){
+    return new Promise(resolve => {
+      const startedAt = performance.now();
+      function tick(){
+        if(token?.aborted) return resolve(false);
+        try{
+          if(check()) return resolve(true);
+        }catch(error){}
+        if(performance.now() - startedAt >= timeout) return resolve(false);
+        window.setTimeout(tick, 80);
+      }
+      tick();
+    });
+  }
+
+  async function waitForElement(selector, token, timeout = 5000){
+    let element = document.querySelector(selector);
+    if(element) return element;
+    await waitForCondition(() => {
+      element = document.querySelector(selector);
+      return !!element;
+    }, token, timeout);
+    return element;
+  }
+
+  function createAssistantTourLayer(){
+    document.getElementById(TOUR_LAYER_ID)?.remove();
+    const layer = document.createElement('div');
+    layer.id = TOUR_LAYER_ID;
+    layer.className = 'assistant-tour-layer';
+    layer.innerHTML = `
+      <div class="assistant-tour-caption" id="assistantTourCaption" role="status" aria-live="polite">
+        <div class="assistant-tour-text" id="assistantTourText"></div>
+        <button class="assistant-tour-close" id="assistantTourClose" type="button" aria-label="Encerrar apresentação">×</button>
+      </div>
+      <div class="assistant-tour-cursor" id="assistantTourCursor" aria-hidden="true">
+        <svg viewBox="0 0 28 34" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M4 3.6 23.4 21.4l-8.1 1.1 4.8 8.2-4.5 2.4-4.7-8.2-6.9 5.8V3.6Z" fill="#ffffff" stroke="#0b5790" stroke-width="2" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <div class="assistant-tour-click" id="assistantTourClick" aria-hidden="true"></div>
+    `;
+    document.body.appendChild(layer);
+    document.getElementById('assistantTourClose')?.addEventListener('click', stopAssistantTour);
+    return layer;
+  }
+
+  function tourParts(){
+    return {
+      layer:document.getElementById(TOUR_LAYER_ID),
+      caption:document.getElementById('assistantTourCaption'),
+      text:document.getElementById('assistantTourText'),
+      cursor:document.getElementById('assistantTourCursor'),
+      click:document.getElementById('assistantTourClick')
+    };
+  }
+
+  function clamp(value, min, max){
+    return Math.max(min, Math.min(max, value));
+  }
+
+  async function scrollTargetIntoView(element, token){
+    if(!element) return;
+    try{
+      element.scrollIntoView({behavior:'smooth', block:'center', inline:'center'});
+    }catch(error){
+      element.scrollIntoView();
+    }
+    await delay(360, token);
+  }
+
+  function targetPoint(element){
+    const rect = element.getBoundingClientRect();
+    const visibleLeft = clamp(rect.left, 10, window.innerWidth - 10);
+    const visibleRight = clamp(rect.right, 10, window.innerWidth - 10);
+    const visibleTop = clamp(rect.top, 10, window.innerHeight - 10);
+    const visibleBottom = clamp(rect.bottom, 10, window.innerHeight - 10);
+    return {
+      x:clamp((visibleLeft + visibleRight) / 2, 14, window.innerWidth - 14),
+      y:clamp((visibleTop + visibleBottom) / 2, 16, window.innerHeight - 16),
+      rect
+    };
+  }
+
+  function positionCaption(element){
+    const {caption} = tourParts();
+    if(!caption || !element) return;
+    const rect = element.getBoundingClientRect();
+    const captionWidth = Math.min(430, window.innerWidth - 32);
+    const captionHeight = Math.max(84, caption.offsetHeight || 84);
+    const rightSpace = window.innerWidth - rect.right;
+    const leftSpace = rect.left;
+    const topCandidate = clamp(rect.top + (rect.height / 2) - (captionHeight / 2), 12, window.innerHeight - captionHeight - 12);
+
+    let left;
+    let top;
+    let anchor = 'top';
+
+    if(rightSpace >= captionWidth + 28){
+      left = rect.right + 18;
+      top = topCandidate;
+      anchor = 'right';
+    }else if(leftSpace >= captionWidth + 28){
+      left = rect.left - captionWidth - 18;
+      top = topCandidate;
+      anchor = 'left';
+    }else if(rect.bottom + captionHeight + 20 <= window.innerHeight){
+      left = clamp(rect.left, 16, window.innerWidth - captionWidth - 16);
+      top = rect.bottom + 18;
+      anchor = 'top';
+    }else{
+      left = clamp(rect.left, 16, window.innerWidth - captionWidth - 16);
+      top = clamp(rect.top - captionHeight - 18, 12, window.innerHeight - captionHeight - 12);
+      anchor = 'bottom';
+    }
+
+    caption.dataset.anchor = anchor;
+    caption.style.left = `${Math.round(left)}px`;
+    caption.style.top = `${Math.round(top)}px`;
+  }
+
+  async function moveCursorTo(element, token){
+    const {cursor} = tourParts();
+    if(!cursor || !element) return;
+    const point = targetPoint(element);
+    cursor.style.transform = `translate3d(${Math.round(point.x - 4)}px, ${Math.round(point.y - 3)}px, 0)`;
+    await delay(MOVE_DURATION_MS, token);
+  }
+
+  function showClickAt(element){
+    const {click} = tourParts();
+    if(!click || !element) return;
+    const point = targetPoint(element);
+    click.style.setProperty('--tour-click-x', `${Math.round(point.x - 21)}px`);
+    click.style.setProperty('--tour-click-y', `${Math.round(point.y - 21)}px`);
+    click.classList.remove('is-active');
+    void click.offsetWidth;
+    click.classList.add('is-active');
+  }
+
+  async function typeCaption(message, token){
+    const {caption, text} = tourParts();
+    if(!caption || !text) return;
+    caption.classList.remove('is-complete');
+    text.textContent = '';
+    const content = String(message || '').trim();
+    for(const char of content){
+      if(token?.aborted) return;
+      text.textContent += char;
+      await delay(char === '.' || char === ':' ? 70 : 16, token);
+    }
+    caption.classList.add('is-complete');
+  }
+
+  async function runStep(step, token){
+    const element = await waitForElement(step.selector, token, step.timeout || 5000);
+    if(token?.aborted || !element) return false;
+    await scrollTargetIntoView(element, token);
+    if(token?.aborted) return false;
+    positionCaption(element);
+    await Promise.all([
+      moveCursorTo(element, token),
+      typeCaption(step.text, token)
+    ]);
+    if(token?.aborted) return false;
+
+    if(step.click){
+      showClickAt(element);
+      element.click();
+    }
+
+    if(typeof step.action === 'function'){
+      step.action(element);
+    }
+
+    if(typeof step.waitFor === 'function'){
+      await waitForCondition(step.waitFor, token, step.waitTimeout || 6000);
+    }
+
+    if(typeof step.after === 'function'){
+      step.after(element);
+    }
+
+    await delay(step.pause || READ_PAUSE_MS, token);
+    return !token?.aborted;
+  }
+
+  function resetPanelForAssistantTour(){
+    try{ closeGraphModal(); }catch(error){}
+    try{ closeAnalyticalReportModal(); }catch(error){}
+    try{ closeInfoOverlays(); }catch(error){}
+    try{ fecharGestaoModal(); }catch(error){}
+    try{ fecharOSPanel(); }catch(error){}
+    try{ closeNoc(); }catch(error){}
+    try{ closeOccurrenceStep(); }catch(error){}
+    try{ closeDetail(); }catch(error){}
+    document.getElementById('panelConfigMenu')?.classList.remove('show');
+    document.getElementById('panelConfigBtn')?.setAttribute('aria-expanded','false');
+    document.getElementById('accMenu')?.classList.remove('show');
+    document.getElementById('accButton')?.setAttribute('aria-expanded','false');
+    document.getElementById('deviceSearchPop')?.classList.remove('show');
+    document.querySelectorAll('.calib-pop.show').forEach(item => item.classList.remove('show'));
+    activeFilter = null;
+    nocFilteredIds = null;
+    renderGrid();
+  }
+
+  function stopAssistantTour(){
+    if(activeTourToken) activeTourToken.aborted = true;
+    activeTourToken = null;
+    document.body.classList.remove('assistant-tour-running');
+    document.getElementById(TOUR_LAYER_ID)?.remove();
+    if(activeKeyHandler){
+      document.removeEventListener('keydown', activeKeyHandler, true);
+      activeKeyHandler = null;
+    }
+    syncAssistantTourButton();
+  }
+
+  async function startAssistantTour(){
+    if(!isAssistantTourAllowed()){
+      alert('A apresentação está disponível apenas para o perfil IDvida Master.');
+      syncAssistantTourButton();
+      return;
+    }
+
+    stopAssistantTour();
+    const token = {aborted:false};
+    activeTourToken = token;
+    document.body.classList.add('assistant-tour-running');
+    createAssistantTourLayer();
+
+    activeKeyHandler = function(event){
+      if(event.key === 'Escape') stopAssistantTour();
+    };
+    document.addEventListener('keydown', activeKeyHandler, true);
+
+    const button = document.getElementById(TOUR_BUTTON_ID);
+    if(button) button.disabled = true;
+
+    try{
+      resetPanelForAssistantTour();
+
+      const steps = [
+        {
+          selector:'#cardGrid',
+          text:'Este é o painel de monitoramento IDSensor. Ele centraliza a leitura dos equipamentos acompanhados pela IDvida em tempo real.'
+        },
+        {
+          selector:'.card[data-id="1"]',
+          text:'Cada card representa um equipamento. O card mostra temperatura atual, limites mínimo e máximo, comunicação, bateria, umidade e status operacional.'
+        },
+        {
+          selector:'#statusChips',
+          text:'Os filtros organizam o painel por condição: normal, atenção, crítico, manutenção, sem comunicação, degelo, reposição e inventário.'
+        },
+        {
+          selector:'#deviceSearchBtn',
+          text:'A busca localiza um equipamento por nome, código ou MAC. Isso reduz o tempo de consulta em painéis com muitos dispositivos.',
+          click:true,
+          waitFor:() => document.getElementById('deviceSearchPop')?.classList.contains('show'),
+          after:() => document.getElementById('deviceSearchPop')?.classList.remove('show')
+        },
+        {
+          selector:'.card[data-id="1"]',
+          text:'Ao selecionar um card, o painel abre os detalhes reais do equipamento.',
+          click:true,
+          waitFor:() => !!document.getElementById('cardFloatingDetail')
+        },
+        {
+          selector:'#cardFloatingDetail',
+          text:'Nos detalhes ficam eventos, temperatura, bateria, umidade, comunicação, faixa segura e situação operacional.'
+        },
+        {
+          selector:'#cardFloatingDetail .calib-seal-btn',
+          text:'A calibração apresenta o certificado do sensor. Azul indica certificado válido, laranja indica vencimento próximo e vermelho indica certificado vencido.',
+          click:true,
+          waitFor:() => !!document.querySelector('.calib-pop.show'),
+          after:() => document.querySelectorAll('.calib-pop.show').forEach(item => item.classList.remove('show'))
+        },
+        {
+          selector:'#cardFloatingDetail .detail-info-btn',
+          text:'O botão de informação abre cadastro, MAC, modelo, conexão, área, responsável e ações administrativas.',
+          click:true,
+          waitFor:() => document.getElementById('infoOverlayModal')?.classList.contains('show')
+        },
+        {
+          selector:'#infoOverlayModal',
+          text:'Nesta tela, o usuário consulta os dados do equipamento e acessa edição, troca de MAC, clonagem e histórico.',
+          after:() => closeInfoOverlays()
+        },
+        {
+          selector:'#cardFloatingDetail .open-graph-btn',
+          text:'O gráfico mostra a variação de temperatura no período selecionado, com limites, atenção, crítico e eventos.',
+          click:true,
+          waitFor:() => !!document.getElementById('graphWorkspaceRoot')
+        },
+        {
+          selector:'.graph-main-card',
+          text:'No gráfico, o usuário consulta temperatura atual, mínima, máxima e tempo fora do limite. A visão detalhada amplia a análise do período.'
+        },
+        {
+          selector:'.telemetry-accordion',
+          text:'A telemetria resume tempo dentro do limite, tempo fora do limite, comunicação, alertas enviados e linha do tempo da ocorrência.',
+          click:true,
+          waitFor:() => !!document.querySelector('.telemetry-accordion[open]')
+        },
+        {
+          selector:'.graph-report-accordion',
+          text:'A área de relatórios reúne exportação em PDF, Excel, CSV e relatório analítico para análise operacional.',
+          after:() => {
+            closeGraphModal();
+            closeDetail();
+          }
+        },
+        {
+          selector:'#gestaoBtn',
+          text:'A gestão apresenta saúde dos dispositivos, calibração, comunicação, contratos, disponibilidade, status operacional e ordens de serviço.',
+          click:true,
+          waitFor:() => document.getElementById('gestaoOverlay')?.classList.contains('show')
+        },
+        {
+          selector:'#gestaoOverlay .gestao-modal',
+          text:'Esta visão ajuda a acompanhar a operação por cliente e apoia decisões de manutenção, expansão e atendimento.',
+          after:() => fecharGestaoModal()
+        },
+        {
+          selector:'#nocBtn',
+          text:'O NOC apresenta ocorrências em tempo real por área, dispositivo ou cliente.',
+          click:true,
+          waitFor:() => document.getElementById('nocStartOverlay')?.classList.contains('show')
+        },
+        {
+          selector:'#nocStartOverlay .noc-start-box',
+          text:'Neste modo, o usuário escolhe o tipo de visualização e acompanha apenas as ocorrências necessárias.',
+          after:() => closeNoc()
+        },
+        {
+          selector:'#panelConfigBtn',
+          text:'As configurações reúnem silêncio global, atualização automática, coleta programada, vínculo de alertas e usuários do painel.',
+          click:true,
+          waitFor:() => document.getElementById('panelConfigMenu')?.classList.contains('show')
+        },
+        {
+          selector:'#panelConfigMenu',
+          text:'Esses controles ajustam o comportamento do painel sem alterar a leitura principal dos equipamentos.',
+          after:() => {
+            document.getElementById('panelConfigMenu')?.classList.remove('show');
+            document.getElementById('panelConfigBtn')?.setAttribute('aria-expanded','false');
+          }
+        },
+        {
+          selector:'#accButton',
+          text:'A acessibilidade permite alto contraste, modo daltônico, modo compacto e escolha das informações exibidas nos cards.',
+          click:true,
+          waitFor:() => document.getElementById('accMenu')?.classList.contains('show')
+        },
+        {
+          selector:'#accMenu',
+          text:'Esses recursos ajudam a adaptar a leitura visual do painel para diferentes perfis de usuário.',
+          after:() => {
+            document.getElementById('accMenu')?.classList.remove('show');
+            document.getElementById('accButton')?.setAttribute('aria-expanded','false');
+          }
+        },
+        {
+          selector:'#cardGrid',
+          text:'A apresentação terminou. O painel segue disponível para operação, consulta de alertas, análise de dados e gestão dos dispositivos.',
+          pause:1200
+        }
+      ];
+
+      for(const step of steps){
+        const shouldContinue = await runStep(step, token);
+        if(!shouldContinue) break;
+      }
+    }catch(error){
+      if(!token.aborted) console.warn('Falha na apresentação do assistente IDvida.', error);
+    }finally{
+      if(activeTourToken === token){
+        await delay(260, token);
+        stopAssistantTour();
+      }
+    }
+  }
+
+  function initAssistantTour(){
+    const button = document.getElementById(TOUR_BUTTON_ID);
+    if(button && !button.dataset.assistantTourReady){
+      button.dataset.assistantTourReady = 'true';
+      button.addEventListener('click', startAssistantTour);
+    }
+    syncAssistantTourButton();
+    if(document.body && !document.body.dataset.assistantTourObserver){
+      document.body.dataset.assistantTourObserver = 'true';
+      const observer = new MutationObserver(syncAssistantTourButton);
+      observer.observe(document.body, {attributes:true, attributeFilter:['class','data-auth-role','data-panel-role']});
+    }
+  }
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', initAssistantTour);
+  }else{
+    initAssistantTour();
+  }
+
+  window.startAssistantTextTour = startAssistantTour;
+  window.stopAssistantTextTour = stopAssistantTour;
+})();
+
 
