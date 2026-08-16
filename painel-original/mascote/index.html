@@ -516,7 +516,7 @@
       <div class="actions">
         <button class="primary" id="activateBtn" type="button">Ativar Mascote IDvida</button>
         <button class="quiet" id="desktopBtn" type="button">Ativar desktop</button>
-        <a class="quiet download" id="downloadBtn" href="https://id-sensor-mvp.onrender.com/mascote/downloads/Mascote-IDvida-Desktop.zip" download>Baixar ZIP do helper</a>
+        <a class="quiet download" id="downloadBtn" href="https://id-sensor-mvp.onrender.com/mascote/downloads/Mascote-IDvida-Desktop.zip?v=20260815-clean2" download>Baixar ZIP do helper</a>
         <button class="quiet" id="closeBtn" type="button">Fechar mascote</button>
       </div>
     </header>
@@ -604,7 +604,7 @@
       <button class="web-close" id="webCloseBtn" type="button" title="Fechar mascote web">X</button>
       <div class="bubble" id="bubble">Oi, tudo bem? Eu sou assistente virtual IDvida, vou ficar monitorando por aqui.</div>
       <div class="pet" id="pet" data-state="origin">
-        <img class="sprite" id="sprite" src="/mascote/assets/scenes-v2/origin-01.png" alt="Mascote IDvida animado">
+        <img class="sprite" id="sprite" src="/mascote/assets/scenes-v2/origin-01.png?v=20260815-clean2" alt="Mascote IDvida animado">
       </div>
     </div>
   </div>
@@ -636,6 +636,11 @@
     };
 
     const spriteRoot = '/mascote/assets/scenes-v2';
+    const spriteVersion = 'v=20260815-clean2';
+
+    function spriteUrl(file) {
+      return `${spriteRoot}/${file}?${spriteVersion}`;
+    }
 
     function frameRange(prefix, count) {
       return Array.from({ length: count }, (_, index) => `${prefix}-${String(index + 1).padStart(2, '0')}.png`);
@@ -691,6 +696,7 @@
     let frameIndex = 0;
     let desktopReady = false;
     let dragState = null;
+    const positionKey = 'idvidaMascotWebPositionV2';
 
     function clearTimers() {
       timers.forEach((timer) => window.clearTimeout(timer));
@@ -722,16 +728,26 @@
 
     function saveWebCompanionPosition(left, top) {
       try {
-        window.localStorage.setItem('idvidaMascotWebPosition', JSON.stringify({ left, top }));
+        window.localStorage.setItem(positionKey, JSON.stringify({ left, top }));
       } catch (error) {}
     }
 
     function readWebCompanionPosition() {
       try {
-        return JSON.parse(window.localStorage.getItem('idvidaMascotWebPosition') || 'null');
+        return JSON.parse(window.localStorage.getItem(positionKey) || 'null');
       } catch (error) {
         return null;
       }
+    }
+
+    function getDefaultWebCompanionPosition() {
+      const width = 330;
+      const height = 198;
+      const rightPanelGap = window.innerWidth >= 980 ? Math.min(390, Math.round(window.innerWidth * 0.30)) : 0;
+      return {
+        left: window.innerWidth - width - 22 - rightPanelGap,
+        top: window.innerHeight - height - 22
+      };
     }
 
     function moveWebCompanion(left, top, persist = true) {
@@ -751,8 +767,9 @@
 
       if (!wasActive) {
         const saved = readWebCompanionPosition();
-        const left = Number.isFinite(saved?.left) ? saved.left : window.innerWidth - 330 - 22;
-        const top = Number.isFinite(saved?.top) ? saved.top : window.innerHeight - 198 - 22;
+        const fallback = getDefaultWebCompanionPosition();
+        const left = Number.isFinite(saved?.left) ? saved.left : fallback.left;
+        const top = Number.isFinite(saved?.top) ? saved.top : fallback.top;
         moveWebCompanion(left, top, false);
       }
     }
@@ -772,7 +789,7 @@
       bubble.textContent = state.bubble;
       bubble.classList.toggle('is-alert', state.alert);
       bubble.classList.add('is-visible');
-      sprite.src = `${spriteRoot}/${state.frames[0]}`;
+      sprite.src = spriteUrl(state.frames[0]);
       frameTimer = window.setInterval(() => {
         if (state.loop === false && frameIndex >= state.frames.length - 1) {
           window.clearInterval(frameTimer);
@@ -781,7 +798,7 @@
         frameIndex = state.loop === false
           ? Math.min(frameIndex + 1, state.frames.length - 1)
           : (frameIndex + 1) % state.frames.length;
-        sprite.src = `${spriteRoot}/${state.frames[frameIndex]}`;
+        sprite.src = spriteUrl(state.frames[frameIndex]);
       }, state.frameMs);
 
       window.setTimeout(() => {
@@ -880,7 +897,9 @@
         desktopReady = await activateDesktopIfAvailable();
         if (desktopReady) {
           await requestMascot('/activate');
-          setText('Mascote desktop ativado. O mascote web continua disponível na aba.');
+          hideWebMascot();
+          setBadge(webStatus, 'Desktop ativo', 'ok');
+          setText('Mascote desktop ativado. A prévia web foi ocultada para não duplicar o mascote.');
         }
       } finally {
         desktopBtn.disabled = false;
