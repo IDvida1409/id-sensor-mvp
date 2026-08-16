@@ -17041,9 +17041,9 @@ if(false){(function(){
 (function(){
   const TOUR_BUTTON_ID = 'assistantTourBtn';
   const TOUR_LAYER_ID = 'assistantTourLayer';
-  const MOVE_DURATION_MS = 1120;
-  const READ_PAUSE_MS = 1600;
-  const CHAR_DELAY_MS = 24;
+  const MOVE_DURATION_MS = 860;
+  const READ_PAUSE_MS = 2300;
+  const CHAR_DELAY_MS = 22;
   let activeTourToken = null;
   let activeKeyHandler = null;
 
@@ -17170,15 +17170,25 @@ if(false){(function(){
     };
   }
 
-  function positionCaption(element){
-    const {caption} = tourParts();
-    if(!caption || !element) return;
+  function getTourAnchorRect(element){
     const rawRect = element.getBoundingClientRect();
+    const point = targetPoint(element);
+    const isLargeTarget = rawRect.width > window.innerWidth * 0.46 || rawRect.height > window.innerHeight * 0.34;
+    if(isLargeTarget){
+      return {
+        left:clamp(point.x - 78, 16, window.innerWidth - 16),
+        right:clamp(point.x + 78, 16, window.innerWidth - 16),
+        top:clamp(point.y - 44, 12, window.innerHeight - 12),
+        bottom:clamp(point.y + 44, 12, window.innerHeight - 12),
+        width:156,
+        height:88
+      };
+    }
     const leftBound = clamp(Math.min(rawRect.left, rawRect.right), 16, window.innerWidth - 16);
     const rightBound = clamp(Math.max(rawRect.left, rawRect.right), 16, window.innerWidth - 16);
     const topBound = clamp(Math.min(rawRect.top, rawRect.bottom), 12, window.innerHeight - 12);
     const bottomBound = clamp(Math.max(rawRect.top, rawRect.bottom), 12, window.innerHeight - 12);
-    const rect = {
+    return {
       left:leftBound,
       right:Math.max(leftBound, rightBound),
       top:topBound,
@@ -17186,7 +17196,13 @@ if(false){(function(){
       width:Math.max(1, rightBound - leftBound),
       height:Math.max(1, bottomBound - topBound)
     };
-    const captionWidth = Math.min(430, window.innerWidth - 32);
+  }
+
+  function positionCaption(element){
+    const {caption} = tourParts();
+    if(!caption || !element) return;
+    const rect = getTourAnchorRect(element);
+    const captionWidth = Math.min(390, window.innerWidth - 32);
     const captionHeight = Math.max(84, caption.offsetHeight || 84);
     const rightSpace = window.innerWidth - rect.right;
     const leftSpace = rect.left;
@@ -17305,6 +17321,412 @@ if(false){(function(){
     return !token?.aborted;
   }
 
+  function clearAssistantTourCards(){
+    document.querySelectorAll('.card[data-tour-card]').forEach(card => {
+      delete card.dataset.tourCard;
+    });
+  }
+
+  function markAssistantTourCards(){
+    clearAssistantTourCards();
+    const cards = Array.from(document.querySelectorAll('.card'));
+    if(!cards.length) return;
+    const byClass = className => cards.find(card => card.classList.contains(className));
+    const main = byClass('blue') || cards[0];
+    const warn = byClass('warn');
+    const crit = byClass('crit');
+    const offline = cards.find(card => card.querySelector('.offline-logo-badge.offline'));
+    const mark = (card, name) => {
+      if(card && !card.dataset.tourCard) card.dataset.tourCard = name;
+    };
+    mark(main, 'main');
+    mark(warn, 'warn');
+    mark(crit, 'crit');
+    mark(offline, 'offline');
+  }
+
+  function buildAssistantTourSteps(){
+    return [
+      {
+        selector:'[data-tour-card="main"]',
+        text:'Este é um card de equipamento. Ele reúne a leitura principal do sensor, o estado do equipamento e os indicadores de acompanhamento.',
+        pause:2800
+      },
+      {
+        selector:'[data-tour-card="main"] .temp',
+        text:'Aqui aparece a temperatura atual do equipamento monitorado.',
+        pause:2200
+      },
+      {
+        selector:'[data-tour-card="main"] .metrics',
+        text:'Aqui aparecem os valores mínimo e máximo registrados no período.',
+        pause:2400
+      },
+      {
+        selector:'[data-tour-card="main"] .bottom-meta',
+        text:'Na parte inferior ficam bateria e umidade. A umidade aparece quando o dispositivo possui essa leitura.',
+        pause:2800
+      },
+      {
+        selector:'[data-tour-card="main"] .comm-wrap',
+        text:'Este indicador mostra a comunicação do dispositivo com a IDvida. Quando há falha, o painel informa sem comunicação.',
+        pause:3000
+      },
+      {
+        selector:'[data-tour-card="main"]',
+        text:'O card azul indica que o equipamento está dentro do limite estabelecido e sem alerta ativo.',
+        pause:3000
+      },
+      {
+        selector:'[data-tour-card="warn"]',
+        text:'O card amarelo indica atenção. Ele mostra que a condição precisa de acompanhamento antes de se tornar crítica.',
+        optional:true,
+        pause:3000
+      },
+      {
+        selector:'[data-tour-card="crit"]',
+        text:'O card vermelho indica estado crítico. A temperatura está fora do limite estabelecido e exige ação.',
+        optional:true,
+        pause:3000
+      },
+      {
+        selector:'[data-tour-card="offline"]',
+        text:'Quando o dispositivo fica sem comunicação, o card sinaliza a falha para facilitar a identificação no painel.',
+        optional:true,
+        pause:3000
+      },
+      {
+        selector:'[data-tour-card="main"]',
+        text:'Agora o card será aberto para consultar os detalhes reais do equipamento.',
+        clickBeforeText:true,
+        waitFor:() => !!document.getElementById('cardFloatingDetail'),
+        focusSelector:'#cardFloatingDetail',
+        pause:2600
+      },
+      {
+        selector:'#cardFloatingDetail .alert-name',
+        text:'No detalhe aparecem o nome do equipamento, o limite configurado e a área monitorada.',
+        pause:2800
+      },
+      {
+        selector:'#cardFloatingDetail .alert-temp',
+        text:'A temperatura atual fica em destaque para leitura rápida.',
+        pause:2300
+      },
+      {
+        selector:'#cardFloatingDetail .status-edit-btn',
+        text:'Este botão abre a alteração temporária de status operacional.',
+        clickBeforeText:true,
+        waitFor:() => document.getElementById('statusConfigModal')?.classList.contains('show'),
+        focusSelector:'#statusConfigModal',
+        pause:2600
+      },
+      {
+        selector:'#statusOptionGrid',
+        text:'Aqui é possível colocar o equipamento em reposição, manutenção, inventário ou degelo. Esses ciclos não apagam o histórico.',
+        pause:3400
+      },
+      {
+        selector:'#statusDurationBtn',
+        text:'A duração define por quanto tempo o ciclo operacional ficará ativo.',
+        clickBeforeText:true,
+        waitFor:() => document.getElementById('statusDurationDropdown')?.classList.contains('open'),
+        focusSelector:'#statusDurationMenu',
+        pause:2800,
+        after:() => document.getElementById('statusDurationDropdown')?.classList.remove('open')
+      },
+      {
+        selector:'#statusConfigModal .status-config-actions',
+        text:'Encerrar ciclo devolve o equipamento ao acompanhamento normal antes do tempo definido.',
+        pause:2800,
+        after:() => closeStatusConfigModal()
+      },
+      {
+        selector:'#cardFloatingDetail .rows',
+        text:'Esta área mostra eventos do equipamento, bateria, umidade, uso e comunicação.',
+        pause:3000
+      },
+      {
+        selector:'#cardFloatingDetail .calib-seal-btn',
+        text:'A calibração abre o certificado do sensor. Azul indica válido, amarelo indica vencimento próximo e vermelho indica vencido.',
+        clickBeforeText:true,
+        waitFor:() => !!document.querySelector('.calib-pop.show'),
+        focusSelector:'.calib-pop.show',
+        optional:true,
+        pause:3400,
+        after:() => document.querySelectorAll('.calib-pop.show').forEach(item => item.classList.remove('show'))
+      },
+      {
+        selector:'#cardFloatingDetail .detail-info-btn',
+        text:'O botão de informação abre o cadastro completo do equipamento.',
+        clickBeforeText:true,
+        waitFor:() => document.getElementById('infoOverlayModal')?.classList.contains('show'),
+        focusSelector:'#infoOverlayModal .info-modal',
+        pause:2600
+      },
+      {
+        selector:'#infoOverlayModal .info-section',
+        text:'Nesta tela ficam MAC, modelo, tipo de conexão, nome do equipamento, código, área, responsável e ações como editar, alterar MAC e clonar.',
+        pause:3800,
+        after:() => closeInfoOverlays()
+      },
+      {
+        selector:'#cardFloatingDetail .open-graph-btn',
+        text:'O gráfico abre a análise temporal do equipamento.',
+        clickBeforeText:true,
+        waitFor:() => !!document.getElementById('graphWorkspaceRoot'),
+        focusSelector:'.graph-main-card',
+        pause:2600
+      },
+      {
+        selector:'.graph-main-card',
+        text:'O gráfico mostra a variação de temperatura, o limite seguro, pontos de atenção, estado crítico e eventos registrados.',
+        pause:3400
+      },
+      {
+        selector:'.graph-summary',
+        text:'Os cartões do gráfico resumem temperatura atual, máxima, mínima e tempo fora do limite.',
+        pause:3200
+      },
+      {
+        selector:'.graph-workspace-toolbar',
+        text:'Na barra superior é possível alternar o período de análise e aplicar filtros de data.',
+        optional:true,
+        pause:3000
+      },
+      {
+        selector:'.telemetry-accordion summary',
+        text:'A telemetria operacional detalha a condição do equipamento nas últimas 24 horas.',
+        clickBeforeText:true,
+        waitFor:() => !!document.querySelector('.telemetry-accordion[open]'),
+        focusSelector:'.telemetry-accordion[open]',
+        pause:3400
+      },
+      {
+        selector:'.telemetry-status-grid',
+        text:'Aqui o painel separa o tempo dentro do limite, em atenção, em crítico e sem comunicação.',
+        optional:true,
+        pause:3400
+      },
+      {
+        selector:'.telemetry-channel-grid',
+        text:'Os canais mostram quantas notificações foram registradas, incluindo SMS, WhatsApp e outros avisos configurados.',
+        optional:true,
+        pause:3400
+      },
+      {
+        selector:'.telemetry-variation-strip',
+        text:'A variação mostra leitura inicial, maior risco, diferença acumulada e tempo fora do limite.',
+        optional:true,
+        pause:3400
+      },
+      {
+        selector:'.telemetry-expanded-content',
+        text:'Ao expandir, a linha do tempo organiza cada evento da ocorrência.',
+        optional:true,
+        pause:3000
+      },
+      {
+        selector:'.telemetry-timeline',
+        text:'A linha do tempo registra saída do limite, crítico, alertas enviados, silêncio do painel, falha de comunicação e normalização.',
+        optional:true,
+        pause:3800
+      },
+      {
+        selector:'.graph-report-accordion',
+        text:'A área de relatórios permite exportar dados em PDF, Excel, CSV e relatório analítico.',
+        optional:true,
+        pause:3200,
+        after:() => {
+          closeGraphModal();
+          closeDetail();
+        }
+      },
+      {
+        selector:'#statusChips',
+        text:'Os filtros superiores ajudam a visualizar grupos de equipamentos por condição operacional.',
+        pause:3000
+      },
+      {
+        selector:'#filterAllBtn',
+        text:'Dispositivos retorna a visão geral do painel.',
+        pause:2400
+      },
+      {
+        selector:'#chipAreas',
+        text:'Áreas filtra os equipamentos por setor ou ambiente monitorado.',
+        optional:true,
+        pause:2600
+      },
+      {
+        selector:'#chipClients',
+        text:'Clientes alterna a visualização quando o usuário possui acesso a mais de um cliente.',
+        optional:true,
+        pause:2600
+      },
+      {
+        selector:'#deviceSearchBtn',
+        text:'A busca localiza um equipamento por nome, código ou MAC.',
+        clickBeforeText:true,
+        waitFor:() => document.getElementById('deviceSearchPop')?.classList.contains('show'),
+        focusSelector:'#deviceSearchPop',
+        pause:2800,
+        after:() => document.getElementById('deviceSearchPop')?.classList.remove('show')
+      },
+      {
+        selector:'#gestaoBtn',
+        text:'Gestão abre uma visão administrativa da saúde dos dispositivos.',
+        clickBeforeText:true,
+        waitFor:() => document.getElementById('gestaoOverlay')?.classList.contains('show'),
+        focusSelector:'#gestaoOverlay .gestao-modal',
+        pause:2600
+      },
+      {
+        selector:'#gestaoOverlay .gestao-saude',
+        text:'Aqui aparecem calibrados, próximos do vencimento, vencidos, em manutenção, comunicando e sem comunicação.',
+        pause:3400
+      },
+      {
+        selector:'#gestaoOverlay .gestao-right-top',
+        text:'Este resumo mostra total de dispositivos, contratos, disponibilidade e serviços contratados.',
+        optional:true,
+        pause:3000
+      },
+      {
+        selector:'#gestaoOverlay .gestao-bottom .gestao-card.clickable',
+        text:'Status operacional mostra a distribuição geral dos dispositivos acompanhados.',
+        optional:true,
+        pause:3000,
+        after:() => fecharGestaoModal()
+      },
+      {
+        selector:'#nocBtn',
+        text:'NOC abre o acompanhamento em tempo real das ocorrências por área, dispositivo ou cliente.',
+        clickBeforeText:true,
+        waitFor:() => document.getElementById('nocStartOverlay')?.classList.contains('show'),
+        focusSelector:'#nocStartOverlay .noc-start-box',
+        pause:3000
+      },
+      {
+        selector:'#nocStartOverlay .noc-mode-wrap',
+        text:'Nesta tela o usuário escolhe a visão do NOC antes de iniciar o monitoramento.',
+        pause:3000,
+        after:() => closeNoc()
+      },
+      {
+        selector:'#panelConfigBtn',
+        text:'A engrenagem concentra controles operacionais do painel.',
+        clickBeforeText:true,
+        waitFor:() => document.getElementById('panelConfigMenu')?.classList.contains('show'),
+        focusSelector:'#panelConfigMenu',
+        pause:2600
+      },
+      {
+        selector:'#toggleGlobalMute',
+        text:'Silenciar painel pausa o som local por 15 minutos, sem bloquear os alertas externos configurados.',
+        optional:true,
+        pause:3000
+      },
+      {
+        selector:'#toggleAutoRefresh',
+        text:'Atualização automática recarrega os dados em ciclo definido e mostra o contador abaixo do subtítulo.',
+        optional:true,
+        pause:3000
+      },
+      {
+        selector:'#scheduledCollectionEntry',
+        text:'Coleta programada define uma rotina de registro para o fechamento mensal da área.',
+        optional:true,
+        pause:3000
+      },
+      {
+        selector:'#openScheduledCollectionModal',
+        text:'Ao abrir a coleta programada, o usuário define frequência, dispositivos e dados registrados.',
+        clickBeforeText:true,
+        waitFor:() => document.getElementById('scheduledCollectionOverlay')?.classList.contains('show'),
+        focusSelector:'#scheduledCollectionOverlay .scheduled-collection-modal',
+        optional:true,
+        pause:3200
+      },
+      {
+        selector:'#scheduledFrequencyOptions',
+        text:'A frequência define de quanto em quanto tempo a coleta será registrada.',
+        optional:true,
+        pause:3000
+      },
+      {
+        selector:'#scheduledScopeOptions',
+        text:'O escopo define se a rotina usa todos os dispositivos da área ou apenas equipamentos selecionados.',
+        optional:true,
+        pause:3200
+      },
+      {
+        selector:'#scheduledMetricOptions',
+        text:'Em dados registrados, o usuário escolhe temperatura, mínimo, máximo, média e umidade.',
+        optional:true,
+        pause:3200
+      },
+      {
+        selector:'#scheduledCollectionSummary',
+        text:'O resumo mostra como a rotina ficará configurada. O relatório fica disponível no fechamento de 30 dias.',
+        optional:true,
+        pause:3400,
+        after:() => {
+          document.getElementById('scheduledCollectionOverlay')?.classList.remove('show');
+          document.getElementById('panelConfigMenu')?.classList.remove('show');
+          document.getElementById('panelConfigBtn')?.setAttribute('aria-expanded','false');
+        }
+      },
+      {
+        selector:'#accButton',
+        text:'Acessibilidade adapta a leitura visual do painel.',
+        clickBeforeText:true,
+        waitFor:() => document.getElementById('accMenu')?.classList.contains('show'),
+        focusSelector:'#accMenu',
+        pause:2600
+      },
+      {
+        selector:'#toggleColorblind',
+        text:'Modo daltônico reforça a leitura com ícones, padrões e sinais visuais.',
+        optional:true,
+        pause:3000
+      },
+      {
+        selector:'#toggleContrast',
+        text:'Alto contraste destaca textos, bordas e elementos de gráfico para leitura mais rápida.',
+        optional:true,
+        pause:3000
+      },
+      {
+        selector:'#toggleDensity',
+        text:'Modo compacto reduz os cards e aumenta a quantidade de equipamentos visíveis.',
+        optional:true,
+        pause:3000
+      },
+      {
+        selector:'#accPersonalHeader',
+        text:'Personalização define quais informações aparecem nos cards.',
+        optional:true,
+        pause:3000
+      },
+      {
+        selector:'#accStatusHeader',
+        text:'Status define quais filtros aparecem na barra superior.',
+        optional:true,
+        pause:2800,
+        after:() => {
+          document.getElementById('accMenu')?.classList.remove('show');
+          document.getElementById('accButton')?.setAttribute('aria-expanded','false');
+        }
+      },
+      {
+        selector:'#cardGrid',
+        text:'Apresentação concluída. O painel permanece disponível para operação, consulta de alertas, análise de dados e gestão dos dispositivos.',
+        pause:2600
+      }
+    ];
+  }
+
   function resetPanelForAssistantTour(){
     try{ closeGraphModal(); }catch(error){}
     try{ closeAnalyticalReportModal(); }catch(error){}
@@ -17323,12 +17745,15 @@ if(false){(function(){
     activeFilter = null;
     nocFilteredIds = null;
     renderGrid();
+    markAssistantTourCards();
+    window.scrollTo({top:0, left:0, behavior:'auto'});
   }
 
   function stopAssistantTour(){
     if(activeTourToken) activeTourToken.aborted = true;
     activeTourToken = null;
     document.body.classList.remove('assistant-tour-running');
+    clearAssistantTourCards();
     document.getElementById(TOUR_LAYER_ID)?.remove();
     if(activeKeyHandler){
       document.removeEventListener('keydown', activeKeyHandler, true);
@@ -17361,7 +17786,7 @@ if(false){(function(){
     try{
       resetPanelForAssistantTour();
 
-      const steps = [
+      const legacySteps = [
         {
           selector:'#cardGrid',
           text:'Este é o painel de monitoramento IDSensor. Aqui ficam os equipamentos acompanhados pela IDvida, com leitura visual rápida para temperatura, comunicação e status.',
@@ -17713,6 +18138,8 @@ if(false){(function(){
           pause:2200
         }
       ];
+
+      const steps = buildAssistantTourSteps();
 
       for(const step of steps){
         const shouldContinue = await runStep(step, token);
