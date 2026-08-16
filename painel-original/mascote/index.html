@@ -516,7 +516,7 @@
       <div class="actions">
         <button class="primary" id="activateBtn" type="button">Ativar Mascote IDvida</button>
         <button class="quiet" id="desktopBtn" type="button">Ativar desktop</button>
-        <a class="quiet download" id="downloadBtn" href="https://id-sensor-mvp.onrender.com/mascote/downloads/Mascote-IDvida-Desktop.zip?v=20260815-clean2" download>Baixar ZIP do helper</a>
+        <a class="quiet download" id="downloadBtn" href="https://id-sensor-mvp.onrender.com/mascote/downloads/Mascote-IDvida-Desktop.zip?v=20260815-clean3" download>Baixar ZIP do helper</a>
         <button class="quiet" id="closeBtn" type="button">Fechar mascote</button>
       </div>
     </header>
@@ -570,12 +570,12 @@
             <div class="badge offline" id="helperStatus">Aguardando</div>
           </div>
           <div class="side-body">
-            <div class="step" id="stepOrigin"><span>1</span><span>Sair do IDSense</span></div>
+            <div class="step" id="stepOrigin"><span>1</span><span>Ativar mascote</span></div>
             <div class="step" id="stepHello"><span>2</span><span>Oi / apresentar</span></div>
-            <div class="step" id="stepSit"><span>3</span><span>Caminhar e sentar</span></div>
+            <div class="step" id="stepSit"><span>3</span><span>Sentar e monitorar</span></div>
             <div class="step" id="stepMonitor"><span>4</span><span>Monitorando</span></div>
             <div class="step" id="stepAlert"><span>5</span><span>Alerta atento</span></div>
-            <div class="step" id="stepClose"><span>6</span><span>Voltar ao IDSense</span></div>
+            <div class="step" id="stepClose"><span>6</span><span>Fechar mascote</span></div>
             <div class="log" id="log">Clique em Ativar Mascote IDvida para iniciar o teste.</div>
             <div class="notice">Para aparecer fora do navegador em outro computador, baixe o helper desktop e instale uma vez. Sem helper, esta página mostra apenas a prévia web.</div>
             <div class="install-steps">
@@ -604,7 +604,7 @@
       <button class="web-close" id="webCloseBtn" type="button" title="Fechar mascote web">X</button>
       <div class="bubble" id="bubble">Oi, tudo bem? Eu sou assistente virtual IDvida, vou ficar monitorando por aqui.</div>
       <div class="pet" id="pet" data-state="origin">
-        <img class="sprite" id="sprite" src="/mascote/assets/scenes-v2/origin-01.png?v=20260815-clean2" alt="Mascote IDvida animado">
+        <img class="sprite" id="sprite" src="/mascote/assets/frames-v5-final/greet-01.png?v=20260815-clean3" alt="Mascote IDvida animado">
       </div>
     </div>
   </div>
@@ -635,8 +635,8 @@
       close: document.getElementById('stepClose')
     };
 
-    const spriteRoot = '/mascote/assets/scenes-v2';
-    const spriteVersion = 'v=20260815-clean2';
+    const spriteRoot = '/mascote/assets/frames-v5-final';
+    const spriteVersion = 'v=20260815-clean3';
 
     function spriteUrl(file) {
       return `${spriteRoot}/${file}?${spriteVersion}`;
@@ -648,44 +648,44 @@
 
     const states = {
       origin: {
-        frames: frameRange('origin', 6),
-        frameMs: 700,
+        frames: frameRange('greet', 4),
+        frameMs: 780,
         loop: false,
         bubble: 'Oi, tudo bem? Eu sou assistente virtual IDvida, vou ficar monitorando por aqui.',
         alert: false,
         bubbleMs: 4200
       },
       hello: {
-        frames: frameRange('hello', 6),
-        frameMs: 560,
+        frames: ['greet-02.png', 'greet-03.png', 'greet-04.png', 'greet-03.png'],
+        frameMs: 820,
         bubble: 'Oi, tudo bem? Eu sou assistente virtual IDvida, vou ficar monitorando por aqui.',
         alert: false
       },
       sit: {
-        frames: frameRange('sit', 6),
-        frameMs: 680,
+        frames: frameRange('monitor', 4),
+        frameMs: 980,
         loop: false,
         bubble: 'Tudo certo por aqui.',
         alert: false,
         bubbleMs: 4200
       },
       monitor: {
-        frames: frameRange('monitor', 6),
-        frameMs: 1200,
+        frames: frameRange('monitor', 4),
+        frameMs: 1400,
         bubble: 'Tudo certo por aqui.',
         alert: false
       },
       alert: {
-        frames: frameRange('alert', 5),
-        frameMs: 900,
+        frames: frameRange('alert', 4),
+        frameMs: 1050,
         bubble: 'Geladeira 2 está há 30 min sem comunicação.',
         alert: true
       },
       close: {
-        frames: frameRange('close', 6),
-        frameMs: 700,
+        frames: ['greet-04.png', 'greet-03.png', 'greet-01.png'],
+        frameMs: 760,
         loop: false,
-        bubble: 'Voltando para o IDSense.',
+        bubble: 'Até logo. Vou parar o monitoramento visual por aqui.',
         alert: false,
         bubbleMs: 4600
       }
@@ -917,7 +917,7 @@
       setBadge(webStatus, 'Web ativo', 'ok');
 
       setStep('origin');
-      setText('O mascote sai do IDSense. Arraste ele para qualquer ponto da tela do navegador.');
+      setText('O mascote aparece limpo na tela. Arraste ele para qualquer ponto do navegador.');
 
       timers.push(window.setTimeout(() => {
         setStep('hello');
@@ -928,7 +928,7 @@
       timers.push(window.setTimeout(() => {
         setStep('sit');
         setWebMascotState('sit');
-        setText('Ele caminha, senta e abre o notebook para monitorar.');
+        setText('Ele senta e abre o notebook para monitorar.');
       }, 9600));
 
       timers.push(window.setTimeout(async () => {
@@ -968,11 +968,11 @@
       setWebMascotState('close', true);
       setBadge(webStatus, 'Fechado', 'offline');
       setBadge(helperStatus, 'Fechado', 'offline');
-      setText('Fechando: ele volta para o IDSense antes de sumir.');
+      setText('Fechando: ele se despede antes de sumir.');
       try {
         await requestMascot('/close');
       } catch (error) {
-        setText('Fechando: ele volta para o IDSense antes de sumir.');
+        setText('Fechando: ele se despede antes de sumir.');
       }
       window.setTimeout(() => {
         hideWebMascot();
