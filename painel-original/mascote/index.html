@@ -412,13 +412,13 @@
     .web-companion {
       cursor: grab;
       display: none;
-      height: 178px;
+      height: 184px;
       left: 22px;
       position: fixed;
       top: 22px;
       touch-action: none;
       user-select: none;
-      width: 304px;
+      width: 372px;
       z-index: 50;
     }
 
@@ -431,11 +431,11 @@
     }
 
     .web-companion .pet {
-      bottom: 0;
-      height: 144px;
+      bottom: 6px;
+      height: 142px;
       position: absolute;
-      right: 0;
-      width: 184px;
+      right: 6px;
+      width: 142px;
     }
 
     .web-companion .pet::after {
@@ -451,16 +451,17 @@
       color: rgba(17, 24, 39, .88);
       font-size: 11px;
       font-weight: 500;
+      left: 0;
       line-height: 1.32;
       pointer-events: none;
-      right: 138px;
+      right: auto;
       top: 42px;
-      width: 198px;
+      width: 204px;
     }
 
     .web-companion .bubble.is-alert {
       border-color: rgba(244, 165, 28, .50);
-      width: 228px;
+      width: 224px;
     }
 
     .web-close {
@@ -538,7 +539,7 @@
       <div class="actions">
         <button class="primary" id="activateBtn" type="button">Ativar Mascote IDvida</button>
         <button class="quiet" id="desktopBtn" type="button">Ativar desktop</button>
-        <a class="quiet download" id="downloadBtn" href="https://id-sensor-mvp.onrender.com/mascote/downloads/Mascote-IDvida-Desktop.zip?v=20260816-approved6" download>Baixar ZIP do helper</a>
+        <a class="quiet download" id="downloadBtn" href="https://id-sensor-mvp.onrender.com/mascote/downloads/Mascote-IDvida-Desktop.zip?v=20260816-approved7" download>Baixar ZIP do helper</a>
         <button class="quiet" id="closeBtn" type="button">Fechar mascote</button>
       </div>
     </header>
@@ -626,7 +627,7 @@
       <button class="web-close" id="webCloseBtn" type="button" title="Fechar mascote web">X</button>
       <div class="bubble" id="bubble">Oi, tudo bem? Eu sou assistente virtual IDvida, vou ficar monitorando por aqui.</div>
       <div class="pet" id="pet" data-state="origin">
-        <img class="sprite" id="sprite" src="/mascote/assets/scenes-v2/origin-01.png?v=20260816-approved6" alt="Mascote IDvida animado">
+        <img class="sprite" id="sprite" src="/mascote/assets/scenes-v2/origin-01.png?v=20260816-approved7" alt="Mascote IDvida animado">
       </div>
     </div>
   </div>
@@ -658,7 +659,7 @@
     };
 
     const spriteRoot = '/mascote/assets/scenes-v2';
-    const spriteVersion = 'v=20260816-approved6';
+    const spriteVersion = 'v=20260816-approved7';
 
     function spriteUrl(file) {
       return `${spriteRoot}/${file}?${spriteVersion}`;
@@ -694,7 +695,7 @@
         frames: frameRange('sit', 6),
         frameMs: 820,
         loop: false,
-        bubble: 'Beleza. Vou monitorar seu painel por aqui.',
+        bubble: 'Vou monitorar seu painel por aqui.',
         bubbleDelayMs: 2600,
         alert: false,
         bubbleMs: 4200
@@ -780,8 +781,8 @@
     }
 
     function getDefaultWebCompanionPosition() {
-      const width = 304;
-      const height = 178;
+      const width = 372;
+      const height = 184;
       const rightPanelGap = window.innerWidth >= 980 ? Math.min(390, Math.round(window.innerWidth * 0.30)) : 0;
       return {
         left: window.innerWidth - width - 22 - rightPanelGap,
@@ -791,8 +792,8 @@
 
     function moveWebCompanion(left, top, persist = true) {
       const rect = webCompanion.getBoundingClientRect();
-      const width = rect.width || 318;
-      const height = rect.height || 188;
+      const width = rect.width || 372;
+      const height = rect.height || 184;
       const nextLeft = clamp(left, 8, Math.max(8, window.innerWidth - width - 8));
       const nextTop = clamp(top, 8, Math.max(8, window.innerHeight - height - 8));
       webCompanion.style.left = `${nextLeft}px`;
@@ -936,20 +937,96 @@
       return true;
     }
 
+    function setMascotStateForMode(name, useDesktop, path = null) {
+      if (!useDesktop) {
+        setWebMascotState(name);
+        return;
+      }
+
+      hideWebMascot();
+      if (path) {
+        requestMascot(path).catch(() => {
+          desktopReady = false;
+          setBadge(helperStatus, 'Modo web', 'offline');
+          setText('A conexão com o mascote desktop foi perdida. A prévia web continua disponível.');
+        });
+      }
+    }
+
+    function startSimulation(useDesktop) {
+      activateBtn.disabled = true;
+      activateBtn.textContent = 'Simulação em andamento';
+      setBadge(webStatus, useDesktop ? 'Desktop ativo' : 'Web ativo', 'ok');
+      setStep('origin');
+
+      if (useDesktop) {
+        hideWebMascot();
+        setText('Mascote ativo na área de trabalho. A prévia web ficará oculta para não duplicar o mascote.');
+      } else {
+        setWebMascotState('origin', true);
+        setText('O mascote acorda no IDSense e cumprimenta o usuário.');
+      }
+
+      timers.push(window.setTimeout(() => {
+        setStep('hello');
+        setMascotStateForMode('hello', useDesktop);
+        setText('Ele dá oi e se apresenta antes de iniciar o monitoramento.');
+      }, 5000));
+
+      timers.push(window.setTimeout(() => {
+        setStep('sit');
+        setMascotStateForMode('sit', useDesktop, '/sit');
+        setText('Ele senta e assume o monitoramento do painel.');
+      }, 9600));
+
+      timers.push(window.setTimeout(() => {
+        setStep('monitor');
+        setMascotStateForMode('monitor', useDesktop, '/monitor');
+        setText('Monitoramento normal. O balão é discreto e some sozinho.');
+      }, 15000));
+
+      timers.push(window.setTimeout(() => {
+        setStep('alert');
+        setBadge(generalStatus, 'Atenção', 'warn');
+        setBadge(deviceStatus, 'Sem comunicação', 'warn');
+        setBadge(webStatus, 'Alerta', 'warn');
+        setMascotStateForMode('alert', useDesktop, '/alert?device=Geladeira%202&minutes=30&local=Laborat%C3%B3rio%20IDvida&area=C%C3%A2mara%20fria');
+        setText('Alerta simulado: Geladeira 2 está há 30 min sem comunicação.');
+      }, 30000));
+
+      timers.push(window.setTimeout(() => {
+        setStep('monitor');
+        setBadge(generalStatus, 'Tudo certo', 'ok');
+        setBadge(deviceStatus, 'Online', 'ok');
+        setBadge(webStatus, useDesktop ? 'Desktop ativo' : 'Web ativo', 'ok');
+        setMascotStateForMode('monitor', useDesktop, '/monitor');
+        setText('Depois do alerta, ele volta ao monitoramento normal.');
+        activateBtn.disabled = false;
+        activateBtn.textContent = 'Reiniciar simulação';
+      }, 41000));
+    }
+
     async function activateDesktopMode() {
+      clearTimers();
+      resetPanel();
+      hideWebMascot();
       desktopBtn.disabled = true;
+      activateBtn.disabled = true;
+      setStep('origin');
       setBadge(helperStatus, 'Conectando', 'warn');
       setText('Tentando abrir o mascote na área de trabalho...');
-      setWebMascotState('origin', true);
 
       try {
         desktopReady = await activateDesktopIfAvailable();
-        if (desktopReady) {
-          await requestMascot('/activate');
-          hideWebMascot();
-          setBadge(webStatus, 'Desktop ativo', 'ok');
-          setText('Mascote desktop ativado. A prévia web foi ocultada para não duplicar o mascote.');
+        if (!desktopReady) {
+          activateBtn.disabled = false;
+          setBadge(webStatus, 'Web pronta', 'offline');
+          setText('Não foi possível ativar o mascote desktop. Use a ativação principal para abrir a versão web.');
+          return;
         }
+        await requestMascot('/activate');
+        setText('Mascote desktop ativado. A prévia web foi ocultada para não duplicar o mascote.');
+        startSimulation(true);
       } finally {
         desktopBtn.disabled = false;
       }
@@ -958,67 +1035,44 @@
     async function activateMascot() {
       clearTimers();
       resetPanel();
+      hideWebMascot();
       activateBtn.disabled = true;
-      setBadge(helperStatus, 'Modo web', 'offline');
-      setText('Abrindo o Mascote IDvida dentro do navegador...');
-      desktopReady = false;
-      setWebMascotState('origin', true);
-      setBadge(webStatus, 'Web ativo', 'ok');
-
+      desktopBtn.disabled = true;
       setStep('origin');
-      setText('O mascote acorda no IDSense e cumprimenta o usuário.');
+      setBadge(helperStatus, 'Conectando', 'warn');
+      setText('Verificando se este computador tem o helper desktop...');
 
-      timers.push(window.setTimeout(() => {
-        setStep('hello');
-        setWebMascotState('hello');
-        setText('Ele dá oi e se apresenta antes de iniciar o monitoramento.');
-      }, 5000));
-
-      timers.push(window.setTimeout(async () => {
-        setStep('sit');
-        setWebMascotState('sit');
-        setText('Ele senta e assume o monitoramento do painel.');
-        if (desktopReady) await requestMascot('/sit');
-      }, 9600));
-
-      timers.push(window.setTimeout(async () => {
-        setStep('monitor');
-        setWebMascotState('monitor');
-        setText('Monitoramento normal. O balão é discreto e some sozinho.');
-        if (desktopReady) await requestMascot('/monitor');
-      }, 15000));
-
-      timers.push(window.setTimeout(async () => {
-        setStep('alert');
-        setBadge(generalStatus, 'Atenção', 'warn');
-        setBadge(deviceStatus, 'Sem comunicação', 'warn');
-        setBadge(webStatus, 'Alerta', 'warn');
-        setWebMascotState('alert');
-        setText('Alerta simulado: Geladeira 2 está há 30 min sem comunicação.');
+      try {
+        desktopReady = await activateDesktopIfAvailable();
         if (desktopReady) {
-          await requestMascot('/alert?device=Geladeira%202&minutes=30&local=Laborat%C3%B3rio%20IDvida&area=C%C3%A2mara%20fria');
+          await requestMascot('/activate');
+          setText('Mascote desktop ativado. A prévia web foi ocultada para não duplicar o mascote.');
+          startSimulation(true);
+          return;
         }
-      }, 30000));
 
-      timers.push(window.setTimeout(() => {
-        setStep('monitor');
-        setBadge(generalStatus, 'Tudo certo', 'ok');
-        setBadge(deviceStatus, 'Online', 'ok');
-        setBadge(webStatus, 'Web ativo', 'ok');
-        setWebMascotState('monitor');
-        setText('Depois do alerta, ele volta ao monitoramento normal.');
-        activateBtn.disabled = false;
-        activateBtn.textContent = 'Reiniciar simulação';
-      }, 41000));
+        desktopReady = false;
+        setBadge(helperStatus, 'Modo web', 'offline');
+        setText('Helper desktop não encontrado. Abrindo o Mascote IDvida dentro do navegador.');
+        startSimulation(false);
+      } finally {
+        desktopBtn.disabled = false;
+      }
     }
 
     async function closeMascot() {
       clearTimers();
       setStep('close');
-      setWebMascotState('close', true);
       setBadge(webStatus, 'Fechado', 'offline');
       setBadge(helperStatus, 'Fechado', 'offline');
       setText('Fechando: ele volta para o IDSense antes de sumir.');
+
+      if (!desktopReady) {
+        setWebMascotState('close', true);
+      } else {
+        hideWebMascot();
+      }
+
       try {
         await requestMascot('/close');
       } catch (error) {
@@ -1028,6 +1082,7 @@
         hideWebMascot();
         window.clearInterval(frameTimer);
       }, 4800);
+      desktopReady = false;
       activateBtn.disabled = false;
       activateBtn.textContent = 'Ativar Mascote IDvida';
     }
