@@ -17041,8 +17041,9 @@ if(false){(function(){
 (function(){
   const TOUR_BUTTON_ID = 'assistantTourBtn';
   const TOUR_LAYER_ID = 'assistantTourLayer';
-  const MOVE_DURATION_MS = 820;
-  const READ_PAUSE_MS = 620;
+  const MOVE_DURATION_MS = 1120;
+  const READ_PAUSE_MS = 1600;
+  const CHAR_DELAY_MS = 24;
   let activeTourToken = null;
   let activeKeyHandler = null;
 
@@ -17234,29 +17235,26 @@ if(false){(function(){
     for(const char of content){
       if(token?.aborted) return;
       text.textContent += char;
-      await delay(char === '.' || char === ':' ? 70 : 16, token);
+      await delay(char === '.' || char === ':' ? 120 : CHAR_DELAY_MS, token);
     }
     caption.classList.add('is-complete');
   }
 
   async function runStep(step, token){
-    const element = await waitForElement(step.selector, token, step.timeout || 5000);
-    if(token?.aborted || !element) return false;
+    let element = await waitForElement(step.selector, token, step.timeout || 5000);
+    if(token?.aborted) return false;
+    if(!element) return !!step.optional;
     await scrollTargetIntoView(element, token);
     if(token?.aborted) return false;
-    positionCaption(element);
-    await Promise.all([
-      moveCursorTo(element, token),
-      typeCaption(step.text, token)
-    ]);
+    await moveCursorTo(element, token);
     if(token?.aborted) return false;
 
-    if(step.click){
+    if(step.clickBeforeText){
       showClickAt(element);
       element.click();
     }
 
-    if(typeof step.action === 'function'){
+    if(step.actionBeforeText && typeof step.action === 'function'){
       step.action(element);
     }
 
@@ -17264,11 +17262,34 @@ if(false){(function(){
       await waitForCondition(step.waitFor, token, step.waitTimeout || 6000);
     }
 
+    if(step.focusSelector){
+      element = await waitForElement(step.focusSelector, token, step.focusTimeout || 5000) || element;
+      await scrollTargetIntoView(element, token);
+    }
+
+    positionCaption(element);
+    await typeCaption(step.text, token);
+    if(token?.aborted) return false;
+
+    if(step.click && !step.clickBeforeText){
+      showClickAt(element);
+      element.click();
+    }
+
+    if(!step.actionBeforeText && typeof step.action === 'function'){
+      step.action(element);
+    }
+
+    if(typeof step.waitAfterTextFor === 'function'){
+      await waitForCondition(step.waitAfterTextFor, token, step.waitTimeout || 6000);
+    }
+
     if(typeof step.after === 'function'){
       step.after(element);
     }
 
-    await delay(step.pause || READ_PAUSE_MS, token);
+    const autoPause = Math.min(4200, READ_PAUSE_MS + (String(step.text || '').length * 8));
+    await delay(step.pause || autoPause, token);
     return !token?.aborted;
   }
 
@@ -17331,70 +17352,141 @@ if(false){(function(){
       const steps = [
         {
           selector:'#cardGrid',
-          text:'Este é o painel de monitoramento IDSensor. Ele centraliza a leitura dos equipamentos acompanhados pela IDvida em tempo real.'
+          text:'Este é o painel de monitoramento IDSensor. Aqui ficam os equipamentos acompanhados pela IDvida, com leitura visual rápida para temperatura, comunicação e status.',
+          pause:2600
         },
         {
-          selector:'.card[data-id="1"]',
-          text:'Cada card representa um equipamento. O card mostra temperatura atual, limites mínimo e máximo, comunicação, bateria, umidade e status operacional.'
+          selector:'.card.blue',
+          text:'O card azul indica operação normal. A temperatura está dentro da faixa configurada e o equipamento segue sem alerta ativo.',
+          optional:true
+        },
+        {
+          selector:'.card.warn',
+          text:'O card laranja indica atenção. Ele sinaliza uma condição que precisa de acompanhamento antes de evoluir para um estado crítico.',
+          optional:true
+        },
+        {
+          selector:'.card.crit',
+          text:'O card vermelho indica condição crítica. Esse estado pede ação rápida, porque o equipamento está fora da regra de segurança.',
+          optional:true
+        },
+        {
+          selector:'.card .range-row',
+          text:'Nesta área do card aparecem os limites mínimo e máximo. A leitura mostra se a temperatura atual está dentro da faixa segura.',
+          optional:true
+        },
+        {
+          selector:'.card .comm-wrap',
+          text:'Aqui fica a comunicação do dispositivo. Quando o indicador está ativo, o painel recebe leituras. Quando há falha, o card informa ausência de comunicação.',
+          optional:true
+        },
+        {
+          selector:'.card .offline-logo-badge',
+          text:'Este símbolo visual reforça o estado de comunicação. Ele ajuda o usuário a identificar rapidamente se o sensor está transmitindo dados.',
+          optional:true
         },
         {
           selector:'#statusChips',
-          text:'Os filtros organizam o painel por condição: normal, atenção, crítico, manutenção, sem comunicação, degelo, reposição e inventário.'
+          text:'Os filtros superiores separam os equipamentos por estado: normal, atenção, crítico, manutenção, sem comunicação, degelo, reposição e inventário.',
+          pause:2600
         },
         {
           selector:'#deviceSearchBtn',
-          text:'A busca localiza um equipamento por nome, código ou MAC. Isso reduz o tempo de consulta em painéis com muitos dispositivos.',
-          click:true,
+          text:'A busca localiza um equipamento por nome, código ou MAC. Ela é útil quando o painel possui muitos dispositivos.',
+          clickBeforeText:true,
           waitFor:() => document.getElementById('deviceSearchPop')?.classList.contains('show'),
+          focusSelector:'#deviceSearchPop',
           after:() => document.getElementById('deviceSearchPop')?.classList.remove('show')
         },
         {
-          selector:'.card[data-id="1"]',
-          text:'Ao selecionar um card, o painel abre os detalhes reais do equipamento.',
-          click:true,
-          waitFor:() => !!document.getElementById('cardFloatingDetail')
+          selector:'.card',
+          text:'Ao clicar em um card, o painel abre os detalhes reais do equipamento selecionado.',
+          clickBeforeText:true,
+          waitFor:() => !!document.getElementById('cardFloatingDetail'),
+          focusSelector:'#cardFloatingDetail'
         },
         {
-          selector:'#cardFloatingDetail',
-          text:'Nos detalhes ficam eventos, temperatura, bateria, umidade, comunicação, faixa segura e situação operacional.'
+          selector:'#cardFloatingDetail .alert-temp',
+          text:'Nos detalhes, a temperatura atual fica em destaque. Abaixo dela aparecem o estado operacional e os principais dados do sensor.',
+          pause:2400
+        },
+        {
+          selector:'#cardFloatingDetail .rows',
+          text:'Esta área mostra eventos, bateria, umidade, uso, comunicação e mensagens importantes do equipamento monitorado.',
+          pause:2600
         },
         {
           selector:'#cardFloatingDetail .calib-seal-btn',
-          text:'A calibração apresenta o certificado do sensor. Azul indica certificado válido, laranja indica vencimento próximo e vermelho indica certificado vencido.',
-          click:true,
+          text:'A calibração abre o certificado do sensor. Azul indica certificado válido, laranja indica vencimento próximo e vermelho indica certificado vencido.',
+          clickBeforeText:true,
           waitFor:() => !!document.querySelector('.calib-pop.show'),
+          focusSelector:'.calib-pop.show',
+          pause:3000,
           after:() => document.querySelectorAll('.calib-pop.show').forEach(item => item.classList.remove('show'))
         },
         {
           selector:'#cardFloatingDetail .detail-info-btn',
-          text:'O botão de informação abre cadastro, MAC, modelo, conexão, área, responsável e ações administrativas.',
-          click:true,
-          waitFor:() => document.getElementById('infoOverlayModal')?.classList.contains('show')
+          text:'O botão de informação abre o cadastro completo do equipamento.',
+          clickBeforeText:true,
+          waitFor:() => document.getElementById('infoOverlayModal')?.classList.contains('show'),
+          focusSelector:'#infoOverlayModal .info-modal'
         },
         {
-          selector:'#infoOverlayModal',
-          text:'Nesta tela, o usuário consulta os dados do equipamento e acessa edição, troca de MAC, clonagem e histórico.',
+          selector:'#infoOverlayModal .info-section',
+          text:'Nesta tela aparecem MAC, modelo, tipo de conexão, nome do equipamento, código, área e responsável. Também existem ações para editar, alterar MAC, clonar e consultar histórico.',
+          pause:3400,
           after:() => closeInfoOverlays()
         },
         {
           selector:'#cardFloatingDetail .open-graph-btn',
-          text:'O gráfico mostra a variação de temperatura no período selecionado, com limites, atenção, crítico e eventos.',
-          click:true,
-          waitFor:() => !!document.getElementById('graphWorkspaceRoot')
+          text:'O botão de gráfico abre a análise temporal do equipamento.',
+          clickBeforeText:true,
+          waitFor:() => !!document.getElementById('graphWorkspaceRoot'),
+          focusSelector:'.graph-main-card'
         },
         {
           selector:'.graph-main-card',
-          text:'No gráfico, o usuário consulta temperatura atual, mínima, máxima e tempo fora do limite. A visão detalhada amplia a análise do período.'
+          text:'O gráfico mostra a variação de temperatura no período selecionado, com faixa segura, pontos de atenção, estado crítico e eventos registrados.',
+          pause:3200
         },
         {
-          selector:'.telemetry-accordion',
-          text:'A telemetria resume tempo dentro do limite, tempo fora do limite, comunicação, alertas enviados e linha do tempo da ocorrência.',
-          click:true,
-          waitFor:() => !!document.querySelector('.telemetry-accordion[open]')
+          selector:'.graph-workspace-toolbar',
+          text:'Na barra superior do gráfico, o usuário alterna períodos e aplica filtros de data para analisar a ocorrência com mais precisão.',
+          optional:true
+        },
+        {
+          selector:'.telemetry-accordion summary',
+          text:'A telemetria operacional detalha a condição do equipamento nas últimas 24 horas.',
+          clickBeforeText:true,
+          waitFor:() => !!document.querySelector('.telemetry-accordion[open]'),
+          focusSelector:'.telemetry-accordion[open]'
+        },
+        {
+          selector:'.telemetry-status-grid',
+          text:'Aqui aparecem os tempos dentro do limite, em atenção, em crítico e sem comunicação. Esse resumo ajuda a medir a duração real da ocorrência.',
+          pause:3200
+        },
+        {
+          selector:'.telemetry-channel-grid',
+          text:'Nesta parte ficam os canais de alerta, como notificação, SMS e WhatsApp, com a quantidade de disparos registrados.',
+          optional:true
+        },
+        {
+          selector:'.telemetry-variation-strip',
+          text:'A variação mostra a temperatura inicial, o ponto de maior risco, a diferença acumulada e o tempo fora do limite configurado.',
+          optional:true,
+          pause:3200
+        },
+        {
+          selector:'.telemetry-timeline',
+          text:'A linha do tempo organiza os eventos da ocorrência, desde a saída do limite até alertas enviados, silêncio do painel e normalização.',
+          optional:true,
+          pause:3200
         },
         {
           selector:'.graph-report-accordion',
-          text:'A área de relatórios reúne exportação em PDF, Excel, CSV e relatório analítico para análise operacional.',
+          text:'A área de relatórios reúne exportação em PDF, Excel, CSV e relatório analítico para apoio à auditoria e à rotina operacional.',
+          optional:true,
           after:() => {
             closeGraphModal();
             closeDetail();
@@ -17402,35 +17494,70 @@ if(false){(function(){
         },
         {
           selector:'#gestaoBtn',
-          text:'A gestão apresenta saúde dos dispositivos, calibração, comunicação, contratos, disponibilidade, status operacional e ordens de serviço.',
-          click:true,
-          waitFor:() => document.getElementById('gestaoOverlay')?.classList.contains('show')
+          text:'O botão Gestão abre uma visão administrativa da saúde dos dispositivos.',
+          clickBeforeText:true,
+          waitFor:() => document.getElementById('gestaoOverlay')?.classList.contains('show'),
+          focusSelector:'#gestaoOverlay .gestao-modal'
         },
         {
-          selector:'#gestaoOverlay .gestao-modal',
-          text:'Esta visão ajuda a acompanhar a operação por cliente e apoia decisões de manutenção, expansão e atendimento.',
+          selector:'#gestaoOverlay .gestao-saude',
+          text:'Saúde dos dispositivos resume calibrados, próximos do vencimento, vencidos, em manutenção, comunicando e sem comunicação.',
+          pause:3300
+        },
+        {
+          selector:'#gestaoOverlay .gestao-right-top',
+          text:'Este card mostra total de dispositivos, contratos, itens aguardando, disponibilidade e serviços contratados.',
+          optional:true
+        },
+        {
+          selector:'#gestaoOverlay .gestao-bottom .gestao-card.clickable',
+          text:'A área de status operacional mostra a distribuição geral dos dispositivos e ajuda a acompanhar a operação por cliente.',
+          optional:true,
           after:() => fecharGestaoModal()
         },
         {
           selector:'#nocBtn',
-          text:'O NOC apresenta ocorrências em tempo real por área, dispositivo ou cliente.',
-          click:true,
-          waitFor:() => document.getElementById('nocStartOverlay')?.classList.contains('show')
+          text:'O NOC apresenta ocorrências por área, dispositivo ou cliente para acompanhamento em tempo real.',
+          clickBeforeText:true,
+          waitFor:() => document.getElementById('nocStartOverlay')?.classList.contains('show'),
+          focusSelector:'#nocStartOverlay .noc-start-box'
         },
         {
           selector:'#nocStartOverlay .noc-start-box',
-          text:'Neste modo, o usuário escolhe o tipo de visualização e acompanha apenas as ocorrências necessárias.',
+          text:'Nesta tela o usuário escolhe a visão mais adequada para acompanhar somente as ocorrências que precisam de atenção.',
           after:() => closeNoc()
         },
         {
           selector:'#panelConfigBtn',
-          text:'As configurações reúnem silêncio global, atualização automática, coleta programada, vínculo de alertas e usuários do painel.',
-          click:true,
-          waitFor:() => document.getElementById('panelConfigMenu')?.classList.contains('show')
+          text:'As configurações concentram controles operacionais do painel.',
+          clickBeforeText:true,
+          waitFor:() => document.getElementById('panelConfigMenu')?.classList.contains('show'),
+          focusSelector:'#panelConfigMenu'
         },
         {
-          selector:'#panelConfigMenu',
-          text:'Esses controles ajustam o comportamento do painel sem alterar a leitura principal dos equipamentos.',
+          selector:'#toggleGlobalMute',
+          text:'Silenciar painel pausa o som local por 15 minutos, sem bloquear os alertas externos configurados.',
+          optional:true
+        },
+        {
+          selector:'#toggleAutoRefresh',
+          text:'A atualização automática recarrega os dados em ciclo definido e mostra o contador abaixo do subtítulo.',
+          optional:true
+        },
+        {
+          selector:'#scheduledCollectionEntry',
+          text:'A coleta programada define frequência e dados usados no ciclo mensal de relatório.',
+          optional:true
+        },
+        {
+          selector:'#bindDeviceEntry',
+          text:'Vincular dispositivo gera um código para associar um smartphone aos alertas da área selecionada.',
+          optional:true
+        },
+        {
+          selector:'#panelUsersEntry',
+          text:'Usuários do painel permite cadastrar acessos básicos por cliente.',
+          optional:true,
           after:() => {
             document.getElementById('panelConfigMenu')?.classList.remove('show');
             document.getElementById('panelConfigBtn')?.setAttribute('aria-expanded','false');
@@ -17438,13 +17565,35 @@ if(false){(function(){
         },
         {
           selector:'#accButton',
-          text:'A acessibilidade permite alto contraste, modo daltônico, modo compacto e escolha das informações exibidas nos cards.',
-          click:true,
-          waitFor:() => document.getElementById('accMenu')?.classList.contains('show')
+          text:'Acessibilidade adapta a leitura visual do painel.',
+          clickBeforeText:true,
+          waitFor:() => document.getElementById('accMenu')?.classList.contains('show'),
+          focusSelector:'#accMenu'
         },
         {
-          selector:'#accMenu',
-          text:'Esses recursos ajudam a adaptar a leitura visual do painel para diferentes perfis de usuário.',
+          selector:'#toggleColorblind',
+          text:'Modo daltônico reforça a leitura com ícones, padrões e sinais visuais, sem depender apenas de cor.',
+          optional:true
+        },
+        {
+          selector:'#toggleContrast',
+          text:'Alto contraste destaca textos, bordas e elementos de gráfico para leitura mais rápida.',
+          optional:true
+        },
+        {
+          selector:'#toggleDensity',
+          text:'Modo compacto reduz os cards e aumenta a quantidade de dispositivos visíveis na tela.',
+          optional:true
+        },
+        {
+          selector:'#accPersonalHeader',
+          text:'Personalização permite escolher quais informações aparecem nos cards, como comunicação, mínimo e máximo, bateria e umidade.',
+          optional:true
+        },
+        {
+          selector:'#accStatusHeader',
+          text:'Status permite definir quais filtros aparecem na barra superior do painel.',
+          optional:true,
           after:() => {
             document.getElementById('accMenu')?.classList.remove('show');
             document.getElementById('accButton')?.setAttribute('aria-expanded','false');
@@ -17453,7 +17602,7 @@ if(false){(function(){
         {
           selector:'#cardGrid',
           text:'A apresentação terminou. O painel segue disponível para operação, consulta de alertas, análise de dados e gestão dos dispositivos.',
-          pause:1200
+          pause:2200
         }
       ];
 

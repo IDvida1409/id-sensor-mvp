@@ -18367,15 +18367,36 @@ body.analytic-report-open{overflow:hidden}
   }
 }
 
+.brand-title-row{
+  align-items:center;
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px;
+}
+
 /* ===== Assistente IDvida: apresentacao guiada em texto ===== */
 .assistant-tour-trigger{
-  background:#0b5790;
-  border-color:#0b5790;
-  color:#fff;
+  align-items:center;
+  appearance:none;
+  background:rgba(255,255,255,.86);
+  border:1px solid rgba(11,87,144,.22);
+  border-radius:999px;
+  box-shadow:0 5px 14px rgba(31,42,55,.06);
+  color:#0b5790;
+  cursor:pointer;
+  display:inline-flex;
+  flex:0 0 auto;
+  font-size:12px;
+  font-weight:800;
+  height:28px;
+  line-height:1;
+  padding:0 11px;
+  white-space:nowrap;
 }
 
 .assistant-tour-trigger:hover{
-  background:#084a7b;
+  background:#eef8ff;
+  border-color:rgba(11,87,144,.42);
 }
 
 .assistant-tour-trigger:disabled{

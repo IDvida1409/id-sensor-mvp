@@ -237,7 +237,7 @@
 
 
 
-<link rel='stylesheet' href='./styles.css?v=20260722-chart-dynamic-exchange-groups-01' />
+<link rel='stylesheet' href='./styles.css?v=20260816-assistant-tour-v2' />
 </head>
 <body class="auth-pending">
   <section class="login-shell" id="loginShell" hidden aria-labelledby="loginTitle">
@@ -270,14 +270,13 @@
   </section>
   <div class="app">
     <div class="topbar">
-      <div class="brand"><div><div class="title">Monitoramento de Geladeiras</div><div class="subtitle" id="pageSubtitle">Laboratório IDvida · Banco IDvida</div><div class="subtitle subtitle-refresh" id="autoRefreshStatus" hidden>Próxima atualização em: 01:00</div></div></div>
+      <div class="brand"><div><div class="brand-title-row"><div class="title">Monitoramento de Geladeiras</div><button class="assistant-tour-trigger auth-master-only" id="assistantTourBtn" type="button">Apresentação</button></div><div class="subtitle" id="pageSubtitle">Laboratório IDvida · Banco IDvida</div><div class="subtitle subtitle-refresh" id="autoRefreshStatus" hidden>Próxima atualização em: 01:00</div></div></div>
       <div class="controls">
         <button class="simulation-toggle-btn is-off auth-master-only" id="simulationToggleBtn" type="button" aria-pressed="false" aria-label="Simulador desligado" title="Simulador">
           <span class="simulation-power-icon" aria-hidden="true"></span>
         </button>
         <button class="acc-btn gestao-btn auth-master-only" id="gestaoBtn" type="button" onclick="abrirGestaoModal()">Gestão</button>
         <button class="acc-btn gestao-btn auth-master-only" id="nocBtn" type="button" onclick="openNocStart()">NOC</button>
-        <button class="acc-btn gestao-btn assistant-tour-trigger auth-master-only" id="assistantTourBtn" type="button">Apresentação</button>
         <button class="acc-btn gestao-btn config-trigger-btn auth-master-only" id="panelConfigBtn" type="button" aria-expanded="false" aria-controls="panelConfigMenu">
           <span class="config-trigger-icon" aria-hidden="true">⚙</span>
         </button>
@@ -1238,7 +1237,7 @@
 
 
 
-<script src='./script.js?v=20260723-chart-poc-daily-axis-01'></script>
+<script src='./script.js?v=20260816-assistant-tour-v2'></script>
 </body>
 </html>
 
