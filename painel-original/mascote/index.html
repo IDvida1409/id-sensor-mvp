@@ -296,19 +296,9 @@
       z-index: 2;
     }
 
-    .pet[data-state="origin"] {
-      animation-name: emerge;
-      animation-duration: 5.2s;
-    }
-
-    .pet[data-state="hello"] {
+    .pet[data-state="greet"] {
       animation-name: greet;
-      animation-duration: 6.4s;
-    }
-
-    .pet[data-state="sit"] {
-      animation-name: monitor;
-      animation-duration: 7s;
+      animation-duration: 5.6s;
     }
 
     .pet[data-state="monitor"] {
@@ -318,12 +308,7 @@
 
     .pet[data-state="alert"] {
       animation-name: alert;
-      animation-duration: 4.8s;
-    }
-
-    .pet[data-state="close"] {
-      animation-name: return-device;
-      animation-duration: 4.8s;
+      animation-duration: 3.2s;
     }
 
     .pet::after {
@@ -367,7 +352,7 @@
     }
 
     .bubble.is-visible {
-      opacity: .86;
+      opacity: .92;
       transform: translateY(0) scale(1);
     }
 
@@ -425,61 +410,6 @@
       cursor: grabbing;
     }
 
-    .idsense-prop {
-      background:
-        linear-gradient(180deg, rgba(255, 255, 255, .96), rgba(237, 243, 241, .98)),
-        radial-gradient(circle at 42% 42%, rgba(20, 123, 189, .1), transparent 44%);
-      border: 1px solid rgba(8, 61, 92, .18);
-      border-radius: 8px;
-      bottom: 44px;
-      box-shadow:
-        inset 0 0 0 1px rgba(255, 255, 255, .82),
-        0 10px 22px rgba(8, 37, 57, .14);
-      display: none;
-      height: 78px;
-      position: absolute;
-      right: 92px;
-      width: 122px;
-      z-index: 1;
-    }
-
-    .idsense-prop::before,
-    .idsense-prop::after {
-      background: linear-gradient(90deg, #0a8f82, #38c7aa, #0f8c7d);
-      content: "";
-      height: 7px;
-      left: 0;
-      position: absolute;
-      width: 100%;
-    }
-
-    .idsense-prop::before {
-      border-radius: 8px 8px 2px 2px;
-      top: 0;
-    }
-
-    .idsense-prop::after {
-      border-radius: 2px 2px 8px 8px;
-      bottom: 0;
-    }
-
-    .idsense-screen {
-      background: radial-gradient(circle at 50% 46%, #37cfff 0 8%, #073763 26%, #02182d 74%);
-      border: 2px solid rgba(3, 17, 33, .72);
-      border-radius: 5px;
-      box-shadow: inset 0 0 16px rgba(24, 181, 255, .32);
-      height: 34px;
-      left: 50%;
-      position: absolute;
-      top: 50%;
-      transform: translate(-50%, -50%);
-      width: 54px;
-    }
-
-    .web-companion.has-device .idsense-prop {
-      display: block;
-    }
-
     .web-companion .pet {
       bottom: 0;
       height: 164px;
@@ -495,16 +425,15 @@
     }
 
     .web-companion .bubble {
-      backdrop-filter: blur(5px);
-      background: rgba(255, 255, 255, .58);
-      border-color: rgba(35, 174, 234, .48);
-      box-shadow: 0 8px 18px rgba(6, 29, 56, .08);
-      font-size: 10.5px;
+      background: rgba(255, 255, 255, .74);
+      border-color: rgba(35, 174, 234, .56);
+      box-shadow: 0 8px 18px rgba(6, 29, 56, .10);
+      font-size: 11px;
       line-height: 1.25;
       pointer-events: none;
       right: 152px;
       top: 46px;
-      width: 188px;
+      width: 174px;
     }
 
     .web-companion .bubble.is-alert {
@@ -562,19 +491,6 @@
     @keyframes breathe {
       0%, 100% { transform: translateY(0); }
       50% { transform: translateY(-6px); }
-    }
-
-    @keyframes emerge {
-      0% { opacity: .18; transform: translate(-34px, 26px) scale(.38); }
-      40% { opacity: 1; transform: translate(-18px, 13px) scale(.64); }
-      72% { transform: translate(-5px, 3px) scale(.88); }
-      100% { transform: translateY(0) scale(1); }
-    }
-
-    @keyframes return-device {
-      0% { opacity: 1; transform: translateY(0) scale(1); }
-      55% { opacity: .88; transform: translate(-18px, 12px) scale(.7); }
-      100% { opacity: .18; transform: translate(-34px, 26px) scale(.38); }
     }
 
     @media (max-width: 940px) {
@@ -656,7 +572,7 @@
           <div class="side-body">
             <div class="step" id="stepOrigin"><span>1</span><span>Sair do IDSense</span></div>
             <div class="step" id="stepHello"><span>2</span><span>Oi / apresentar</span></div>
-            <div class="step" id="stepSit"><span>3</span><span>Sentar / monitorar</span></div>
+            <div class="step" id="stepSit"><span>3</span><span>Caminhar e sentar</span></div>
             <div class="step" id="stepMonitor"><span>4</span><span>Monitorando</span></div>
             <div class="step" id="stepAlert"><span>5</span><span>Alerta atento</span></div>
             <div class="step" id="stepClose"><span>6</span><span>Voltar ao IDSense</span></div>
@@ -686,10 +602,9 @@
 
     <div class="web-companion" id="webCompanion" aria-label="Mascote IDvida web" aria-live="polite">
       <button class="web-close" id="webCloseBtn" type="button" title="Fechar mascote web">X</button>
-      <div class="idsense-prop" id="idsenseProp" aria-hidden="true"><span class="idsense-screen"></span></div>
-      <div class="bubble" id="bubble">Oi, tudo bem? Eu sou assistente virtual IDvida, vou ficar monitorando por aqui.</div>
+      <div class="bubble" id="bubble">Oi, vou monitorar por aqui</div>
       <div class="pet" id="pet" data-state="origin">
-        <img class="sprite" id="sprite" src="/mascote/assets/frames-v6-motion/greet-01.png" alt="Mascote IDvida animado">
+        <img class="sprite" id="sprite" src="/mascote/assets/scenes-v2/origin-01.png" alt="Mascote IDvida animado">
       </div>
     </div>
   </div>
@@ -720,57 +635,54 @@
       close: document.getElementById('stepClose')
     };
 
-    const spriteRoot = '/mascote/assets/frames-v6-motion';
+    const spriteRoot = '/mascote/assets/scenes-v2';
 
-    function frameRange(prefix, count, start = 1) {
-      return Array.from({ length: count }, (_, index) => `${prefix}-${String(index + start).padStart(2, '0')}.png`);
+    function frameRange(prefix, count) {
+      return Array.from({ length: count }, (_, index) => `${prefix}-${String(index + 1).padStart(2, '0')}.png`);
     }
 
     const states = {
       origin: {
-        frames: frameRange('greet', 8),
-        frameMs: 760,
+        frames: frameRange('origin', 6),
+        frameMs: 700,
         loop: false,
-        bubble: 'Oi, tudo bem? Eu sou assistente virtual IDvida, vou ficar monitorando por aqui.',
+        bubble: 'Saindo do IDSense...',
         alert: false,
-        bubbleMs: 7200,
-        device: true
+        bubbleMs: 4200
       },
       hello: {
-        frames: frameRange('greet', 14),
-        frameMs: 820,
-        bubble: 'Oi, tudo bem? Eu sou assistente virtual IDvida, vou ficar monitorando por aqui.',
-        alert: false,
-        bubbleMs: 6600
+        frames: frameRange('hello', 6),
+        frameMs: 560,
+        bubble: 'Oi, vou monitorar por aqui',
+        alert: false
       },
       sit: {
-        frames: frameRange('monitor', 8),
-        frameMs: 1050,
+        frames: frameRange('sit', 6),
+        frameMs: 680,
         loop: false,
-        bubble: 'Tudo certo por aqui.',
+        bubble: 'Vou ficar monitorando.',
         alert: false,
         bubbleMs: 4200
       },
       monitor: {
-        frames: frameRange('monitor', 16),
-        frameMs: 1750,
-        bubble: 'Tudo certo por aqui.',
+        frames: frameRange('monitor', 6),
+        frameMs: 1200,
+        bubble: 'Tudo certo por aqui',
         alert: false
       },
       alert: {
-        frames: frameRange('alert', 14),
-        frameMs: 1150,
+        frames: frameRange('alert', 6),
+        frameMs: 900,
         bubble: 'Geladeira 2 está há 30 min sem comunicação.',
         alert: true
       },
       close: {
-        frames: ['greet-04.png', 'greet-03.png', 'greet-02.png', 'greet-01.png'],
-        frameMs: 900,
+        frames: frameRange('close', 6),
+        frameMs: 700,
         loop: false,
         bubble: 'Voltando para o IDSense.',
         alert: false,
-        bubbleMs: 4600,
-        device: true
+        bubbleMs: 4600
       }
     };
 
@@ -846,7 +758,7 @@
     }
 
     function hideWebMascot() {
-      webCompanion.classList.remove('is-active', 'is-dragging', 'has-device');
+      webCompanion.classList.remove('is-active', 'is-dragging');
       bubble.classList.remove('is-visible');
       dragState = null;
     }
@@ -856,7 +768,6 @@
       window.clearInterval(frameTimer);
       frameIndex = 0;
       if (shouldShow) showWebMascot();
-      webCompanion.classList.toggle('has-device', Boolean(state.device));
       pet.dataset.state = name;
       bubble.textContent = state.bubble;
       bubble.classList.toggle('is-alert', state.alert);
@@ -987,26 +898,26 @@
       setBadge(webStatus, 'Web ativo', 'ok');
 
       setStep('origin');
-      setText('O mascote sai do IDSense e se apresenta. Arraste ele para qualquer ponto da tela do navegador.');
+      setText('O mascote sai do IDSense. Arraste ele para qualquer ponto da tela do navegador.');
 
       timers.push(window.setTimeout(() => {
         setStep('hello');
         setWebMascotState('hello');
         setText('Ele dá oi e se apresenta antes de iniciar o monitoramento.');
-      }, 7200));
+      }, 5000));
 
       timers.push(window.setTimeout(() => {
         setStep('sit');
         setWebMascotState('sit');
-        setText('Ele senta e entra no modo de monitoramento.');
-      }, 15800));
+        setText('Ele caminha, senta e abre o notebook para monitorar.');
+      }, 9600));
 
       timers.push(window.setTimeout(async () => {
         setStep('monitor');
         setWebMascotState('monitor');
         setText('Monitoramento normal. O balão é discreto e some sozinho.');
         if (desktopReady) await requestMascot('/monitor');
-      }, 24000));
+      }, 15000));
 
       timers.push(window.setTimeout(async () => {
         setStep('alert');
@@ -1018,7 +929,7 @@
         if (desktopReady) {
           await requestMascot('/alert?device=Geladeira%202&minutes=30&local=Laborat%C3%B3rio%20IDvida&area=C%C3%A2mara%20fria');
         }
-      }, 39000));
+      }, 30000));
 
       timers.push(window.setTimeout(() => {
         setStep('monitor');
@@ -1029,7 +940,7 @@
         setText('Depois do alerta, ele volta ao monitoramento normal.');
         activateBtn.disabled = false;
         activateBtn.textContent = 'Reiniciar simulação';
-      }, 52000));
+      }, 41000));
     }
 
     async function closeMascot() {
@@ -1047,7 +958,7 @@
       window.setTimeout(() => {
         hideWebMascot();
         window.clearInterval(frameTimer);
-      }, 5400);
+      }, 4800);
       activateBtn.disabled = false;
       activateBtn.textContent = 'Ativar Mascote IDvida';
     }
