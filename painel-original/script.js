@@ -17173,7 +17173,19 @@ if(false){(function(){
   function positionCaption(element){
     const {caption} = tourParts();
     if(!caption || !element) return;
-    const rect = element.getBoundingClientRect();
+    const rawRect = element.getBoundingClientRect();
+    const leftBound = clamp(Math.min(rawRect.left, rawRect.right), 16, window.innerWidth - 16);
+    const rightBound = clamp(Math.max(rawRect.left, rawRect.right), 16, window.innerWidth - 16);
+    const topBound = clamp(Math.min(rawRect.top, rawRect.bottom), 12, window.innerHeight - 12);
+    const bottomBound = clamp(Math.max(rawRect.top, rawRect.bottom), 12, window.innerHeight - 12);
+    const rect = {
+      left:leftBound,
+      right:Math.max(leftBound, rightBound),
+      top:topBound,
+      bottom:Math.max(topBound, bottomBound),
+      width:Math.max(1, rightBound - leftBound),
+      height:Math.max(1, bottomBound - topBound)
+    };
     const captionWidth = Math.min(430, window.innerWidth - 32);
     const captionHeight = Math.max(84, caption.offsetHeight || 84);
     const rightSpace = window.innerWidth - rect.right;
@@ -17387,8 +17399,23 @@ if(false){(function(){
         },
         {
           selector:'#statusChips',
-          text:'Os filtros superiores separam os equipamentos por estado: normal, atenção, crítico, manutenção, sem comunicação, degelo, reposição e inventário.',
+          text:'Os filtros superiores ajudam a visualizar grupos de equipamentos por condição, como normal, atenção, crítico e sem comunicação.',
           pause:2600
+        },
+        {
+          selector:'#filterAllBtn',
+          text:'O botão Dispositivos retorna a visão geral do painel. Ao lado dele ficam a busca e os controles usados para organizar a visualização.',
+          pause:2600
+        },
+        {
+          selector:'#chipAreas',
+          text:'Áreas permite filtrar o painel por setor ou ambiente monitorado.',
+          optional:true
+        },
+        {
+          selector:'#chipClients',
+          text:'Clientes permite alternar a visualização quando o usuário possui acesso a mais de um cliente.',
+          optional:true
         },
         {
           selector:'#deviceSearchBtn',
@@ -17414,6 +17441,32 @@ if(false){(function(){
           selector:'#cardFloatingDetail .rows',
           text:'Esta área mostra eventos, bateria, umidade, uso, comunicação e mensagens importantes do equipamento monitorado.',
           pause:2600
+        },
+        {
+          selector:'#cardFloatingDetail .status-edit-btn',
+          text:'O status do detalhe abre o controle operacional do dispositivo.',
+          clickBeforeText:true,
+          waitFor:() => document.getElementById('statusConfigModal')?.classList.contains('show'),
+          focusSelector:'#statusConfigModal'
+        },
+        {
+          selector:'#statusOptionGrid',
+          text:'Aqui o usuário coloca o equipamento em reposição, manutenção, inventário ou degelo. Esses ciclos são temporários e não apagam o histórico do dispositivo.',
+          pause:3400
+        },
+        {
+          selector:'#statusDurationBtn',
+          text:'A duração define por quanto tempo o ciclo ficará ativo. Depois do período, o painel volta a considerar o status automático do equipamento.',
+          clickBeforeText:true,
+          waitFor:() => document.getElementById('statusDurationDropdown')?.classList.contains('open'),
+          focusSelector:'#statusDurationMenu',
+          after:() => document.getElementById('statusDurationDropdown')?.classList.remove('open')
+        },
+        {
+          selector:'#statusOptionGrid .normal-option',
+          text:'Encerrar ciclo finaliza manualmente manutenção, degelo, reposição ou inventário, devolvendo o equipamento ao acompanhamento normal.',
+          optional:true,
+          after:() => closeStatusConfigModal()
         },
         {
           selector:'#cardFloatingDetail .calib-seal-btn',
@@ -17456,20 +17509,41 @@ if(false){(function(){
         },
         {
           selector:'.telemetry-accordion summary',
-          text:'A telemetria operacional detalha a condição do equipamento nas últimas 24 horas.',
+          text:'A telemetria operacional detalha a condição do equipamento nas últimas 24 horas. Vou expandir para mostrar os dados registrados.',
           clickBeforeText:true,
           waitFor:() => !!document.querySelector('.telemetry-accordion[open]'),
-          focusSelector:'.telemetry-accordion[open]'
+          focusSelector:'.telemetry-accordion[open]',
+          pause:3200
         },
         {
-          selector:'.telemetry-status-grid',
-          text:'Aqui aparecem os tempos dentro do limite, em atenção, em crítico e sem comunicação. Esse resumo ajuda a medir a duração real da ocorrência.',
-          pause:3200
+          selector:'.telemetry-status-card.limit',
+          text:'Dentro do limite mostra por quanto tempo o equipamento permaneceu na faixa segura configurada.',
+          optional:true,
+          pause:3000
+        },
+        {
+          selector:'.telemetry-status-card.attention',
+          text:'Atenção mostra o tempo em que a leitura ficou próxima ou fora do limite antes de chegar a uma condição crítica.',
+          optional:true,
+          pause:3000
+        },
+        {
+          selector:'.telemetry-status-card.critical',
+          text:'Crítico mostra a duração do período em que a regra crítica foi atingida.',
+          optional:true,
+          pause:3000
+        },
+        {
+          selector:'.telemetry-status-card.offline',
+          text:'Sem comunicação mostra o tempo em que o painel deixou de receber dados do sensor.',
+          optional:true,
+          pause:3000
         },
         {
           selector:'.telemetry-channel-grid',
           text:'Nesta parte ficam os canais de alerta, como notificação, SMS e WhatsApp, com a quantidade de disparos registrados.',
-          optional:true
+          optional:true,
+          pause:3200
         },
         {
           selector:'.telemetry-variation-strip',
@@ -17478,10 +17552,16 @@ if(false){(function(){
           pause:3200
         },
         {
-          selector:'.telemetry-timeline',
-          text:'A linha do tempo organiza os eventos da ocorrência, desde a saída do limite até alertas enviados, silêncio do painel e normalização.',
+          selector:'.telemetry-expanded-content',
+          text:'Ao expandir a telemetria, o painel abre a linha do tempo completa da ocorrência.',
           optional:true,
-          pause:3200
+          pause:3000
+        },
+        {
+          selector:'.telemetry-timeline',
+          text:'A linha do tempo organiza cada evento: saída do limite, início do crítico, alertas enviados, silêncio do painel, falha de comunicação e normalização.',
+          optional:true,
+          pause:3800
         },
         {
           selector:'.graph-report-accordion',
@@ -17546,7 +17626,7 @@ if(false){(function(){
         },
         {
           selector:'#scheduledCollectionEntry',
-          text:'A coleta programada define frequência e dados usados no ciclo mensal de relatório.',
+          text:'A coleta programada define uma rotina de registro para o ciclo mensal da área.',
           optional:true
         },
         {
@@ -17557,9 +17637,37 @@ if(false){(function(){
         {
           selector:'#panelUsersEntry',
           text:'Usuários do painel permite cadastrar acessos básicos por cliente.',
+          optional:true
+        },
+        {
+          selector:'#openScheduledCollectionModal',
+          text:'Ao abrir a coleta programada, o usuário configura frequência, dispositivos e dados que serão registrados.',
+          clickBeforeText:true,
+          waitFor:() => document.getElementById('scheduledCollectionOverlay')?.classList.contains('show'),
+          focusSelector:'#scheduledCollectionOverlay .scheduled-collection-modal',
+          pause:3200
+        },
+        {
+          selector:'#scheduledFrequencyOptions',
+          text:'A frequência define o intervalo da coleta. O painel permite ciclos como uma, duas, três, quatro, seis ou doze horas.',
+          optional:true
+        },
+        {
+          selector:'#scheduledScopeOptions',
+          text:'Em dispositivos da coleta, a rotina pode usar todos os dispositivos da área ou apenas equipamentos selecionados.',
+          optional:true
+        },
+        {
+          selector:'#scheduledMetricOptions',
+          text:'Em dados registrados, o usuário escolhe quais informações entram no relatório, como temperatura, mínimo, máximo, média e umidade.',
+          optional:true
+        },
+        {
+          selector:'#scheduledCollectionSummary',
+          text:'O resumo mostra como a rotina ficará configurada. O relatório da coleta fica disponível no fechamento de 30 dias para baixar e assinar.',
           optional:true,
           after:() => {
-            document.getElementById('panelConfigMenu')?.classList.remove('show');
+            document.getElementById('scheduledCollectionOverlay')?.classList.remove('show');
             document.getElementById('panelConfigBtn')?.setAttribute('aria-expanded','false');
           }
         },
