@@ -516,7 +516,7 @@
       <div class="actions">
         <button class="primary" id="activateBtn" type="button">Ativar Mascote IDvida</button>
         <button class="quiet" id="desktopBtn" type="button">Ativar desktop</button>
-        <a class="quiet download" id="downloadBtn" href="https://id-sensor-mvp.onrender.com/mascote/downloads/Mascote-IDvida-Desktop.zip?v=20260815-clean4" download>Baixar ZIP do helper</a>
+        <a class="quiet download" id="downloadBtn" href="https://id-sensor-mvp.onrender.com/mascote/downloads/Mascote-IDvida-Desktop.zip?v=20260816-approved2" download>Baixar ZIP do helper</a>
         <button class="quiet" id="closeBtn" type="button">Fechar mascote</button>
       </div>
     </header>
@@ -604,7 +604,7 @@
       <button class="web-close" id="webCloseBtn" type="button" title="Fechar mascote web">X</button>
       <div class="bubble" id="bubble">Oi, tudo bem? Eu sou assistente virtual IDvida, vou ficar monitorando por aqui.</div>
       <div class="pet" id="pet" data-state="origin">
-        <img class="sprite" id="sprite" src="/mascote/assets/scenes-v3-clean/origin-01.png?v=20260815-clean4" alt="Mascote IDvida animado">
+        <img class="sprite" id="sprite" src="/mascote/assets/scenes-v2/origin-01.png?v=20260816-approved2" alt="Mascote IDvida animado">
       </div>
     </div>
   </div>
@@ -635,8 +635,8 @@
       close: document.getElementById('stepClose')
     };
 
-    const spriteRoot = '/mascote/assets/scenes-v3-clean';
-    const spriteVersion = 'v=20260815-clean4';
+    const spriteRoot = '/mascote/assets/scenes-v2';
+    const spriteVersion = 'v=20260816-approved2';
 
     function spriteUrl(file) {
       return `${spriteRoot}/${file}?${spriteVersion}`;
@@ -656,27 +656,27 @@
         bubbleMs: 5200
       },
       hello: {
-        frames: frameRange('hello', 4),
-        frameMs: 850,
+        frames: frameRange('hello', 6),
+        frameMs: 720,
         bubble: 'Oi, tudo bem? Eu sou assistente virtual IDvida, vou ficar monitorando por aqui.',
         alert: false
       },
       sit: {
-        frames: frameRange('monitor', 4),
-        frameMs: 980,
+        frames: frameRange('sit', 6),
+        frameMs: 820,
         loop: false,
         bubble: 'Tudo certo por aqui.',
         alert: false,
         bubbleMs: 4200
       },
       monitor: {
-        frames: frameRange('monitor', 4),
+        frames: frameRange('monitor', 6),
         frameMs: 1400,
         bubble: 'Tudo certo por aqui.',
         alert: false
       },
       alert: {
-        frames: frameRange('alert', 4),
+        frames: frameRange('alert', 5),
         frameMs: 1050,
         bubble: 'Geladeira 2 está há 30 min sem comunicação.',
         alert: true
