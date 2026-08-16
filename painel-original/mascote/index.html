@@ -516,7 +516,7 @@
       <div class="actions">
         <button class="primary" id="activateBtn" type="button">Ativar Mascote IDvida</button>
         <button class="quiet" id="desktopBtn" type="button">Ativar desktop</button>
-        <a class="quiet download" id="downloadBtn" href="https://id-sensor-mvp.onrender.com/mascote/downloads/Mascote-IDvida-Desktop.zip?v=20260816-approved3" download>Baixar ZIP do helper</a>
+        <a class="quiet download" id="downloadBtn" href="https://id-sensor-mvp.onrender.com/mascote/downloads/Mascote-IDvida-Desktop.zip?v=20260816-approved5" download>Baixar ZIP do helper</a>
         <button class="quiet" id="closeBtn" type="button">Fechar mascote</button>
       </div>
     </header>
@@ -604,7 +604,7 @@
       <button class="web-close" id="webCloseBtn" type="button" title="Fechar mascote web">X</button>
       <div class="bubble" id="bubble">Oi, tudo bem? Eu sou assistente virtual IDvida, vou ficar monitorando por aqui.</div>
       <div class="pet" id="pet" data-state="origin">
-        <img class="sprite" id="sprite" src="/mascote/assets/scenes-v2/origin-01.png?v=20260816-approved3" alt="Mascote IDvida animado">
+        <img class="sprite" id="sprite" src="/mascote/assets/scenes-v2/origin-01.png?v=20260816-approved5" alt="Mascote IDvida animado">
       </div>
     </div>
   </div>
@@ -636,7 +636,7 @@
     };
 
     const spriteRoot = '/mascote/assets/scenes-v2';
-    const spriteVersion = 'v=20260816-approved3';
+    const spriteVersion = 'v=20260816-approved5';
 
     function spriteUrl(file) {
       return `${spriteRoot}/${file}?${spriteVersion}`;
@@ -644,6 +644,10 @@
 
     function frameRange(prefix, count) {
       return Array.from({ length: count }, (_, index) => `${prefix}-${String(index + 1).padStart(2, '0')}.png`);
+    }
+
+    function frameSequence(prefix, indexes) {
+      return indexes.map((index) => `${prefix}-${String(index).padStart(2, '0')}.png`);
     }
 
     const states = {
@@ -682,8 +686,8 @@
         alert: true
       },
       close: {
-        frames: frameRange('close', 6),
-        frameMs: 820,
+        frames: frameRange('close', 8),
+        frameMs: 760,
         loop: false,
         bubble: 'Voltando para o IDSense.',
         alert: false,
@@ -925,10 +929,11 @@
         setText('Ele dá oi e se apresenta antes de iniciar o monitoramento.');
       }, 5000));
 
-      timers.push(window.setTimeout(() => {
+      timers.push(window.setTimeout(async () => {
         setStep('sit');
         setWebMascotState('sit');
         setText('Ele senta e abre o notebook para monitorar.');
+        if (desktopReady) await requestMascot('/sit');
       }, 9600));
 
       timers.push(window.setTimeout(async () => {
