@@ -332,34 +332,54 @@
     }
 
     .bubble {
-      background: rgba(255, 255, 255, .78);
-      border: 1px solid rgba(35, 174, 234, .62);
+      -webkit-backdrop-filter: blur(10px);
+      backdrop-filter: blur(10px);
+      background: rgba(255, 255, 255, .56);
+      border: 1px solid rgba(20, 92, 146, .26);
       border-radius: 8px;
-      box-shadow: 0 8px 22px rgba(6, 29, 56, .12);
-      color: var(--blue);
+      box-shadow: 0 10px 24px rgba(6, 29, 56, .10);
+      color: rgba(17, 24, 39, .88);
       font-size: 12px;
-      font-weight: 700;
-      line-height: 1.25;
+      font-weight: 500;
+      line-height: 1.32;
       opacity: 0;
-      padding: 9px 10px;
+      padding: 9px 11px;
       position: absolute;
       right: 14px;
       top: 24px;
       transform: translateY(10px) scale(.98);
-      transition: opacity 220ms ease, transform 220ms ease, border-color 220ms ease, color 220ms ease;
-      width: 180px;
+      transition: opacity 220ms ease, transform 220ms ease, border-color 220ms ease, color 220ms ease, background 220ms ease;
+      width: 198px;
       z-index: 4;
     }
 
+    .bubble::after {
+      border-bottom: 7px solid transparent;
+      border-left: 8px solid rgba(255, 255, 255, .62);
+      border-top: 7px solid transparent;
+      content: "";
+      filter: drop-shadow(1px 0 0 rgba(20, 92, 146, .24));
+      position: absolute;
+      right: -8px;
+      top: 50%;
+      transform: translateY(-50%);
+    }
+
     .bubble.is-visible {
-      opacity: .92;
+      opacity: .96;
       transform: translateY(0) scale(1);
     }
 
     .bubble.is-alert {
-      border-color: rgba(244, 165, 28, .7);
-      color: #7a4c00;
-      width: 210px;
+      background: rgba(255, 252, 247, .66);
+      border-color: rgba(244, 165, 28, .50);
+      color: rgba(52, 38, 18, .92);
+      width: 222px;
+    }
+
+    .bubble.is-alert::after {
+      border-left-color: rgba(255, 252, 247, .70);
+      filter: drop-shadow(1px 0 0 rgba(244, 165, 28, .40));
     }
 
     .notice {
@@ -425,20 +445,22 @@
     }
 
     .web-companion .bubble {
-      background: rgba(255, 255, 255, .74);
-      border-color: rgba(35, 174, 234, .56);
-      box-shadow: 0 8px 18px rgba(6, 29, 56, .10);
+      background: rgba(255, 255, 255, .54);
+      border-color: rgba(20, 92, 146, .26);
+      box-shadow: 0 10px 24px rgba(6, 29, 56, .10);
+      color: rgba(17, 24, 39, .88);
       font-size: 11px;
-      line-height: 1.25;
+      font-weight: 500;
+      line-height: 1.32;
       pointer-events: none;
       right: 138px;
-      top: 46px;
-      width: 162px;
+      top: 42px;
+      width: 198px;
     }
 
     .web-companion .bubble.is-alert {
-      border-color: rgba(244, 165, 28, .68);
-      width: 190px;
+      border-color: rgba(244, 165, 28, .50);
+      width: 228px;
     }
 
     .web-close {
@@ -516,7 +538,7 @@
       <div class="actions">
         <button class="primary" id="activateBtn" type="button">Ativar Mascote IDvida</button>
         <button class="quiet" id="desktopBtn" type="button">Ativar desktop</button>
-        <a class="quiet download" id="downloadBtn" href="https://id-sensor-mvp.onrender.com/mascote/downloads/Mascote-IDvida-Desktop.zip?v=20260816-approved5" download>Baixar ZIP do helper</a>
+        <a class="quiet download" id="downloadBtn" href="https://id-sensor-mvp.onrender.com/mascote/downloads/Mascote-IDvida-Desktop.zip?v=20260816-approved6" download>Baixar ZIP do helper</a>
         <button class="quiet" id="closeBtn" type="button">Fechar mascote</button>
       </div>
     </header>
@@ -604,7 +626,7 @@
       <button class="web-close" id="webCloseBtn" type="button" title="Fechar mascote web">X</button>
       <div class="bubble" id="bubble">Oi, tudo bem? Eu sou assistente virtual IDvida, vou ficar monitorando por aqui.</div>
       <div class="pet" id="pet" data-state="origin">
-        <img class="sprite" id="sprite" src="/mascote/assets/scenes-v2/origin-01.png?v=20260816-approved5" alt="Mascote IDvida animado">
+        <img class="sprite" id="sprite" src="/mascote/assets/scenes-v2/origin-01.png?v=20260816-approved6" alt="Mascote IDvida animado">
       </div>
     </div>
   </div>
@@ -636,7 +658,7 @@
     };
 
     const spriteRoot = '/mascote/assets/scenes-v2';
-    const spriteVersion = 'v=20260816-approved5';
+    const spriteVersion = 'v=20260816-approved6';
 
     function spriteUrl(file) {
       return `${spriteRoot}/${file}?${spriteVersion}`;
@@ -655,41 +677,50 @@
         frames: frameRange('origin', 6),
         frameMs: 850,
         loop: false,
-        bubble: 'Oi, tudo bem? Eu sou assistente virtual IDvida, vou ficar monitorando por aqui.',
+        bubble: 'Oi!',
+        bubbleDelayMs: 900,
         alert: false,
-        bubbleMs: 5200
+        bubbleMs: 1900
       },
       hello: {
         frames: frameRange('hello', 6),
         frameMs: 720,
-        bubble: 'Oi, tudo bem? Eu sou assistente virtual IDvida, vou ficar monitorando por aqui.',
-        alert: false
+        bubble: 'Oi, tudo bem? Sou o assistente virtual IDvida.',
+        bubbleDelayMs: 450,
+        alert: false,
+        bubbleMs: 4200
       },
       sit: {
         frames: frameRange('sit', 6),
         frameMs: 820,
         loop: false,
-        bubble: 'Tudo certo por aqui.',
+        bubble: 'Beleza. Vou monitorar seu painel por aqui.',
+        bubbleDelayMs: 2600,
         alert: false,
         bubbleMs: 4200
       },
       monitor: {
         frames: frameRange('monitor', 6),
         frameMs: 1400,
-        bubble: 'Tudo certo por aqui.',
-        alert: false
+        bubble: 'Tudo certo por aqui, por enquanto.',
+        bubbleDelayMs: 650,
+        alert: false,
+        bubbleMs: 3600
       },
       alert: {
         frames: frameRange('alert', 6),
         frameMs: 1050,
-        bubble: 'Geladeira 2 está há 30 min sem comunicação.',
-        alert: true
+        bubble: 'Atenção: Geladeira 2 está há 30 min sem comunicação.',
+        bubbleDelayMs: 3400,
+        alert: true,
+        bubbleMs: 9000
       },
       close: {
         frames: frameRange('close', 8),
         frameMs: 760,
         loop: false,
-        bubble: 'Voltando para o IDSense.',
+        bubble: 'Até logo. Continuarei atento por aqui.',
+        bubbleDelayMs: 250,
         alert: false,
         bubbleMs: 4600
       }
@@ -697,6 +728,8 @@
 
     let timers = [];
     let frameTimer = 0;
+    let bubbleTimer = 0;
+    let bubbleHideTimer = 0;
     let frameIndex = 0;
     let desktopReady = false;
     let dragState = null;
@@ -706,6 +739,8 @@
       timers.forEach((timer) => window.clearTimeout(timer));
       timers = [];
       window.clearInterval(frameTimer);
+      window.clearTimeout(bubbleTimer);
+      window.clearTimeout(bubbleHideTimer);
     }
 
     function setText(message) {
@@ -784,16 +819,22 @@
       dragState = null;
     }
 
-    function setWebMascotState(name, shouldShow = true) {
+    function setWebMascotState(name, shouldShow = true, message = null) {
       const state = states[name];
       window.clearInterval(frameTimer);
+      window.clearTimeout(bubbleTimer);
+      window.clearTimeout(bubbleHideTimer);
       frameIndex = 0;
-      if (shouldShow) showWebMascot();
+      if (shouldShow) {
+        showWebMascot();
+      }
       pet.dataset.state = name;
-      bubble.textContent = state.bubble;
+      bubble.textContent = message || state.bubble;
       bubble.classList.toggle('is-alert', state.alert);
-      bubble.classList.add('is-visible');
+      bubble.classList.remove('is-visible');
       sprite.src = spriteUrl(state.frames[0]);
+      if (!shouldShow) return;
+
       frameTimer = window.setInterval(() => {
         if (state.loop === false && frameIndex >= state.frames.length - 1) {
           window.clearInterval(frameTimer);
@@ -805,9 +846,13 @@
         sprite.src = spriteUrl(state.frames[frameIndex]);
       }, state.frameMs);
 
-      window.setTimeout(() => {
+      bubbleTimer = window.setTimeout(() => {
+        bubble.classList.add('is-visible');
+      }, state.bubbleDelayMs || 0);
+
+      bubbleHideTimer = window.setTimeout(() => {
         if (name !== 'alert') bubble.classList.remove('is-visible');
-      }, state.bubbleMs || (name === 'alert' ? 9000 : 3600));
+      }, (state.bubbleDelayMs || 0) + (state.bubbleMs || (name === 'alert' ? 9000 : 3600)));
     }
 
     function startWebDrag(event) {
@@ -921,7 +966,7 @@
       setBadge(webStatus, 'Web ativo', 'ok');
 
       setStep('origin');
-      setText('O mascote sai do IDSense. Arraste ele para qualquer ponto do navegador.');
+      setText('O mascote acorda no IDSense e cumprimenta o usuário.');
 
       timers.push(window.setTimeout(() => {
         setStep('hello');
@@ -932,7 +977,7 @@
       timers.push(window.setTimeout(async () => {
         setStep('sit');
         setWebMascotState('sit');
-        setText('Ele senta e abre o notebook para monitorar.');
+        setText('Ele senta e assume o monitoramento do painel.');
         if (desktopReady) await requestMascot('/sit');
       }, 9600));
 
