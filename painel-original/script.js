@@ -17046,6 +17046,7 @@ if(false){(function(){
   const CHAR_DELAY_MS = 22;
   let activeTourToken = null;
   let activeKeyHandler = null;
+  let assistantTourDeviceSnapshot = null;
 
   function panelRoleForTour(){
     return String(
@@ -17282,6 +17283,7 @@ if(false){(function(){
     const {caption, text} = tourParts();
     if(!caption || !text) return;
     caption.classList.remove('is-complete');
+    caption.classList.remove('is-measuring');
     caption.classList.add('is-hidden');
     text.textContent = '';
     const content = String(message || '').trim();
@@ -17296,8 +17298,22 @@ if(false){(function(){
     caption.classList.add('is-complete');
   }
 
+  function prepareCaptionMeasurement(message){
+    const {caption, text} = tourParts();
+    if(!caption || !text) return;
+    text.textContent = String(message || '').trim();
+    caption.classList.remove('is-hidden');
+    caption.classList.add('is-measuring');
+  }
+
+  function finishCaptionMeasurement(){
+    const {caption} = tourParts();
+    caption?.classList.remove('is-measuring');
+  }
+
   async function runStep(step, token){
-    let element = await waitForElement(step.selector, token, step.timeout || 5000);
+    const elementTimeout = step.timeout || (step.optional ? 900 : 5000);
+    let element = await waitForElement(step.selector, token, elementTimeout);
     if(token?.aborted) return false;
     if(!element) return !!step.optional;
     await scrollTargetIntoView(element, token);
@@ -17315,15 +17331,17 @@ if(false){(function(){
     }
 
     if(typeof step.waitFor === 'function'){
-      await waitForCondition(step.waitFor, token, step.waitTimeout || 6000);
+      await waitForCondition(step.waitFor, token, step.waitTimeout || (step.optional ? 1800 : 6000));
     }
 
     if(step.focusSelector){
-      element = await waitForElement(step.focusSelector, token, step.focusTimeout || 5000) || element;
+      element = await waitForElement(step.focusSelector, token, step.focusTimeout || (step.optional ? 1200 : 5000)) || element;
       await scrollTargetIntoView(element, token);
     }
 
+    prepareCaptionMeasurement(step.text);
     positionCaption(element);
+    finishCaptionMeasurement();
     await typeCaption(step.text, token);
     if(token?.aborted) return false;
 
@@ -17340,12 +17358,14 @@ if(false){(function(){
       await waitForCondition(step.waitAfterTextFor, token, step.waitTimeout || 6000);
     }
 
-    if(typeof step.after === 'function'){
-      step.after(element);
-    }
-
     const autoPause = Math.min(4200, READ_PAUSE_MS + (String(step.text || '').length * 8));
     await delay(step.pause || autoPause, token);
+
+    if(typeof step.after === 'function'){
+      step.after(element);
+      await delay(180, token);
+    }
+
     return !token?.aborted;
   }
 
@@ -17353,6 +17373,112 @@ if(false){(function(){
     document.querySelectorAll('.card[data-tour-card]').forEach(card => {
       delete card.dataset.tourCard;
     });
+  }
+
+  function tourDeviceList(){
+    if(Array.isArray(window.devices)) return window.devices;
+    if(typeof devices !== 'undefined' && Array.isArray(devices)) return devices;
+    return [];
+  }
+
+  function snapshotAssistantTourDevices(){
+    if(assistantTourDeviceSnapshot) return;
+    assistantTourDeviceSnapshot = tourDeviceList().map(device => ({
+      id:device.id,
+      state:device.state,
+      status:device.status,
+      online:device.online,
+      temp:device.temp,
+      timer:device.timer,
+      timerLabel:device.timerLabel,
+      commText:device.commText,
+      updated:device.updated,
+      events:Array.isArray(device.events) ? device.events.slice() : device.events,
+      tempStatusUntil:device.tempStatusUntil,
+      preTempStatusState:device.preTempStatusState
+    }));
+  }
+
+  function applyAssistantTourDemoStates(){
+    const list = tourDeviceList();
+    if(list.length < 4) return;
+    snapshotAssistantTourDevices();
+    const now = Date.now();
+    const update = (device, patch) => {
+      if(device) Object.assign(device, patch);
+    };
+    update(list[0], {
+      state:'blue',
+      status:'NORMAL',
+      online:true,
+      commText:'',
+      timer:0,
+      timerLabel:'Dentro do limite estabelecido',
+      updated:'agora',
+      tempStatusUntil:null,
+      preTempStatusState:null,
+      events:['Sem alerta ativo']
+    });
+    update(list[1], {
+      state:'blue',
+      status:'NORMAL',
+      online:false,
+      commText:'Sem comunicação há 15 min',
+      timer:0,
+      timerLabel:'Sem comunicação',
+      updated:'há 15 min',
+      tempStatusUntil:null,
+      preTempStatusState:null,
+      events:['Sem comunicação']
+    });
+    update(list[2], {
+      state:'warn',
+      status:'ATENÇÃO',
+      online:true,
+      commText:'',
+      timer:60,
+      timerLabel:'Próximo do limite · monitorando',
+      updated:'há 3 min',
+      tempStatusUntil:now + (12 * 60 * 1000),
+      preTempStatusState:'warn',
+      events:['Próximo do limite', 'Alerta ainda não enviado']
+    });
+    update(list[4] || list[3], {
+      state:'crit',
+      status:'CRÍTICO',
+      online:true,
+      commText:'',
+      timer:100,
+      timerLabel:'30 min atingidos · alertas enviados',
+      updated:'há 2 min',
+      tempStatusUntil:null,
+      preTempStatusState:null,
+      events:['Fora do limite por 30 minutos', 'SMS enviado', 'Email enviado']
+    });
+  }
+
+  function restoreAssistantTourDevices(){
+    const list = tourDeviceList();
+    if(!assistantTourDeviceSnapshot || !list.length) return;
+    assistantTourDeviceSnapshot.forEach(snapshot => {
+      const device = list.find(item => String(item.id) === String(snapshot.id));
+      if(device){
+        Object.assign(device, {
+          state:snapshot.state,
+          status:snapshot.status,
+          online:snapshot.online,
+          temp:snapshot.temp,
+          timer:snapshot.timer,
+          timerLabel:snapshot.timerLabel,
+          commText:snapshot.commText,
+          updated:snapshot.updated,
+          events:Array.isArray(snapshot.events) ? snapshot.events.slice() : snapshot.events,
+          tempStatusUntil:snapshot.tempStatusUntil,
+          preTempStatusState:snapshot.preTempStatusState
+        });
+      }
+    });
+    assistantTourDeviceSnapshot = null;
   }
 
   function markAssistantTourCards(){
@@ -17382,7 +17508,7 @@ if(false){(function(){
       },
       {
         selector:'[data-tour-card="main"], .card.blue, .card',
-        text:'Cada card representa uma geladeira monitorada.',
+        text:'Cada card representa um equipamento monitorado.',
         pause:1800
       },
       {
@@ -17402,12 +17528,12 @@ if(false){(function(){
       },
       {
         selector:'[data-tour-card="main"] .comm-wrap, .card.blue .comm-wrap, .card .comm-wrap',
-        text:'Este indicador mostra se o dispositivo está comunicando com o painel.',
+        text:'Esta faixa mostra se o equipamento está comunicando com o painel.',
         pause:2000
       },
       {
-        selector:'[data-tour-card="main"] .offline-logo-badge, .card.blue .offline-logo-badge, .card .offline-logo-badge',
-        text:'O símbolo da IDvida reforça visualmente o estado de comunicação do dispositivo.',
+        selector:'[data-tour-card="main"] > .offline-logo-badge.online, .card.blue > .offline-logo-badge.online, .card > .offline-logo-badge.online',
+        text:'O logo azul da IDvida indica que o equipamento está comunicando.',
         optional:true,
         pause:1900
       },
@@ -17418,9 +17544,15 @@ if(false){(function(){
       },
       {
         selector:'[data-tour-card="warn"], .card.warn',
-        text:'O card amarelo indica atenção. A leitura precisa ser acompanhada antes de chegar ao crítico.',
+        text:'O card amarelo indica atenção. A leitura saiu ou está próxima do limite e precisa de acompanhamento.',
         optional:true,
         pause:2300
+      },
+      {
+        selector:'[data-tour-card="warn"] .status-timer-chip, .card.warn .status-timer-chip, [data-tour-card="warn"] .timer, .card.warn .timer',
+        text:'Quando houver tempo configurado, o painel mostra o acompanhamento dessa condição antes do alerta crítico.',
+        optional:true,
+        pause:2200
       },
       {
         selector:'[data-tour-card="crit"], .card.crit',
@@ -17429,8 +17561,20 @@ if(false){(function(){
         pause:2300
       },
       {
-        selector:'[data-tour-card="offline"], .card:has(.offline-logo-badge.offline)',
-        text:'Quando não há comunicação, o painel mostra a falha no próprio card.',
+        selector:'[data-tour-card="crit"] .critical-clock-card, .card.crit .critical-clock-card',
+        text:'No crítico, o cronômetro mostra o tempo acumulado nessa condição.',
+        optional:true,
+        pause:2200
+      },
+      {
+        selector:'[data-tour-card="crit"] .card-bell, .card.crit .card-bell',
+        text:'O sino indica alerta ativo e pode ser silenciado temporariamente no painel.',
+        optional:true,
+        pause:2100
+      },
+      {
+        selector:'[data-tour-card="offline"] > .offline-logo-badge.offline, .card > .offline-logo-badge.offline',
+        text:'Quando o logo fica vermelho, o equipamento está sem comunicação e parou de enviar leituras.',
         optional:true,
         pause:2200
       },
@@ -17444,7 +17588,7 @@ if(false){(function(){
       },
       {
         selector:'#cardFloatingDetail .alert-name',
-        text:'Aqui aparecem o nome da geladeira, o limite configurado e a área monitorada.',
+        text:'Aqui aparecem o nome do equipamento, o limite configurado e a área monitorada.',
         pause:3000
       },
       {
@@ -17535,23 +17679,23 @@ if(false){(function(){
       },
       {
         selector:'.telemetry-accordion summary',
-        text:'A telemetria detalha a condição do equipamento nas últimas 24 horas.',
+        text:'A telemetria detalha a condição do equipamento nas últimas 24 horas. Vou expandir a área para mostrar os dados.',
         clickBeforeText:true,
         waitFor:() => !!document.querySelector('.telemetry-accordion[open]'),
         focusSelector:'.telemetry-accordion[open]',
         pause:3400
       },
       {
-        selector:'.telemetry-status-grid',
+        selector:'.telemetry-status-card.limit, .telemetry-status-grid',
         text:'Aqui o painel separa o tempo dentro do limite, em atenção, em crítico e sem comunicação.',
         optional:true,
         pause:3400
       },
       {
-        selector:'.telemetry-channel-grid',
-        text:'Os canais mostram quantas notificações foram registradas.',
+        selector:'.telemetry-channel-card, .telemetry-channel-grid',
+        text:'Os canais mostram quantas notificações foram registradas em painel, SMS, email ou outros meios configurados.',
         optional:true,
-        pause:3000
+        pause:3300
       },
       {
         selector:'.telemetry-variation-strip',
@@ -17572,10 +17716,13 @@ if(false){(function(){
         pause:3800
       },
       {
-        selector:'.graph-report-accordion',
+        selector:'.graph-report-accordion summary',
         text:'Em relatórios, é possível exportar dados em PDF, Excel, CSV e relatório analítico.',
+        clickBeforeText:true,
+        waitFor:() => !!document.querySelector('.graph-report-accordion[open]'),
+        focusSelector:'.graph-report-accordion[open] .graph-report-list',
         optional:true,
-        pause:3200,
+        pause:3400,
         after:() => {
           closeGraphModal();
           closeDetail();
@@ -17707,7 +17854,7 @@ if(false){(function(){
       },
       {
         selector:'#scheduledCollectionSummary',
-        text:'O resumo mostra como a rotina ficará configurada. O relatório fica disponível no fechamento de 30 dias.',
+        text:'O resumo mostra como a rotina ficará configurada. O relatório da coleta fica disponível no fechamento de 30 dias.',
         optional:true,
         pause:3400,
         after:() => {
@@ -17784,6 +17931,7 @@ if(false){(function(){
     document.querySelectorAll('.calib-pop.show').forEach(item => item.classList.remove('show'));
     activeFilter = null;
     nocFilteredIds = null;
+    applyAssistantTourDemoStates();
     renderGrid();
     markAssistantTourCards();
     window.scrollTo({top:0, left:0, behavior:'auto'});
@@ -17794,6 +17942,8 @@ if(false){(function(){
     activeTourToken = null;
     document.body.classList.remove('assistant-tour-running');
     clearAssistantTourCards();
+    restoreAssistantTourDevices();
+    try{ renderGrid(); }catch(error){}
     document.getElementById(TOUR_LAYER_ID)?.remove();
     if(activeKeyHandler){
       document.removeEventListener('keydown', activeKeyHandler, true);

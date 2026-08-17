@@ -18471,6 +18471,12 @@ body.analytic-report-open{overflow:hidden}
   transform:translateY(6px);
 }
 
+.assistant-tour-caption.is-measuring{
+  opacity:0;
+  pointer-events:none;
+  transition:none;
+}
+
 .assistant-tour-text::after{
   animation:assistantTourCaret 1s steps(1) infinite;
   color:#0b5790;
