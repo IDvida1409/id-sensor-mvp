@@ -17201,38 +17201,9 @@ if(false){(function(){
   function positionCaption(element){
     const {caption} = tourParts();
     if(!caption || !element) return;
-    const rect = getTourAnchorRect(element);
-    const captionWidth = Math.min(390, window.innerWidth - 32);
-    const captionHeight = Math.max(84, caption.offsetHeight || 84);
-    const rightSpace = window.innerWidth - rect.right;
-    const leftSpace = rect.left;
-    const topCandidate = clamp(rect.top + (rect.height / 2) - (captionHeight / 2), 12, window.innerHeight - captionHeight - 12);
-
-    let left;
-    let top;
-    let anchor = 'top';
-
-    if(rightSpace >= captionWidth + 28){
-      left = rect.right + 18;
-      top = topCandidate;
-      anchor = 'right';
-    }else if(leftSpace >= captionWidth + 28){
-      left = rect.left - captionWidth - 18;
-      top = topCandidate;
-      anchor = 'left';
-    }else if(rect.bottom + captionHeight + 20 <= window.innerHeight){
-      left = clamp(rect.left, 16, window.innerWidth - captionWidth - 16);
-      top = rect.bottom + 18;
-      anchor = 'top';
-    }else{
-      left = clamp(rect.left, 16, window.innerWidth - captionWidth - 16);
-      top = clamp(rect.top - captionHeight - 18, 12, window.innerHeight - captionHeight - 12);
-      anchor = 'bottom';
-    }
-
-    caption.dataset.anchor = anchor;
-    caption.style.left = `${Math.round(left)}px`;
-    caption.style.top = `${Math.round(top)}px`;
+    caption.dataset.anchor = 'subtitle';
+    caption.style.left = '';
+    caption.style.top = '';
   }
 
   async function moveCursorTo(element, token){
@@ -17258,11 +17229,15 @@ if(false){(function(){
     const {caption, text} = tourParts();
     if(!caption || !text) return;
     caption.classList.remove('is-complete');
+    caption.classList.add('is-hidden');
     text.textContent = '';
     const content = String(message || '').trim();
-    for(const char of content){
+    if(!content) return;
+    for(let index = 0; index < content.length; index += 1){
       if(token?.aborted) return;
+      const char = content[index];
       text.textContent += char;
+      if(index === 0) caption.classList.remove('is-hidden');
       await delay(char === '.' || char === ':' ? 120 : CHAR_DELAY_MS, token);
     }
     caption.classList.add('is-complete');
@@ -17348,87 +17323,98 @@ if(false){(function(){
   function buildAssistantTourSteps(){
     return [
       {
+        selector:'.brand-title-row',
+        text:'Olá, seja bem-vindo ao painel de monitoramento IDvida. Vou mostrar como acompanhar seus equipamentos em tempo real.',
+        pause:3200
+      },
+      {
         selector:'[data-tour-card="main"]',
-        text:'Este é um card de equipamento. Ele reúne a leitura principal do sensor, o estado do equipamento e os indicadores de acompanhamento.',
-        pause:2800
+        text:'Cada card representa uma geladeira monitorada.',
+        pause:2400
       },
       {
         selector:'[data-tour-card="main"] .temp',
-        text:'Aqui aparece a temperatura atual do equipamento monitorado.',
+        text:'No centro do card fica a temperatura atual.',
         pause:2200
       },
       {
         selector:'[data-tour-card="main"] .metrics',
-        text:'Aqui aparecem os valores mínimo e máximo registrados no período.',
+        text:'Aqui ficam os valores mínimo e máximo registrados no período.',
         pause:2400
       },
       {
         selector:'[data-tour-card="main"] .bottom-meta',
-        text:'Na parte inferior ficam bateria e umidade. A umidade aparece quando o dispositivo possui essa leitura.',
+        text:'Na parte inferior aparecem bateria e umidade, quando o dispositivo possui essa leitura.',
         pause:2800
       },
       {
         selector:'[data-tour-card="main"] .comm-wrap',
-        text:'Este indicador mostra a comunicação do dispositivo com a IDvida. Quando há falha, o painel informa sem comunicação.',
-        pause:3000
+        text:'Este indicador mostra se o dispositivo está comunicando com o painel.',
+        pause:2600
+      },
+      {
+        selector:'[data-tour-card="main"] .offline-logo-badge',
+        text:'O símbolo da IDvida reforça visualmente o estado de comunicação do dispositivo.',
+        optional:true,
+        pause:2600
       },
       {
         selector:'[data-tour-card="main"]',
-        text:'O card azul indica que o equipamento está dentro do limite estabelecido e sem alerta ativo.',
-        pause:3000
+        text:'O card azul indica que a temperatura está dentro do limite estabelecido.',
+        pause:2800
       },
       {
         selector:'[data-tour-card="warn"]',
-        text:'O card amarelo indica atenção. Ele mostra que a condição precisa de acompanhamento antes de se tornar crítica.',
+        text:'O card amarelo indica atenção. A leitura precisa ser acompanhada antes de chegar ao crítico.',
         optional:true,
         pause:3000
       },
       {
         selector:'[data-tour-card="crit"]',
-        text:'O card vermelho indica estado crítico. A temperatura está fora do limite estabelecido e exige ação.',
+        text:'O card vermelho indica crítico. A temperatura está fora do limite estabelecido e exige ação.',
         optional:true,
         pause:3000
       },
       {
         selector:'[data-tour-card="offline"]',
-        text:'Quando o dispositivo fica sem comunicação, o card sinaliza a falha para facilitar a identificação no painel.',
+        text:'Quando não há comunicação, o painel mostra a falha no próprio card.',
         optional:true,
-        pause:3000
-      },
-      {
-        selector:'[data-tour-card="main"]',
-        text:'Agora o card será aberto para consultar os detalhes reais do equipamento.',
-        clickBeforeText:true,
-        waitFor:() => !!document.getElementById('cardFloatingDetail'),
-        focusSelector:'#cardFloatingDetail',
-        pause:2600
-      },
-      {
-        selector:'#cardFloatingDetail .alert-name',
-        text:'No detalhe aparecem o nome do equipamento, o limite configurado e a área monitorada.',
         pause:2800
       },
       {
-        selector:'#cardFloatingDetail .alert-temp',
-        text:'A temperatura atual fica em destaque para leitura rápida.',
-        pause:2300
+        selector:'[data-tour-card="main"]',
+        text:'Ao clicar no card, abrimos a tela real de detalhes do equipamento.',
+        clickBeforeText:true,
+        waitFor:() => !!document.getElementById('cardFloatingDetail'),
+        focusSelector:'#cardFloatingDetail',
+        pause:3000
       },
       {
-        selector:'#cardFloatingDetail .status-edit-btn',
-        text:'Este botão abre a alteração temporária de status operacional.',
-        clickBeforeText:true,
-        waitFor:() => document.getElementById('statusConfigModal')?.classList.contains('show'),
-        focusSelector:'#statusConfigModal',
+        selector:'#cardFloatingDetail .alert-name',
+        text:'Aqui aparecem o nome da geladeira, o limite configurado e a área monitorada.',
+        pause:3000
+      },
+      {
+        selector:'#cardFloatingDetail .alert-temp',
+        text:'A leitura atual continua em destaque para consulta rápida.',
         pause:2600
       },
       {
+        selector:'#cardFloatingDetail .status-edit-btn',
+        text:'O status operacional pode ser alterado temporariamente quando houver uma rotina em andamento.',
+        clickBeforeText:true,
+        waitFor:() => document.getElementById('statusConfigModal')?.classList.contains('show'),
+        focusSelector:'#statusConfigModal',
+        pause:3400
+      },
+      {
         selector:'#statusOptionGrid',
-        text:'Aqui é possível colocar o equipamento em reposição, manutenção, inventário ou degelo. Esses ciclos não apagam o histórico.',
+        text:'Aqui ficam reposição, manutenção, inventário e degelo. Esses ciclos não apagam o histórico do equipamento.',
         pause:3400
       },
       {
         selector:'#statusDurationBtn',
-        text:'A duração define por quanto tempo o ciclo operacional ficará ativo.',
+        text:'A duração define por quanto tempo o ciclo ficará ativo.',
         clickBeforeText:true,
         waitFor:() => document.getElementById('statusDurationDropdown')?.classList.contains('open'),
         focusSelector:'#statusDurationMenu',
@@ -17437,13 +17423,13 @@ if(false){(function(){
       },
       {
         selector:'#statusConfigModal .status-config-actions',
-        text:'Encerrar ciclo devolve o equipamento ao acompanhamento normal antes do tempo definido.',
+        text:'Encerrar ciclo devolve o equipamento ao acompanhamento normal.',
         pause:2800,
         after:() => closeStatusConfigModal()
       },
       {
         selector:'#cardFloatingDetail .rows',
-        text:'Esta área mostra eventos do equipamento, bateria, umidade, uso e comunicação.',
+        text:'Nesta área ficam eventos, bateria, umidade, uso e comunicação.',
         pause:3000
       },
       {
@@ -17466,13 +17452,13 @@ if(false){(function(){
       },
       {
         selector:'#infoOverlayModal .info-section',
-        text:'Nesta tela ficam MAC, modelo, tipo de conexão, nome do equipamento, código, área, responsável e ações como editar, alterar MAC e clonar.',
+        text:'Nesta tela ficam MAC, modelo, conexão, nome, código, área, responsável e ações como editar, alterar MAC e clonar.',
         pause:3800,
         after:() => closeInfoOverlays()
       },
       {
         selector:'#cardFloatingDetail .open-graph-btn',
-        text:'O gráfico abre a análise temporal do equipamento.',
+        text:'O gráfico abre a análise do equipamento no período selecionado.',
         clickBeforeText:true,
         waitFor:() => !!document.getElementById('graphWorkspaceRoot'),
         focusSelector:'.graph-main-card',
@@ -17480,12 +17466,12 @@ if(false){(function(){
       },
       {
         selector:'.graph-main-card',
-        text:'O gráfico mostra a variação de temperatura, o limite seguro, pontos de atenção, estado crítico e eventos registrados.',
+        text:'O gráfico mostra a variação de temperatura e os limites configurados.',
         pause:3400
       },
       {
         selector:'.graph-summary',
-        text:'Os cartões do gráfico resumem temperatura atual, máxima, mínima e tempo fora do limite.',
+        text:'Estes cartões resumem temperatura atual, máxima, mínima e tempo fora do limite.',
         pause:3200
       },
       {
@@ -17496,7 +17482,7 @@ if(false){(function(){
       },
       {
         selector:'.telemetry-accordion summary',
-        text:'A telemetria operacional detalha a condição do equipamento nas últimas 24 horas.',
+        text:'A telemetria detalha a condição do equipamento nas últimas 24 horas.',
         clickBeforeText:true,
         waitFor:() => !!document.querySelector('.telemetry-accordion[open]'),
         focusSelector:'.telemetry-accordion[open]',
@@ -17510,9 +17496,9 @@ if(false){(function(){
       },
       {
         selector:'.telemetry-channel-grid',
-        text:'Os canais mostram quantas notificações foram registradas, incluindo SMS, WhatsApp e outros avisos configurados.',
+        text:'Os canais mostram quantas notificações foram registradas.',
         optional:true,
-        pause:3400
+        pause:3000
       },
       {
         selector:'.telemetry-variation-strip',
@@ -17528,13 +17514,13 @@ if(false){(function(){
       },
       {
         selector:'.telemetry-timeline',
-        text:'A linha do tempo registra saída do limite, crítico, alertas enviados, silêncio do painel, falha de comunicação e normalização.',
+        text:'A linha do tempo registra cada evento da ocorrência até a normalização.',
         optional:true,
         pause:3800
       },
       {
         selector:'.graph-report-accordion',
-        text:'A área de relatórios permite exportar dados em PDF, Excel, CSV e relatório analítico.',
+        text:'Em relatórios, é possível exportar dados em PDF, Excel, CSV e relatório analítico.',
         optional:true,
         pause:3200,
         after:() => {
@@ -17544,12 +17530,12 @@ if(false){(function(){
       },
       {
         selector:'#statusChips',
-        text:'Os filtros superiores ajudam a visualizar grupos de equipamentos por condição operacional.',
+        text:'Os filtros superiores organizam os equipamentos por condição operacional.',
         pause:3000
       },
       {
         selector:'#filterAllBtn',
-        text:'Dispositivos retorna a visão geral do painel.',
+        text:'Dispositivos retorna para a visão geral.',
         pause:2400
       },
       {
@@ -17575,7 +17561,7 @@ if(false){(function(){
       },
       {
         selector:'#gestaoBtn',
-        text:'Gestão abre uma visão administrativa da saúde dos dispositivos.',
+        text:'Gestão abre a visão administrativa da saúde dos dispositivos.',
         clickBeforeText:true,
         waitFor:() => document.getElementById('gestaoOverlay')?.classList.contains('show'),
         focusSelector:'#gestaoOverlay .gestao-modal',
@@ -17601,7 +17587,7 @@ if(false){(function(){
       },
       {
         selector:'#nocBtn',
-        text:'NOC abre o acompanhamento em tempo real das ocorrências por área, dispositivo ou cliente.',
+        text:'NOC abre o acompanhamento das ocorrências por área, dispositivo ou cliente.',
         clickBeforeText:true,
         waitFor:() => document.getElementById('nocStartOverlay')?.classList.contains('show'),
         focusSelector:'#nocStartOverlay .noc-start-box',
@@ -17615,7 +17601,7 @@ if(false){(function(){
       },
       {
         selector:'#panelConfigBtn',
-        text:'A engrenagem concentra controles operacionais do painel.',
+        text:'A engrenagem concentra os controles operacionais do painel.',
         clickBeforeText:true,
         waitFor:() => document.getElementById('panelConfigMenu')?.classList.contains('show'),
         focusSelector:'#panelConfigMenu',
@@ -17623,7 +17609,7 @@ if(false){(function(){
       },
       {
         selector:'#toggleGlobalMute',
-        text:'Silenciar painel pausa o som local por 15 minutos, sem bloquear os alertas externos configurados.',
+        text:'Silenciar painel pausa o som local por 15 minutos.',
         optional:true,
         pause:3000
       },
@@ -17635,7 +17621,7 @@ if(false){(function(){
       },
       {
         selector:'#scheduledCollectionEntry',
-        text:'Coleta programada define uma rotina de registro para o fechamento mensal da área.',
+        text:'Coleta programada cria uma rotina de registro para o fechamento mensal da área.',
         optional:true,
         pause:3000
       },
@@ -17721,7 +17707,7 @@ if(false){(function(){
       },
       {
         selector:'#cardGrid',
-        text:'Apresentação concluída. O painel permanece disponível para operação, consulta de alertas, análise de dados e gestão dos dispositivos.',
+        text:'Apresentação concluída. O painel permanece disponível para operação e consulta.',
         pause:2600
       }
     ];
