@@ -17043,7 +17043,7 @@ if(false){(function(){
   const TOUR_BUTTON_ID = 'assistantTourBtn';
   const TOUR_LAYER_ID = 'assistantTourLayer';
   const ASSISTANT_MASCOT_DOCK_ID = 'assistantMascotDock';
-  const ASSISTANT_MASCOT_VERSION = '20260817-assistant-mascot-panel-v1';
+  const ASSISTANT_MASCOT_VERSION = '20260817-assistant-mascot-panel-v2';
   const ASSISTANT_MASCOT_FRAME_ROOT = './mascote/assets/frames-v6-motion';
   const ASSISTANT_MASCOT_WHATSAPP_IMAGE = `./mascote/assets/whatsapp-suporte-transparente-aprovacao.png?v=${ASSISTANT_MASCOT_VERSION}`;
   const ASSISTANT_MASCOT_FRAMES = {
@@ -17202,19 +17202,22 @@ if(false){(function(){
       dock.classList.remove('is-visible');
     });
 
-    dock.querySelectorAll('[data-assistant-menu-target]').forEach((button) => {
-      button.addEventListener('click', (event) => {
+    dock.addEventListener('click', (event) => {
+      const menuButton = event.target?.closest?.('[data-assistant-menu-target]');
+      if(menuButton && dock.contains(menuButton)){
         event.preventDefault();
         event.stopPropagation();
-        openAssistantMascotMenu(button.dataset.assistantMenuTarget || 'main');
-      });
-    });
+        openAssistantMascotMenu(menuButton.dataset.assistantMenuTarget || 'main');
+        return;
+      }
 
-    dock.querySelector('[data-assistant-action="tour-full"]')?.addEventListener('click', (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      closeAssistantMascotMenu({keepMode:true});
-      startAssistantTour();
+      const actionButton = event.target?.closest?.('[data-assistant-action="tour-full"]');
+      if(actionButton && dock.contains(actionButton)){
+        event.preventDefault();
+        event.stopPropagation();
+        closeAssistantMascotMenu({keepMode:true});
+        startAssistantTour();
+      }
     });
   }
 

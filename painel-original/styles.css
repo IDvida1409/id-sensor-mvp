@@ -18437,6 +18437,7 @@ body.analytic-report-open{overflow:hidden}
   position:absolute;
   right:0;
   width:142px;
+  z-index:1;
 }
 
 .assistant-mascot-sprite{
@@ -18490,6 +18491,7 @@ body.analytic-report-open{overflow:hidden}
   position:absolute;
   right:130px;
   width:360px;
+  z-index:4;
 }
 
 .assistant-mascot-menu::after{
