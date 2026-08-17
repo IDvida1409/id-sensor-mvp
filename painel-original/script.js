@@ -17043,7 +17043,7 @@ if(false){(function(){
   const TOUR_BUTTON_ID = 'assistantTourBtn';
   const TOUR_LAYER_ID = 'assistantTourLayer';
   const ASSISTANT_MASCOT_DOCK_ID = 'assistantMascotDock';
-  const ASSISTANT_MASCOT_VERSION = '20260817-assistant-mascot-panel-v2';
+  const ASSISTANT_MASCOT_VERSION = '20260817-assistant-mascot-panel-v3';
   const ASSISTANT_MASCOT_FRAME_ROOT = './mascote/assets/frames-v6-motion';
   const ASSISTANT_MASCOT_WHATSAPP_IMAGE = `./mascote/assets/whatsapp-suporte-transparente-aprovacao.png?v=${ASSISTANT_MASCOT_VERSION}`;
   const ASSISTANT_MASCOT_FRAMES = {
@@ -17062,6 +17062,7 @@ if(false){(function(){
   let assistantMascotMode = '';
   let assistantMascotUserDismissed = false;
   let assistantMascotMenuCloseTimer = null;
+  let assistantMascotLastActionAt = 0;
 
   function panelRoleForTour(){
     return String(
@@ -17202,9 +17203,12 @@ if(false){(function(){
       dock.classList.remove('is-visible');
     });
 
-    dock.addEventListener('click', (event) => {
+    const handleMenuAction = (event) => {
+      const now = performance.now();
+      if(event.type === 'click' && now - assistantMascotLastActionAt < 350) return;
       const menuButton = event.target?.closest?.('[data-assistant-menu-target]');
       if(menuButton && dock.contains(menuButton)){
+        assistantMascotLastActionAt = now;
         event.preventDefault();
         event.stopPropagation();
         openAssistantMascotMenu(menuButton.dataset.assistantMenuTarget || 'main');
@@ -17213,12 +17217,16 @@ if(false){(function(){
 
       const actionButton = event.target?.closest?.('[data-assistant-action="tour-full"]');
       if(actionButton && dock.contains(actionButton)){
+        assistantMascotLastActionAt = now;
         event.preventDefault();
         event.stopPropagation();
         closeAssistantMascotMenu({keepMode:true});
         startAssistantTour();
       }
-    });
+    };
+
+    dock.addEventListener('pointerdown', handleMenuAction, true);
+    dock.addEventListener('click', handleMenuAction, true);
   }
 
   function setAssistantMascotMode(mode){
