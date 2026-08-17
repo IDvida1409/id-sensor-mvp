@@ -2278,6 +2278,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function shouldLoadLegacyPanelDevices(){
     if(isCartTrackingSessionActive()) return false;
+    if(document.body.classList.contains('assistant-tour-running')) return false;
     if(document.body.classList.contains('auth-pending')) return false;
     if(!document.body.classList.contains('auth-ready') && !window.activePanelSession?.token) return false;
     return true;
@@ -17527,15 +17528,9 @@ if(false){(function(){
         pause:2200
       },
       {
-        selector:'[data-tour-card="main"] .comm-wrap, .card.blue .comm-wrap, .card .comm-wrap',
-        text:'Esta faixa mostra se o equipamento está comunicando com o painel.',
-        pause:2000
-      },
-      {
-        selector:'[data-tour-card="main"] > .offline-logo-badge.online, .card.blue > .offline-logo-badge.online, .card > .offline-logo-badge.online',
-        text:'O logo azul da IDvida indica que o equipamento está comunicando.',
-        optional:true,
-        pause:1900
+        selector:'[data-tour-card="main"] > .offline-logo-badge.online, [data-tour-card="main"] .offline-logo-badge.online',
+        text:'Este símbolo da IDvida indica que o equipamento está comunicando.',
+        pause:2100
       },
       {
         selector:'[data-tour-card="main"], .card.blue, .card',
@@ -17573,8 +17568,8 @@ if(false){(function(){
         pause:2100
       },
       {
-        selector:'[data-tour-card="offline"] > .offline-logo-badge.offline, .card > .offline-logo-badge.offline',
-        text:'Quando o logo fica vermelho, o equipamento está sem comunicação e parou de enviar leituras.',
+        selector:'[data-tour-card="offline"] > .offline-logo-badge.offline, [data-tour-card="offline"] .offline-logo-badge.offline',
+        text:'Quando esse símbolo fica vermelho, o equipamento está sem comunicação e parou de enviar leituras.',
         optional:true,
         pause:2200
       },
