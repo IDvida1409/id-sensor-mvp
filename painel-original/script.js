@@ -17111,6 +17111,24 @@ if(false){(function(){
     return element;
   }
 
+  function forceMonitoringPanelForAssistantTour(){
+    try{ localStorage.removeItem('idsensor.cartTracking.activeRoute.v1'); }catch(error){}
+    try{ if(typeof window.closeCartTrackingView === 'function') window.closeCartTrackingView(); }catch(error){}
+    try{ document.getElementById('cartTrackingView')?.setAttribute('hidden', ''); }catch(error){}
+    document.body?.classList.remove('cart-tracking-open', 'cart-profile-mode');
+    document.body.dataset.panelRole = 'master';
+    window.currentRole = 'master';
+    if(typeof selectedArea !== 'undefined') selectedArea = 'Banco IDvida';
+    if(typeof selectedClient !== 'undefined') selectedClient = 'Laboratório IDvida';
+    const title = document.querySelector('.brand .title');
+    const subtitle = document.getElementById('pageSubtitle');
+    if(title) title.textContent = 'Monitoramento de Geladeiras';
+    if(subtitle) subtitle.textContent = 'Laboratório IDvida · Banco IDvida';
+    document.querySelectorAll('.auth-master-only').forEach((element) => {
+      element.hidden = false;
+    });
+  }
+
   function createAssistantTourLayer(){
     document.getElementById(TOUR_LAYER_ID)?.remove();
     const layer = document.createElement('div');
@@ -17201,9 +17219,44 @@ if(false){(function(){
   function positionCaption(element){
     const {caption} = tourParts();
     if(!caption || !element) return;
-    caption.dataset.anchor = 'subtitle';
-    caption.style.left = '';
-    caption.style.top = '';
+    const rect = getTourAnchorRect(element);
+    const captionWidth = Math.min(360, window.innerWidth - 28);
+    const captionHeight = Math.max(52, caption.offsetHeight || 52);
+    const rightSpace = window.innerWidth - rect.right;
+    const leftSpace = rect.left;
+    const belowSpace = window.innerHeight - rect.bottom;
+    const aboveSpace = rect.top;
+    const centeredTop = clamp(rect.top + (rect.height / 2) - (captionHeight / 2), 12, window.innerHeight - captionHeight - 12);
+
+    let left;
+    let top;
+    let anchor = 'right';
+
+    if(rightSpace >= captionWidth + 20){
+      left = rect.right + 14;
+      top = centeredTop;
+      anchor = 'right';
+    }else if(leftSpace >= captionWidth + 20){
+      left = rect.left - captionWidth - 14;
+      top = centeredTop;
+      anchor = 'left';
+    }else if(belowSpace >= captionHeight + 18){
+      left = clamp(rect.left, 14, window.innerWidth - captionWidth - 14);
+      top = rect.bottom + 12;
+      anchor = 'top';
+    }else if(aboveSpace >= captionHeight + 18){
+      left = clamp(rect.left, 14, window.innerWidth - captionWidth - 14);
+      top = rect.top - captionHeight - 12;
+      anchor = 'bottom';
+    }else{
+      left = clamp((window.innerWidth - captionWidth) / 2, 14, window.innerWidth - captionWidth - 14);
+      top = clamp(window.innerHeight - captionHeight - 18, 12, window.innerHeight - captionHeight - 12);
+      anchor = 'top';
+    }
+
+    caption.dataset.anchor = anchor;
+    caption.style.left = `${Math.round(left)}px`;
+    caption.style.top = `${Math.round(top)}px`;
   }
 
   async function moveCursorTo(element, token){
@@ -17324,65 +17377,65 @@ if(false){(function(){
     return [
       {
         selector:'.brand-title-row',
-        text:'Olá, seja bem-vindo ao painel de monitoramento IDvida. Vou mostrar como acompanhar seus equipamentos em tempo real.',
-        pause:3200
+        text:'Olá. Vou apresentar o painel de monitoramento IDvida.',
+        pause:1400
       },
       {
-        selector:'[data-tour-card="main"]',
+        selector:'[data-tour-card="main"], .card.blue, .card',
         text:'Cada card representa uma geladeira monitorada.',
-        pause:2400
+        pause:1800
       },
       {
-        selector:'[data-tour-card="main"] .temp',
+        selector:'[data-tour-card="main"] .temp, .card.blue .temp, .card .temp',
         text:'No centro do card fica a temperatura atual.',
+        pause:1700
+      },
+      {
+        selector:'[data-tour-card="main"] .metrics, .card.blue .metrics, .card .metrics',
+        text:'Aqui ficam os valores mínimo e máximo registrados no período.',
+        pause:2000
+      },
+      {
+        selector:'[data-tour-card="main"] .bottom-meta, .card.blue .bottom-meta, .card .bottom-meta',
+        text:'Na parte inferior aparecem bateria e umidade, quando o dispositivo possui essa leitura.',
         pause:2200
       },
       {
-        selector:'[data-tour-card="main"] .metrics',
-        text:'Aqui ficam os valores mínimo e máximo registrados no período.',
-        pause:2400
-      },
-      {
-        selector:'[data-tour-card="main"] .bottom-meta',
-        text:'Na parte inferior aparecem bateria e umidade, quando o dispositivo possui essa leitura.',
-        pause:2800
-      },
-      {
-        selector:'[data-tour-card="main"] .comm-wrap',
+        selector:'[data-tour-card="main"] .comm-wrap, .card.blue .comm-wrap, .card .comm-wrap',
         text:'Este indicador mostra se o dispositivo está comunicando com o painel.',
-        pause:2600
+        pause:2000
       },
       {
-        selector:'[data-tour-card="main"] .offline-logo-badge',
+        selector:'[data-tour-card="main"] .offline-logo-badge, .card.blue .offline-logo-badge, .card .offline-logo-badge',
         text:'O símbolo da IDvida reforça visualmente o estado de comunicação do dispositivo.',
         optional:true,
-        pause:2600
+        pause:1900
       },
       {
-        selector:'[data-tour-card="main"]',
+        selector:'[data-tour-card="main"], .card.blue, .card',
         text:'O card azul indica que a temperatura está dentro do limite estabelecido.',
-        pause:2800
+        pause:2200
       },
       {
-        selector:'[data-tour-card="warn"]',
+        selector:'[data-tour-card="warn"], .card.warn',
         text:'O card amarelo indica atenção. A leitura precisa ser acompanhada antes de chegar ao crítico.',
         optional:true,
-        pause:3000
+        pause:2300
       },
       {
-        selector:'[data-tour-card="crit"]',
+        selector:'[data-tour-card="crit"], .card.crit',
         text:'O card vermelho indica crítico. A temperatura está fora do limite estabelecido e exige ação.',
         optional:true,
-        pause:3000
+        pause:2300
       },
       {
-        selector:'[data-tour-card="offline"]',
+        selector:'[data-tour-card="offline"], .card:has(.offline-logo-badge.offline)',
         text:'Quando não há comunicação, o painel mostra a falha no próprio card.',
         optional:true,
-        pause:2800
+        pause:2200
       },
       {
-        selector:'[data-tour-card="main"]',
+        selector:'[data-tour-card="main"], .card.blue, .card',
         text:'Ao clicar no card, abrimos a tela real de detalhes do equipamento.',
         clickBeforeText:true,
         waitFor:() => !!document.getElementById('cardFloatingDetail'),
@@ -17714,6 +17767,7 @@ if(false){(function(){
   }
 
   function resetPanelForAssistantTour(){
+    forceMonitoringPanelForAssistantTour();
     try{ closeGraphModal(); }catch(error){}
     try{ closeAnalyticalReportModal(); }catch(error){}
     try{ closeInfoOverlays(); }catch(error){}
