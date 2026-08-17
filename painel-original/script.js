@@ -17042,12 +17042,26 @@ if(false){(function(){
 (function(){
   const TOUR_BUTTON_ID = 'assistantTourBtn';
   const TOUR_LAYER_ID = 'assistantTourLayer';
+  const ASSISTANT_MASCOT_DOCK_ID = 'assistantMascotDock';
+  const ASSISTANT_MASCOT_VERSION = '20260817-assistant-mascot-panel-v1';
+  const ASSISTANT_MASCOT_FRAME_ROOT = './mascote/assets/frames-v6-motion';
+  const ASSISTANT_MASCOT_WHATSAPP_IMAGE = `./mascote/assets/whatsapp-suporte-transparente-aprovacao.png?v=${ASSISTANT_MASCOT_VERSION}`;
+  const ASSISTANT_MASCOT_FRAMES = {
+    monitor:Array.from({length:16}, (_, index) => `${ASSISTANT_MASCOT_FRAME_ROOT}/monitor-${String(index + 1).padStart(2, '0')}.png?v=${ASSISTANT_MASCOT_VERSION}`),
+    talk:Array.from({length:12}, (_, index) => `${ASSISTANT_MASCOT_FRAME_ROOT}/talk-${String(index + 1).padStart(2, '0')}.png?v=${ASSISTANT_MASCOT_VERSION}`),
+    greet:Array.from({length:14}, (_, index) => `${ASSISTANT_MASCOT_FRAME_ROOT}/greet-${String(index + 1).padStart(2, '0')}.png?v=${ASSISTANT_MASCOT_VERSION}`)
+  };
   const MOVE_DURATION_MS = 860;
   const READ_PAUSE_MS = 2300;
   const CHAR_DELAY_MS = 22;
   let activeTourToken = null;
   let activeKeyHandler = null;
   let assistantTourDeviceSnapshot = null;
+  let assistantMascotFrameTimer = null;
+  let assistantMascotFrameIndex = 0;
+  let assistantMascotMode = '';
+  let assistantMascotUserDismissed = false;
+  let assistantMascotMenuCloseTimer = null;
 
   function panelRoleForTour(){
     return String(
@@ -17061,6 +17075,8 @@ if(false){(function(){
 
   function isAssistantTourAllowed(){
     const body = document.body;
+    const loginShell = document.getElementById('loginShell');
+    if(body?.classList.contains('auth-pending') || (loginShell && !loginShell.hidden)) return false;
     const role = panelRoleForTour();
     const label = String(document.getElementById('currentUserLabel')?.textContent || '').toLowerCase();
     const isCartPanel = body?.classList.contains('cart-profile-mode') || body?.classList.contains('cart-tracking-open') || role === 'cart';
@@ -17069,11 +17085,204 @@ if(false){(function(){
 
   function syncAssistantTourButton(){
     const button = document.getElementById(TOUR_BUTTON_ID);
-    if(!button) return;
     const allowed = isAssistantTourAllowed();
-    button.hidden = !allowed;
-    button.disabled = !allowed;
-    button.title = allowed ? 'Iniciar apresentação do painel' : 'Disponível apenas para IDvida Master';
+    if(button){
+      button.hidden = !allowed;
+      button.disabled = !allowed;
+      button.title = allowed ? 'Iniciar apresentação do painel' : 'Disponível apenas para IDvida Master';
+    }
+    syncAssistantMascotDock(allowed);
+  }
+
+  function assistantMascotImageTag(){
+    return `<img class="assistant-mascot-option-art" src="${ASSISTANT_MASCOT_WHATSAPP_IMAGE}" alt="">`;
+  }
+
+  function createAssistantMascotDock(){
+    let dock = document.getElementById(ASSISTANT_MASCOT_DOCK_ID);
+    if(dock) return dock;
+
+    dock = document.createElement('section');
+    dock.id = ASSISTANT_MASCOT_DOCK_ID;
+    dock.className = 'assistant-mascot-dock';
+    dock.setAttribute('aria-label', 'Assistente virtual IDVida');
+    dock.innerHTML = `
+      <div class="assistant-mascot-menu" id="assistantMascotMenu" hidden>
+        <div class="assistant-mascot-panel assistant-mascot-panel-main" data-assistant-panel="main">
+          <div class="assistant-mascot-menu-head">
+            <strong>Assistente IDVida</strong>
+            <span>Escolha uma opção de ajuda.</span>
+          </div>
+          <button class="assistant-mascot-option assistant-mascot-option-primary" type="button" data-assistant-menu-target="panel">
+            <span class="assistant-mascot-option-icon" aria-hidden="true">▸</span>
+            <span>
+              <strong>Conhecer o painel</strong>
+              <small>Tour completo e temas do monitoramento.</small>
+            </span>
+          </button>
+          <button class="assistant-mascot-option assistant-mascot-option-contact" type="button" aria-disabled="true">
+            ${assistantMascotImageTag()}
+            <span>
+              <strong>Suporte técnico</strong>
+              <small>Atendimento pelo WhatsApp.</small>
+            </span>
+          </button>
+          <button class="assistant-mascot-option assistant-mascot-option-contact" type="button" aria-disabled="true">
+            ${assistantMascotImageTag()}
+            <span>
+              <strong>Comercial</strong>
+              <small>Fale com a equipe comercial.</small>
+            </span>
+          </button>
+        </div>
+
+        <div class="assistant-mascot-panel assistant-mascot-panel-topics" data-assistant-panel="panel" hidden>
+          <div class="assistant-mascot-subhead">
+            <button type="button" class="assistant-mascot-back" data-assistant-menu-target="main" aria-label="Voltar">‹</button>
+            <div>
+              <strong>Conhecer o painel</strong>
+              <span>Escolha um assunto.</span>
+            </div>
+          </div>
+          <button class="assistant-mascot-topic is-active" type="button" data-assistant-action="tour-full">Tour completo</button>
+          <button class="assistant-mascot-topic" type="button" aria-disabled="true">Detalhes do card</button>
+          <button class="assistant-mascot-topic" type="button" aria-disabled="true">Telemetria</button>
+          <button class="assistant-mascot-topic" type="button" aria-disabled="true">Status e comunicação</button>
+          <button class="assistant-mascot-topic" type="button" aria-disabled="true">Gráficos</button>
+          <button class="assistant-mascot-topic" type="button" aria-disabled="true">Relatórios e calibração</button>
+          <button class="assistant-mascot-topic" type="button" aria-disabled="true">Gestão, NOC e acessibilidade</button>
+        </div>
+      </div>
+
+      <button class="assistant-mascot-close" type="button" data-assistant-mascot-close aria-label="Fechar assistente">×</button>
+      <button class="assistant-mascot-stage" id="assistantMascotStage" type="button" aria-label="Abrir menu do assistente IDVida" aria-expanded="false">
+        <img id="assistantMascotSprite" class="assistant-mascot-sprite" src="${ASSISTANT_MASCOT_FRAMES.monitor[0]}" alt="Assistente virtual IDVida">
+      </button>
+    `;
+
+    document.body.appendChild(dock);
+    wireAssistantMascotDock(dock);
+    preloadAssistantMascotFrames();
+    setAssistantMascotMode('monitor');
+    return dock;
+  }
+
+  function preloadAssistantMascotFrames(){
+    Object.values(ASSISTANT_MASCOT_FRAMES).flat().forEach((src) => {
+      const image = new Image();
+      image.src = src;
+    });
+  }
+
+  function wireAssistantMascotDock(dock){
+    dock.addEventListener('mouseenter', () => {
+      if(activeTourToken) return;
+      openAssistantMascotMenu('main');
+    });
+    dock.addEventListener('mouseleave', () => {
+      if(activeTourToken) return;
+      scheduleAssistantMascotMenuClose();
+    });
+    dock.addEventListener('focusin', () => {
+      if(activeTourToken) return;
+      openAssistantMascotMenu('main');
+    });
+
+    dock.querySelector('#assistantMascotStage')?.addEventListener('click', () => {
+      if(activeTourToken) return;
+      const menu = document.getElementById('assistantMascotMenu');
+      if(menu && !menu.hidden) closeAssistantMascotMenu();
+      else openAssistantMascotMenu('main');
+    });
+
+    dock.querySelector('[data-assistant-mascot-close]')?.addEventListener('click', (event) => {
+      event.stopPropagation();
+      assistantMascotUserDismissed = true;
+      closeAssistantMascotMenu({keepMode:true});
+      dock.classList.remove('is-visible');
+    });
+
+    dock.querySelectorAll('[data-assistant-menu-target]').forEach((button) => {
+      button.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        openAssistantMascotMenu(button.dataset.assistantMenuTarget || 'main');
+      });
+    });
+
+    dock.querySelector('[data-assistant-action="tour-full"]')?.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      closeAssistantMascotMenu({keepMode:true});
+      startAssistantTour();
+    });
+  }
+
+  function setAssistantMascotMode(mode){
+    const dock = document.getElementById(ASSISTANT_MASCOT_DOCK_ID);
+    const image = document.getElementById('assistantMascotSprite');
+    const frames = ASSISTANT_MASCOT_FRAMES[mode] || ASSISTANT_MASCOT_FRAMES.monitor;
+    if(!image || !frames.length) return;
+    if(assistantMascotMode === mode && assistantMascotFrameTimer) return;
+
+    window.clearInterval(assistantMascotFrameTimer);
+    assistantMascotMode = mode;
+    assistantMascotFrameIndex = 0;
+    if(dock) dock.dataset.mode = mode;
+
+    const renderFrame = () => {
+      image.src = frames[assistantMascotFrameIndex % frames.length];
+      assistantMascotFrameIndex += 1;
+    };
+    const interval = mode === 'monitor' ? 760 : mode === 'talk' ? 460 : 520;
+    renderFrame();
+    assistantMascotFrameTimer = window.setInterval(renderFrame, interval);
+  }
+
+  function openAssistantMascotMenu(panelName = 'main'){
+    const dock = createAssistantMascotDock();
+    assistantMascotUserDismissed = false;
+    dock.classList.add('is-visible', 'is-menu-open');
+    window.clearTimeout(assistantMascotMenuCloseTimer);
+    const menu = document.getElementById('assistantMascotMenu');
+    const stage = document.getElementById('assistantMascotStage');
+    if(menu) menu.hidden = false;
+    if(stage) stage.setAttribute('aria-expanded', 'true');
+    dock.querySelectorAll('[data-assistant-panel]').forEach((panel) => {
+      panel.hidden = panel.dataset.assistantPanel !== panelName;
+    });
+    setAssistantMascotMode('talk');
+  }
+
+  function closeAssistantMascotMenu(options = {}){
+    window.clearTimeout(assistantMascotMenuCloseTimer);
+    const dock = document.getElementById(ASSISTANT_MASCOT_DOCK_ID);
+    const menu = document.getElementById('assistantMascotMenu');
+    const stage = document.getElementById('assistantMascotStage');
+    if(menu) menu.hidden = true;
+    if(stage) stage.setAttribute('aria-expanded', 'false');
+    dock?.classList.remove('is-menu-open');
+    if(!options.keepMode && !activeTourToken) setAssistantMascotMode('monitor');
+  }
+
+  function scheduleAssistantMascotMenuClose(){
+    window.clearTimeout(assistantMascotMenuCloseTimer);
+    assistantMascotMenuCloseTimer = window.setTimeout(() => closeAssistantMascotMenu(), 520);
+  }
+
+  function syncAssistantMascotDock(allowed = isAssistantTourAllowed()){
+    const dock = document.getElementById(ASSISTANT_MASCOT_DOCK_ID);
+    if(!allowed){
+      window.clearInterval(assistantMascotFrameTimer);
+      assistantMascotFrameTimer = null;
+      assistantMascotMode = '';
+      dock?.remove();
+      return;
+    }
+    if(assistantMascotUserDismissed) return;
+    const createdDock = createAssistantMascotDock();
+    createdDock.classList.add('is-visible');
+    if(!activeTourToken) setAssistantMascotMode('monitor');
   }
 
   function delay(ms, token){
@@ -17936,6 +18145,7 @@ if(false){(function(){
     if(activeTourToken) activeTourToken.aborted = true;
     activeTourToken = null;
     document.body.classList.remove('assistant-tour-running');
+    document.getElementById(ASSISTANT_MASCOT_DOCK_ID)?.classList.remove('is-presenting');
     clearAssistantTourCards();
     restoreAssistantTourDevices();
     try{ renderGrid(); }catch(error){}
@@ -17943,6 +18153,10 @@ if(false){(function(){
     if(activeKeyHandler){
       document.removeEventListener('keydown', activeKeyHandler, true);
       activeKeyHandler = null;
+    }
+    if(isAssistantTourAllowed()){
+      syncAssistantMascotDock(true);
+      if(!assistantMascotUserDismissed) setAssistantMascotMode('monitor');
     }
     syncAssistantTourButton();
   }
@@ -17955,6 +18169,12 @@ if(false){(function(){
     }
 
     stopAssistantTour();
+    assistantMascotUserDismissed = false;
+    const mascotDock = createAssistantMascotDock();
+    mascotDock.classList.add('is-visible', 'is-presenting');
+    closeAssistantMascotMenu({keepMode:true});
+    setAssistantMascotMode('greet');
+
     const token = {aborted:false};
     activeTourToken = token;
     document.body.classList.add('assistant-tour-running');
