@@ -17043,7 +17043,7 @@ if(false){(function(){
   const TOUR_BUTTON_ID = 'assistantTourBtn';
   const TOUR_LAYER_ID = 'assistantTourLayer';
   const ASSISTANT_MASCOT_DOCK_ID = 'assistantMascotDock';
-  const ASSISTANT_MASCOT_VERSION = '20260817-assistant-mascot-panel-v3';
+  const ASSISTANT_MASCOT_VERSION = '20260819-assistant-sidekick-v1';
   const ASSISTANT_MASCOT_FRAME_ROOT = './mascote/assets/frames-v6-motion';
   const ASSISTANT_MASCOT_WHATSAPP_IMAGE = `./mascote/assets/whatsapp-suporte-transparente-aprovacao.png?v=${ASSISTANT_MASCOT_VERSION}`;
   const ASSISTANT_MASCOT_FRAMES = {
@@ -17276,6 +17276,45 @@ if(false){(function(){
     if(!options.keepMode && !activeTourToken) setAssistantMascotMode('monitor');
   }
 
+  function positionAssistantMascotByCaption(){
+    if(!activeTourToken) return;
+    const dock = document.getElementById(ASSISTANT_MASCOT_DOCK_ID);
+    const caption = document.getElementById('assistantTourCaption');
+    if(!dock || !caption) return;
+
+    const rect = caption.getBoundingClientRect();
+    const size = window.innerWidth <= 760 ? 96 : 118;
+    const gap = 12;
+    const margin = 10;
+    const sideByAnchor = caption.dataset.anchor === 'left' ? 'left' : 'right';
+    const canRight = rect.right + gap + size <= window.innerWidth - margin;
+    const canLeft = rect.left - gap - size >= margin;
+
+    let side = sideByAnchor;
+    if(side === 'right' && !canRight && canLeft) side = 'left';
+    if(side === 'left' && !canLeft && canRight) side = 'right';
+    if(!canRight && !canLeft) side = 'bottom';
+
+    let left;
+    let top;
+    if(side === 'right'){
+      left = rect.right + gap;
+      top = rect.top + (rect.height / 2) - (size / 2);
+    }else if(side === 'left'){
+      left = rect.left - gap - size;
+      top = rect.top + (rect.height / 2) - (size / 2);
+    }else{
+      left = rect.right - size;
+      top = rect.bottom + gap;
+    }
+
+    dock.classList.add('is-tour-sidekick', 'is-visible');
+    dock.classList.remove('is-menu-open');
+    dock.style.setProperty('--assistant-mascot-left', `${Math.round(clamp(left, margin, window.innerWidth - size - margin))}px`);
+    dock.style.setProperty('--assistant-mascot-top', `${Math.round(clamp(top, margin, window.innerHeight - size - margin))}px`);
+    setAssistantMascotMode('talk');
+  }
+
   function scheduleAssistantMascotMenuClose(){
     window.clearTimeout(assistantMascotMenuCloseTimer);
     assistantMascotMenuCloseTimer = window.setTimeout(() => closeAssistantMascotMenu(), 520);
@@ -17479,6 +17518,7 @@ if(false){(function(){
     caption.dataset.anchor = anchor;
     caption.style.left = `${Math.round(left)}px`;
     caption.style.top = `${Math.round(top)}px`;
+    positionAssistantMascotByCaption();
   }
 
   async function moveCursorTo(element, token){
@@ -18156,7 +18196,10 @@ if(false){(function(){
     if(activeTourToken) activeTourToken.aborted = true;
     activeTourToken = null;
     document.body.classList.remove('assistant-tour-running');
-    document.getElementById(ASSISTANT_MASCOT_DOCK_ID)?.classList.remove('is-presenting');
+    const mascotDock = document.getElementById(ASSISTANT_MASCOT_DOCK_ID);
+    mascotDock?.classList.remove('is-presenting', 'is-tour-sidekick');
+    mascotDock?.style.removeProperty('--assistant-mascot-left');
+    mascotDock?.style.removeProperty('--assistant-mascot-top');
     clearAssistantTourCards();
     restoreAssistantTourDevices();
     try{ renderGrid(); }catch(error){}

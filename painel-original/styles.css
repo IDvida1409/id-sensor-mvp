@@ -18422,6 +18422,18 @@ body.analytic-report-open{overflow:hidden}
   transform:translateY(0);
 }
 
+.assistant-mascot-dock.is-tour-sidekick{
+  bottom:auto;
+  height:118px;
+  left:var(--assistant-mascot-left, 20px);
+  right:auto;
+  top:var(--assistant-mascot-top, 20px);
+  transform:none;
+  transition:left .26s ease, top .26s ease, opacity .18s ease;
+  width:118px;
+  z-index:40003;
+}
+
 .assistant-mascot-stage{
   align-items:center;
   appearance:none;
@@ -18440,6 +18452,16 @@ body.analytic-report-open{overflow:hidden}
   z-index:1;
 }
 
+.assistant-mascot-dock.is-tour-sidekick .assistant-mascot-stage{
+  bottom:auto;
+  height:118px;
+  left:0;
+  pointer-events:none;
+  right:auto;
+  top:0;
+  width:118px;
+}
+
 .assistant-mascot-sprite{
   display:block;
   height:142px;
@@ -18447,6 +18469,12 @@ body.analytic-report-open{overflow:hidden}
   pointer-events:none;
   width:142px;
   filter:drop-shadow(0 16px 22px rgba(15,35,55,.18));
+}
+
+.assistant-mascot-dock.is-tour-sidekick .assistant-mascot-sprite{
+  height:118px;
+  width:118px;
+  filter:drop-shadow(0 12px 18px rgba(15,35,55,.16));
 }
 
 .assistant-mascot-close{
@@ -18469,6 +18497,10 @@ body.analytic-report-open{overflow:hidden}
   right:3px;
   width:30px;
   z-index:2;
+}
+
+body.assistant-tour-running .assistant-mascot-close{
+  display:none;
 }
 
 .assistant-mascot-close:hover{
@@ -18820,6 +18852,17 @@ body.assistant-tour-running{
   .assistant-mascot-sprite{
     height:124px;
     width:124px;
+  }
+
+  .assistant-mascot-dock.is-tour-sidekick{
+    height:96px;
+    width:96px;
+  }
+
+  .assistant-mascot-dock.is-tour-sidekick .assistant-mascot-stage,
+  .assistant-mascot-dock.is-tour-sidekick .assistant-mascot-sprite{
+    height:96px;
+    width:96px;
   }
 
   .assistant-mascot-close{
