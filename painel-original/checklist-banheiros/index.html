@@ -5,9 +5,25 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0b74bb">
   <title>Einstein | Checklist de Banheiros</title>
-  <link rel="stylesheet" href="styles.css?v=1.0.12">
+  <link rel="stylesheet" href="styles.css?v=1.0.13">
 </head>
-<body data-step="welcome">
+<body data-step="welcome" data-auth="locked">
+  <section class="login-screen" id="loginScreen">
+    <form class="login-card" id="loginForm">
+      <img src="/assets/einstein-logo.png" alt="Hospital Israelita Einstein">
+      <div>
+        <p class="eyebrow">Acesso</p>
+        <h1>Checklist de banheiros</h1>
+      </div>
+      <label class="field">
+        Senha
+        <input id="accessPassword" type="password" inputmode="numeric" autocomplete="current-password" placeholder="Digite a senha">
+      </label>
+      <button class="primary-button" type="submit">Entrar</button>
+      <div class="status" id="loginStatus" role="status" aria-live="polite"></div>
+    </form>
+  </section>
+
   <header class="topbar">
     <div class="brand">
       <img src="/assets/einstein-logo.png" alt="Hospital Israelita Einstein">
@@ -398,7 +414,7 @@
           </select>
         </label>
         <button class="primary-button compact" type="button" id="loadHistory">Atualizar histórico</button>
-        <span></span>
+        <button class="secondary-button danger compact" type="button" id="clearHistory">Limpar histórico</button>
       </section>
 
       <section class="metric-grid" id="historyMetricGrid"></section>
@@ -416,6 +432,6 @@
     </section>
   </main>
 
-  <script src="script.js?v=1.0.12"></script>
+  <script src="script.js?v=1.0.13"></script>
 </body>
 </html>

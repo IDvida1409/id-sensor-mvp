@@ -71,7 +71,9 @@ const BATHROOM_SUPPLY_ITEMS = [
   { key: 'papel_higienico', label: 'Papel higiênico', unit: 'rolos' },
   { key: 'papel_toalha', label: 'Papel toalha', unit: 'refis' },
   { key: 'sabonete', label: 'Sabonete', unit: 'refis' },
-  { key: 'alcool_outro', label: 'Álcool/outro insumo', unit: 'refis' }
+  { key: 'alcool_outro', label: 'Álcool/outro insumo', unit: 'refis' },
+  { key: 'protetor_assento', label: 'Protetor de assento', unit: 'unidades' },
+  { key: 'absorvente', label: 'Absorvente', unit: 'unidades' }
 ];
 const BATHROOM_SUPPLY_ITEM_BY_KEY = new Map(BATHROOM_SUPPLY_ITEMS.map((item) => [item.key, item]));
 const BATHROOM_ACTIONS = [
@@ -3493,7 +3495,28 @@ addRoute('DELETE', '/api/bathroom-checklists/history', async ({ query, res }) =>
   if (query.confirm !== 'limpar-historico-checklists') {
     return fail(res, 400, 'Confirmação inválida para limpar o histórico.');
   }
-  const deleted = getDb().prepare('DELETE FROM bathroom_checklists').run().changes || 0;
+  const where = [];
+  const args = [];
+  const from = bathroomReportDate(query.from, false);
+  const to = bathroomReportDate(query.to, true);
+  if (from) {
+    where.push('created_at >= ?');
+    args.push(from);
+  }
+  if (to) {
+    where.push('created_at <= ?');
+    args.push(to);
+  }
+  if (query.bathroom_id) {
+    const bathroom = normalizeBathroomChoice(query.bathroom_id);
+    where.push('bathroom_id = ?');
+    args.push(bathroom.id);
+  }
+
+  const deleted = getDb().prepare(`
+    DELETE FROM bathroom_checklists
+    ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
+  `).run(...args).changes || 0;
   ok(res, {
     deleted,
     cleared_at: nowIso()

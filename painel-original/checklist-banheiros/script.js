@@ -10,7 +10,9 @@
       { key: 'papel_higienico', label: 'Papel higiênico', unit: 'rolos' },
       { key: 'papel_toalha', label: 'Papel toalha', unit: 'refis' },
       { key: 'sabonete', label: 'Sabonete', unit: 'refis' },
-      { key: 'alcool_outro', label: 'Álcool/outro insumo', unit: 'refis' }
+      { key: 'alcool_outro', label: 'Álcool/outro insumo', unit: 'refis' },
+      { key: 'protetor_assento', label: 'Protetor de assento', unit: 'unidades' },
+      { key: 'absorvente', label: 'Absorvente', unit: 'unidades' }
     ],
     actions: [
       'limpeza_completa',
@@ -38,7 +40,7 @@
     limpeza_rapida: 'Limpeza rápida',
     reposicao_papel: 'Reposição de papel',
     reposicao_sabonete: 'Reposição de sabonete',
-    reposicao_alcool: 'Reposição de álcool/outro insumo',
+    reposicao_alcool: 'Reposição de outros insumos',
     correcao_odor: 'Correção de odor',
     nenhuma_acao: 'Nenhuma ação necessária',
     lixeira_cheia: 'Lixeira cheia',
@@ -128,6 +130,10 @@
   let currentHistoryRecords = [];
   let currentReport = null;
   let currentGraphSvg = '';
+  let appStarted = false;
+
+  const ACCESS_PASSWORD = '12345678';
+  const ACCESS_KEY = 'bathroomChecklistAccess';
 
   const $ = (selector) => document.querySelector(selector);
   const $$ = (selector) => [...document.querySelectorAll(selector)];
@@ -149,6 +155,39 @@
     if (!status) return;
     status.textContent = message;
     status.className = `status ${type}`;
+  }
+
+  function hasAccess() {
+    return sessionStorage.getItem(ACCESS_KEY) === 'ok';
+  }
+
+  function setLoginStatus(message, type = '') {
+    const status = $('#loginStatus');
+    if (!status) return;
+    status.textContent = message;
+    status.className = `status ${type}`;
+  }
+
+  function applyAccessState() {
+    document.body.dataset.auth = hasAccess() ? 'unlocked' : 'locked';
+    if (!hasAccess()) setTimeout(() => $('#accessPassword')?.focus(), 100);
+  }
+
+  function setupAccessGate() {
+    applyAccessState();
+    $('#loginForm').addEventListener('submit', (event) => {
+      event.preventDefault();
+      const password = $('#accessPassword').value;
+      if (password !== ACCESS_PASSWORD) {
+        setLoginStatus('Senha inválida.', 'error');
+        return;
+      }
+      sessionStorage.setItem(ACCESS_KEY, 'ok');
+      $('#accessPassword').value = '';
+      setLoginStatus('');
+      applyAccessState();
+      startApp().catch((error) => setLoginStatus(error.message, 'error'));
+    });
   }
 
   function setStep(step) {
@@ -340,7 +379,7 @@
     if (state.selected.reason === 'reposicao') {
       if (replenished(['papel_higienico', 'papel_toalha'])) actions.add('reposicao_papel');
       if (replenished(['sabonete'])) actions.add('reposicao_sabonete');
-      if (replenished(['alcool_outro'])) actions.add('reposicao_alcool');
+      if (replenished(['alcool_outro', 'protetor_assento', 'absorvente'])) actions.add('reposicao_alcool');
     }
 
     if (state.selected.reason === 'limpeza') {
@@ -508,10 +547,11 @@
         method: 'POST',
         body: JSON.stringify(payload)
       });
-      setStatus('Checklist salvo. Gráfico e relatório já podem usar este registro.', 'success');
+      setStatus('Checklist salvo. Gráfico, relatório e histórico já podem usar este registro.', 'success');
       resetChecklist(true);
       loadGraph().catch(() => {});
       loadReport().catch(() => {});
+      loadHistory().catch(() => {});
     } catch (error) {
       setStatus(error.message, 'error');
     }
@@ -1279,6 +1319,24 @@
     renderHistoryList(records);
   }
 
+  async function clearHistory() {
+    const filters = selectedFilterText('history');
+    const message = `Limpar o histórico de ${filters.from} até ${filters.to} para ${filters.bathroom}?`;
+    if (!confirm(message)) return;
+
+    const params = paramsForMode('history');
+    params.set('confirm', 'limpar-historico-checklists');
+    const result = await api(`/api/bathroom-checklists/history?${params.toString()}`, {
+      method: 'DELETE'
+    });
+    alert(`${numberText(result.deleted)} registro(s) apagado(s).`);
+    await Promise.all([
+      loadHistory(),
+      loadGraph(),
+      loadReport()
+    ]);
+  }
+
   function downloadBlob(filename, content, type) {
     const blob = new Blob([content], { type });
     const link = document.createElement('a');
@@ -1383,10 +1441,7 @@
         'Lixeira cheia',
         'Vaso/mictório sujo',
         'Pia/bancada suja',
-        'Papel higiênico',
-        'Papel toalha',
-        'Sabonete',
-        'Álcool/outro',
+        ...state.config.supply_items.map((item) => item.label),
         'Reposição realizada',
         'Ação realizada',
         'Responsável',
@@ -1406,10 +1461,7 @@
         record.condition?.lixeira_cheia ? 'Sim' : 'Não',
         record.condition?.vaso_sujo ? 'Sim' : 'Não',
         record.condition?.pia_suja ? 'Sim' : 'Não',
-        labels[record.supplies?.papel_higienico] || '',
-        labels[record.supplies?.papel_toalha] || '',
-        labels[record.supplies?.sabonete] || '',
-        labels[record.supplies?.alcool_outro] || '',
+        ...state.config.supply_items.map((item) => labels[record.supplies?.[item.key]] || ''),
         (record.replenishments || []).map((item) => `${supplyItem(item.item).label}: ${numberText(item.quantity)} ${item.unit}`).join(' | '),
         actionsText(record),
         record.responsible_name,
@@ -1443,7 +1495,9 @@
     });
   }
 
-  async function init() {
+  async function startApp() {
+    if (appStarted) return;
+    appStarted = true;
     try {
       state.config = await api('/api/bathroom-checklists/config');
     } catch {
@@ -1470,12 +1524,18 @@
     $('#loadGraph').addEventListener('click', () => loadGraph().catch((error) => alert(error.message)));
     $('#loadReport').addEventListener('click', () => loadReport().catch((error) => alert(error.message)));
     $('#loadHistory').addEventListener('click', () => loadHistory().catch((error) => alert(error.message)));
+    $('#clearHistory').addEventListener('click', () => clearHistory().catch((error) => alert(error.message)));
     $('#downloadGraph').addEventListener('click', downloadGraphSvg);
     $('#downloadReport').addEventListener('click', downloadReportCsv);
     $('#downloadReportBottom').addEventListener('click', downloadReportCsv);
     loadGraph().catch(() => {});
     loadReport().catch(() => {});
     loadHistory().catch(() => {});
+  }
+
+  function init() {
+    setupAccessGate();
+    if (hasAccess()) startApp().catch((error) => setLoginStatus(error.message, 'error'));
   }
 
   init();
