@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0b74bb">
   <title>Einstein | Checklist de Banheiros</title>
-  <link rel="stylesheet" href="styles.css?v=1.0.6">
+  <link rel="stylesheet" href="styles.css?v=1.0.7">
 </head>
 <body data-step="welcome">
   <header class="topbar">
@@ -156,11 +156,7 @@
         <div>
           <p class="eyebrow">Gráfico</p>
           <h1>Gráfico dos checklists</h1>
-          <p class="muted">Leitura visual por quantidade de pessoas vista no painel.</p>
-        </div>
-        <div class="analysis-switch" aria-label="Alternar análise">
-          <button class="active" type="button" data-view-shortcut="graph">Gráfico</button>
-          <button type="button" data-view-shortcut="report">Relatório</button>
+          <p class="muted">Leitura visual das faixas de pessoas, condições, odor, insumos e ações.</p>
         </div>
       </section>
 
@@ -272,11 +268,7 @@
         <div>
           <p class="eyebrow">Relatório</p>
           <h1>Relatório dos checklists</h1>
-          <p class="muted">Resumo, comparação por banheiro, consumo, reposições e exportação.</p>
-        </div>
-        <div class="analysis-switch" aria-label="Alternar análise">
-          <button type="button" data-view-shortcut="graph">Gráfico</button>
-          <button class="active" type="button" data-view-shortcut="report">Relatório</button>
+          <p class="muted">Consolidação por banheiro, consumo, reposições e campos observados no período.</p>
         </div>
       </section>
 
@@ -336,39 +328,28 @@
         </section>
       </section>
 
-      <section class="graph-grid three">
-        <section class="card">
-          <div class="section-heading">
-            <div>
-              <p class="eyebrow">Sim / Não</p>
-              <h2>Itens de condição</h2>
-            </div>
-            <span class="section-pill">ocorrência</span>
+      <section class="card report-consolidation">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Consolidação do checklist</p>
+            <h2>Ocorrências, motivos e ações</h2>
           </div>
-          <div class="bar-list" id="conditionReport"></div>
-        </section>
-
-        <section class="card">
-          <div class="section-heading">
-            <div>
-              <p class="eyebrow">Botoeira operacional</p>
-              <h2>Motivo do chamado</h2>
-            </div>
-            <span class="section-pill">quantidade</span>
-          </div>
-          <div class="bar-list" id="reasonReport"></div>
-        </section>
-
-        <section class="card">
-          <div class="section-heading">
-            <div>
-              <p class="eyebrow">Campo do checklist</p>
-              <h2>Ação realizada</h2>
-            </div>
-            <span class="section-pill">quantidade</span>
-          </div>
-          <div class="bar-list" id="actionReport"></div>
-        </section>
+          <span class="section-pill">resumo</span>
+        </div>
+        <div class="report-summary-grid">
+          <section>
+            <h3>Itens de condição</h3>
+            <div class="bar-list report-list" id="conditionReport"></div>
+          </section>
+          <section>
+            <h3>Motivo do chamado</h3>
+            <div class="bar-list report-list" id="reasonReport"></div>
+          </section>
+          <section>
+            <h3>Ação realizada</h3>
+            <div class="bar-list report-list" id="actionReport"></div>
+          </section>
+        </div>
       </section>
 
       <section class="card">
@@ -393,6 +374,6 @@
     </section>
   </main>
 
-  <script src="script.js?v=1.0.6"></script>
+  <script src="script.js?v=1.0.7"></script>
 </body>
 </html>

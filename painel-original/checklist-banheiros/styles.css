@@ -14,7 +14,7 @@
   --yellow: #f6c343;
   --red: #dc4c45;
   --track: #e8eef6;
-  --shadow: 0 10px 24px rgba(15, 35, 62, .08);
+  --shadow: 0 6px 16px rgba(15, 35, 62, .06);
   color: var(--text);
   font-family: Inter, "Segoe UI", Arial, sans-serif;
 }
@@ -61,7 +61,7 @@ textarea {
   background: var(--surface);
   border-bottom: 1px solid var(--line);
   box-shadow: 0 3px 12px rgba(15, 35, 62, .04);
-  padding: 14px 16px;
+  padding: 10px 16px;
   position: sticky;
   top: 0;
   z-index: 5;
@@ -72,18 +72,18 @@ textarea {
   display: flex;
   gap: 12px;
   margin: 0 auto;
-  max-width: 1180px;
+  max-width: 1080px;
 }
 
 .brand img {
-  height: 46px;
+  height: 38px;
   object-fit: contain;
-  width: 126px;
+  width: 112px;
 }
 
 .brand strong {
   display: block;
-  font-size: 18px;
+  font-size: 17px;
   line-height: 1.15;
 }
 
@@ -96,43 +96,41 @@ textarea {
 
 .shell {
   display: grid;
-  gap: 16px;
+  gap: 12px;
   margin: 0 auto;
-  max-width: 1180px;
-  padding: 16px;
+  max-width: 1080px;
+  padding: 14px;
 }
 
 .tabs {
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 18px;
+  border-radius: 14px;
   display: grid;
   gap: 8px;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  padding: 6px;
+  padding: 4px;
 }
 
-.tab,
-.analysis-switch button {
+.tab {
   background: transparent;
   border: 0;
-  border-radius: 13px;
+  border-radius: 11px;
   color: var(--muted);
   cursor: pointer;
   font-weight: 800;
-  min-height: 42px;
-  padding: 10px 12px;
+  min-height: 36px;
+  padding: 8px 10px;
 }
 
-.tab.active,
-.analysis-switch button.active {
+.tab.active {
   background: var(--blue-strong);
   color: #fff;
 }
 
 .view {
   display: none;
-  gap: 14px;
+  gap: 12px;
 }
 
 .view.active {
@@ -147,9 +145,9 @@ textarea {
 .card {
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 18px;
+  border-radius: 14px;
   box-shadow: var(--shadow);
-  padding: 18px;
+  padding: 14px;
 }
 
 .hero-card {
@@ -161,7 +159,7 @@ textarea {
 .form-intro h1,
 .section-heading h2,
 .export-card h2 {
-  font-size: 22px;
+  font-size: 20px;
   line-height: 1.15;
   margin: 0;
 }
@@ -173,7 +171,7 @@ textarea {
 }
 
 .welcome-card {
-  min-height: 280px;
+  min-height: 220px;
   place-content: center;
 }
 
@@ -184,21 +182,7 @@ textarea {
 
 .analysis-hero {
   align-items: center;
-  grid-template-columns: minmax(0, 1fr) auto;
-}
-
-.analysis-switch {
-  background: var(--blue-soft);
-  border-radius: 999px;
-  display: grid;
-  gap: 6px;
-  grid-template-columns: 1fr 1fr;
-  padding: 6px;
-}
-
-.analysis-switch button {
-  border-radius: 999px;
-  min-width: 130px;
+  min-height: 78px;
 }
 
 .start-card,
@@ -210,7 +194,7 @@ textarea {
 .stack-chart,
 .supply-stack-list {
   display: grid;
-  gap: 13px;
+  gap: 10px;
 }
 
 .start-actions {
@@ -228,7 +212,7 @@ textarea {
 
 .eyebrow {
   color: var(--blue);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 900;
   letter-spacing: 0;
   margin: 0 0 6px;
@@ -238,7 +222,7 @@ textarea {
 .muted {
   color: var(--muted);
   line-height: 1.45;
-  margin-top: 9px;
+  margin-top: 6px;
 }
 
 .small {
@@ -247,7 +231,7 @@ textarea {
 
 .bathroom-grid {
   display: grid;
-  gap: 12px;
+  gap: 10px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
@@ -255,14 +239,14 @@ textarea {
   align-items: stretch;
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 18px;
+  border-radius: 14px;
   box-shadow: var(--shadow);
   color: var(--text);
   cursor: pointer;
   display: grid;
-  gap: 14px;
-  min-height: 150px;
-  padding: 18px;
+  gap: 10px;
+  min-height: 118px;
+  padding: 14px;
   text-align: left;
   transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
 }
@@ -277,19 +261,19 @@ textarea {
 .bathroom-card .icon {
   align-items: center;
   background: var(--blue-soft);
-  border-radius: 16px;
+  border-radius: 12px;
   color: var(--blue);
   display: flex;
-  font-size: 24px;
+  font-size: 20px;
   font-weight: 900;
-  height: 52px;
+  height: 44px;
   justify-content: center;
-  width: 52px;
+  width: 44px;
 }
 
 .bathroom-card strong {
   display: block;
-  font-size: 20px;
+  font-size: 18px;
 }
 
 .bathroom-card span {
@@ -303,11 +287,11 @@ textarea {
   align-items: center;
   background: var(--surface-soft);
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: 12px;
   display: flex;
   gap: 12px;
   justify-content: space-between;
-  padding: 14px;
+  padding: 12px;
 }
 
 .selected-card strong {
@@ -326,7 +310,7 @@ textarea {
 .auto-row,
 .filters-card {
   display: grid;
-  gap: 12px;
+  gap: 10px;
 }
 
 .auto-row {
@@ -359,13 +343,13 @@ fieldset {
 .field-highlight {
   background: var(--surface-soft);
   border: 1px solid var(--line);
-  border-radius: 16px;
-  padding: 13px;
+  border-radius: 12px;
+  padding: 11px;
 }
 
 legend {
   color: var(--text);
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 900;
   margin-bottom: 10px;
 }
@@ -375,10 +359,10 @@ select,
 textarea {
   background: var(--surface-soft);
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: 11px;
   color: var(--text);
-  min-height: 46px;
-  padding: 12px 13px;
+  min-height: 40px;
+  padding: 9px 11px;
   width: 100%;
 }
 
@@ -405,12 +389,12 @@ textarea {
 .action-grid button {
   background: var(--surface-soft);
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: 11px;
   color: var(--text);
   cursor: pointer;
   font-weight: 900;
-  min-height: 46px;
-  padding: 11px;
+  min-height: 40px;
+  padding: 9px 10px;
 }
 
 .choice-grid button.active,
@@ -429,13 +413,13 @@ textarea {
   align-items: center;
   background: var(--surface-soft);
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: 11px;
   color: var(--text);
   display: flex;
   font-weight: 800;
   gap: 9px;
-  min-height: 46px;
-  padding: 11px 12px;
+  min-height: 40px;
+  padding: 9px 10px;
 }
 
 .check-grid input {
@@ -447,10 +431,10 @@ textarea {
 .replenishment-row {
   background: var(--surface-soft);
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: 12px;
   display: grid;
   gap: 10px;
-  padding: 13px;
+  padding: 11px;
 }
 
 .supply-row strong,
@@ -467,12 +451,12 @@ textarea {
 .level-buttons button {
   background: #fff;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 10px;
   color: var(--muted);
   cursor: pointer;
   font-size: 13px;
   font-weight: 900;
-  min-height: 38px;
+  min-height: 34px;
 }
 
 .level-buttons button.active {
@@ -497,11 +481,11 @@ textarea {
 .primary-button,
 .secondary-button {
   border: 0;
-  border-radius: 16px;
+  border-radius: 12px;
   cursor: pointer;
   font-weight: 900;
-  min-height: 50px;
-  padding: 13px 16px;
+  min-height: 42px;
+  padding: 10px 14px;
 }
 
 .primary-button {
@@ -515,7 +499,7 @@ textarea {
 }
 
 .compact {
-  min-height: 46px;
+  min-height: 40px;
   white-space: nowrap;
 }
 
@@ -536,21 +520,21 @@ textarea {
 
 .metric-grid {
   display: grid;
-  gap: 12px;
+  gap: 10px;
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .metric-card {
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 18px;
+  border-radius: 14px;
   box-shadow: var(--shadow);
-  padding: 16px;
+  padding: 12px;
 }
 
 .metric-card strong {
   display: block;
-  font-size: 28px;
+  font-size: 23px;
   line-height: 1.05;
   overflow-wrap: anywhere;
 }
@@ -558,7 +542,7 @@ textarea {
 .metric-card span {
   color: var(--muted);
   display: block;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 800;
   margin-top: 8px;
 }
@@ -568,7 +552,7 @@ textarea {
   display: flex;
   gap: 12px;
   justify-content: space-between;
-  margin-bottom: 14px;
+  margin-bottom: 10px;
 }
 
 .section-pill {
@@ -576,17 +560,17 @@ textarea {
   border-radius: 999px;
   color: var(--blue-strong);
   display: inline-flex;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 900;
   line-height: 1;
-  padding: 11px 13px;
+  padding: 8px 10px;
   white-space: nowrap;
 }
 
 .graph-grid,
 .report-grid {
   display: grid;
-  gap: 14px;
+  gap: 12px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
@@ -604,11 +588,11 @@ textarea {
   align-items: center;
   background: var(--surface-soft);
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: 11px;
   display: grid;
-  gap: 12px;
+  gap: 10px;
   min-width: 760px;
-  padding: 10px 12px;
+  padding: 8px 10px;
 }
 
 .comparison-row.header {
@@ -652,7 +636,7 @@ textarea {
 }
 
 .mini-track {
-  height: 16px;
+  height: 12px;
   min-width: 95px;
 }
 
@@ -673,13 +657,13 @@ textarea {
 .stack-row {
   align-items: center;
   display: grid;
-  gap: 10px;
-  grid-template-columns: 120px minmax(160px, 1fr);
+  gap: 8px;
+  grid-template-columns: 112px minmax(160px, 1fr);
 }
 
 .stack-track {
   display: flex;
-  height: 24px;
+  height: 20px;
 }
 
 .stack-segment {
@@ -695,8 +679,8 @@ textarea {
 .legend {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
-  margin-bottom: 8px;
+  gap: 10px;
+  margin-bottom: 6px;
 }
 
 .legend span {
@@ -750,7 +734,7 @@ textarea {
 }
 
 .bar-track {
-  height: 16px;
+  height: 12px;
 }
 
 .bar-fill {
@@ -762,7 +746,7 @@ textarea {
   display: grid;
   gap: 5px;
   grid-template-columns: minmax(170px, 1fr) 120px minmax(160px, 1.1fr);
-  padding: 10px 0;
+  padding: 8px 0;
 }
 
 .threshold-item:last-child {
@@ -785,6 +769,50 @@ textarea {
   grid-template-columns: minmax(0, 1fr) auto;
 }
 
+.report-consolidation {
+  background: linear-gradient(180deg, #fff 0%, #fbfdff 100%);
+}
+
+.report-summary-grid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.report-summary-grid section {
+  border-left: 1px solid var(--line);
+  padding-left: 16px;
+}
+
+.report-summary-grid section:first-child {
+  border-left: 0;
+  padding-left: 0;
+}
+
+.report-summary-grid h3 {
+  font-size: 15px;
+  line-height: 1.2;
+  margin: 0 0 10px;
+}
+
+.report-list {
+  gap: 10px;
+}
+
+.report-list .bar-row {
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 8px;
+}
+
+.report-list .bar-row:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.report-list .bar-track {
+  height: 8px;
+}
+
 .empty-state {
   color: var(--muted);
   font-weight: 800;
@@ -796,7 +824,8 @@ textarea {
   .metric-grid,
   .graph-grid,
   .graph-grid.three,
-  .report-grid {
+  .report-grid,
+  .report-summary-grid {
     grid-template-columns: 1fr 1fr;
   }
 
@@ -805,13 +834,8 @@ textarea {
     grid-column: span 2;
   }
 
-  .analysis-hero,
   .export-card {
     grid-template-columns: 1fr;
-  }
-
-  .analysis-switch {
-    width: 100%;
   }
 }
 
@@ -833,7 +857,14 @@ textarea {
   }
 
   .tabs {
-    grid-template-columns: 1fr;
+    gap: 4px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .tab {
+    font-size: 13px;
+    min-height: 34px;
+    padding: 7px 6px;
   }
 
   .card,
@@ -849,6 +880,7 @@ textarea {
   .graph-grid,
   .graph-grid.three,
   .report-grid,
+  .report-summary-grid,
   .check-grid,
   .action-grid,
   .threshold-item {
@@ -858,10 +890,6 @@ textarea {
   .filters-card label:nth-child(3),
   .filters-card button {
     grid-column: auto;
-  }
-
-  .analysis-switch button {
-    min-width: 0;
   }
 
   .section-heading {
@@ -906,5 +934,17 @@ textarea {
 
   .comparison-row.header {
     display: none;
+  }
+
+  .report-summary-grid section {
+    border-left: 0;
+    border-top: 1px solid var(--line);
+    padding-left: 0;
+    padding-top: 12px;
+  }
+
+  .report-summary-grid section:first-child {
+    border-top: 0;
+    padding-top: 0;
   }
 }
