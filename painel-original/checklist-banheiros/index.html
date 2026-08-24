@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0b74bb">
   <title>Einstein | Checklist de Banheiros</title>
-  <link rel="stylesheet" href="styles.css?v=1.0.11">
+  <link rel="stylesheet" href="styles.css?v=1.0.12">
 </head>
 <body data-step="welcome">
   <header class="topbar">
@@ -23,6 +23,7 @@
       <button class="tab active" type="button" data-view="checklist">Novo checklist</button>
       <button class="tab" type="button" data-view="graph">Gráfico</button>
       <button class="tab" type="button" data-view="report">Relatório</button>
+      <button class="tab" type="button" data-view="history">Histórico</button>
     </nav>
 
     <section class="view active" id="checklistView">
@@ -372,8 +373,49 @@
         <button class="secondary-button compact" type="button" id="downloadReportBottom">Baixar relatório</button>
       </section>
     </section>
+
+    <section class="view" id="historyView">
+      <section class="card hero-card analysis-hero">
+        <div>
+          <p class="eyebrow">Histórico</p>
+          <h1>Histórico de checklists</h1>
+        </div>
+      </section>
+
+      <section class="card filters-card">
+        <label>
+          De
+          <input id="historyFromDate" type="date">
+        </label>
+        <label>
+          Até
+          <input id="historyToDate" type="date">
+        </label>
+        <label>
+          Banheiro
+          <select id="historyBathroom">
+            <option value="">Todos os banheiros</option>
+          </select>
+        </label>
+        <button class="primary-button compact" type="button" id="loadHistory">Atualizar histórico</button>
+        <span></span>
+      </section>
+
+      <section class="metric-grid" id="historyMetricGrid"></section>
+
+      <section class="card">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Registros salvos</p>
+            <h2>Checklists realizados</h2>
+          </div>
+          <span class="section-pill" id="historyCountPill">0 registros</span>
+        </div>
+        <div class="history-list" id="historyList"></div>
+      </section>
+    </section>
   </main>
 
-  <script src="script.js?v=1.0.11"></script>
+  <script src="script.js?v=1.0.12"></script>
 </body>
 </html>

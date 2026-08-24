@@ -125,6 +125,7 @@
 
   let currentGraphRecords = [];
   let currentReportRecords = [];
+  let currentHistoryRecords = [];
   let currentReport = null;
   let currentGraphSvg = '';
 
@@ -162,7 +163,7 @@
   function setDefaultDateRange() {
     const now = new Date();
     const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
-    ['graph', 'report'].forEach((prefix) => {
+    ['graph', 'report', 'history'].forEach((prefix) => {
       $(`#${prefix}FromDate`).value = formatDateInput(firstDay);
       $(`#${prefix}ToDate`).value = formatDateInput(now);
     });
@@ -199,6 +200,7 @@
     ].join('');
     $('#graphBathroom').innerHTML = options;
     $('#reportBathroom').innerHTML = options;
+    $('#historyBathroom').innerHTML = options;
   }
 
   function selectBathroom(id) {
@@ -536,6 +538,15 @@
 
   function shortBathroomName(name) {
     return String(name || 'Banheiro').replace(/^Banheiro\s+/i, '');
+  }
+
+  function htmlText(value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   }
 
   function percentValue(count, total) {
@@ -1197,6 +1208,77 @@
     renderReportBlocks(records);
   }
 
+  function historyDetailsText(record) {
+    const details = [];
+    const condition = record.condition || {};
+    if (condition.piso_molhado) details.push('Piso molhado');
+    if (condition.lixeira_cheia) details.push('Lixeira cheia');
+    if (condition.vaso_sujo) details.push('Vaso/mictório sujo');
+    if (condition.pia_suja) details.push('Pia/bancada suja');
+    (record.replenishments || []).forEach((item) => {
+      details.push(`${supplyItem(item.item).label}: ${numberText(item.quantity)} ${item.unit}`);
+    });
+    if (record.notes) details.push(record.notes);
+    return details.length ? details.join(' · ') : '-';
+  }
+
+  function renderHistoryMetrics(records) {
+    const responsibleCount = new Set(records.map((record) => String(record.responsible_name || '').trim()).filter(Boolean)).size;
+    const peopleTotal = totalPeopleCount(records);
+    const lastRecord = records[0];
+    const metrics = [
+      [numberText(records.length), 'checklists no histórico'],
+      [numberText(peopleTotal), 'pessoas acumuladas'],
+      [numberText(responsibleCount), 'responsáveis'],
+      [lastRecord ? dateText(lastRecord.created_at) : '-', 'último checklist']
+    ];
+
+    $('#historyMetricGrid').innerHTML = metrics.map(([value, label]) => `
+      <article class="metric-card ${String(value).length > 14 ? 'compact-value' : ''}">
+        <strong>${htmlText(value)}</strong>
+        <span>${label}</span>
+      </article>
+    `).join('');
+  }
+
+  function renderHistoryList(records) {
+    $('#historyCountPill').textContent = pluralText(records.length, 'registro', 'registros');
+    if (!records.length) {
+      renderEmpty('#historyList', 'Nenhum checklist encontrado no período selecionado.');
+      return;
+    }
+
+    $('#historyList').innerHTML = `
+      <div class="history-row header">
+        <span>Data e hora</span>
+        <span>Banheiro</span>
+        <span>Motivo</span>
+        <span>Ação</span>
+        <span>Responsável</span>
+        <span>Detalhes</span>
+      </div>
+      ${records.map((record) => `
+        <article class="history-row">
+          <time>${htmlText(dateText(record.created_at))}</time>
+          <strong title="${htmlText(record.bathroom_name)}">${htmlText(shortBathroomName(record.bathroom_name))}</strong>
+          <span>${htmlText(labels[record.reason] || record.reason || '-')}</span>
+          <span>${htmlText(actionsText(record))}</span>
+          <strong>${htmlText(record.responsible_name || 'Sem responsável')}</strong>
+          <span>${htmlText(historyDetailsText(record))}</span>
+        </article>
+      `).join('')}
+    `;
+  }
+
+  async function loadHistory() {
+    const params = paramsForMode('history');
+    params.set('limit', '1000');
+    const records = await api(`/api/bathroom-checklists?${params.toString()}`);
+    currentHistoryRecords = records;
+    renderHistoryMetrics(records);
+    renderHistoryList(records);
+  }
+
   function downloadBlob(filename, content, type) {
     const blob = new Blob([content], { type });
     const link = document.createElement('a');
@@ -1352,6 +1434,7 @@
     setStep(viewName);
     if (viewName === 'graph') loadGraph().catch(() => {});
     if (viewName === 'report') loadReport().catch(() => {});
+    if (viewName === 'history') loadHistory().catch(() => {});
   }
 
   function setupTabs() {
@@ -1386,11 +1469,13 @@
     $('#checklistForm').addEventListener('submit', saveChecklist);
     $('#loadGraph').addEventListener('click', () => loadGraph().catch((error) => alert(error.message)));
     $('#loadReport').addEventListener('click', () => loadReport().catch((error) => alert(error.message)));
+    $('#loadHistory').addEventListener('click', () => loadHistory().catch((error) => alert(error.message)));
     $('#downloadGraph').addEventListener('click', downloadGraphSvg);
     $('#downloadReport').addEventListener('click', downloadReportCsv);
     $('#downloadReportBottom').addEventListener('click', downloadReportCsv);
     loadGraph().catch(() => {});
     loadReport().catch(() => {});
+    loadHistory().catch(() => {});
   }
 
   init();

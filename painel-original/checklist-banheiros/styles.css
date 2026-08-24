@@ -46,7 +46,8 @@ body[data-step="form"] #welcomeStep,
 body[data-step="form"] #bathroomStep,
 body[data-step="form"] #startChecklistCard,
 body[data-step="graph"] #checklistView,
-body[data-step="report"] #checklistView {
+body[data-step="report"] #checklistView,
+body[data-step="history"] #checklistView {
   display: none !important;
 }
 
@@ -108,7 +109,7 @@ textarea {
   border-radius: 14px;
   display: grid;
   gap: 8px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   padding: 4px;
 }
 
@@ -673,6 +674,45 @@ textarea {
   overflow-wrap: anywhere;
 }
 
+.history-list {
+  display: grid;
+  gap: 8px;
+  overflow-x: auto;
+}
+
+.history-row {
+  align-items: center;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 128px minmax(130px, .9fr) 86px minmax(150px, 1.1fr) minmax(125px, .9fr) minmax(220px, 1.4fr);
+  min-width: 900px;
+  padding: 8px 10px;
+}
+
+.history-row.header {
+  background: transparent;
+  border: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+  padding-bottom: 0;
+}
+
+.history-row strong,
+.history-row span,
+.history-row time {
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.history-row time {
+  color: var(--muted);
+  font-weight: 800;
+}
+
 body[data-step="graph"] .card {
   border-radius: 12px;
   padding: 11px;
@@ -969,7 +1009,7 @@ body[data-step="graph"] .mini-metric {
 
   .tabs {
     gap: 4px;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .tab {
@@ -1040,11 +1080,18 @@ body[data-step="graph"] .mini-metric {
     grid-template-columns: 1fr;
   }
 
+  .history-row {
+    gap: 6px;
+    grid-template-columns: 1fr;
+    min-width: 0;
+  }
+
   .comparison-row {
     min-width: 0;
   }
 
-  .comparison-row.header {
+  .comparison-row.header,
+  .history-row.header {
     display: none;
   }
 

@@ -3489,6 +3489,17 @@ addRoute('GET', '/api/bathroom-checklists', async ({ query, res }) => {
   ok(res, loadBathroomChecklistRows(query, limit));
 });
 
+addRoute('DELETE', '/api/bathroom-checklists/history', async ({ query, res }) => {
+  if (query.confirm !== 'limpar-historico-checklists') {
+    return fail(res, 400, 'Confirmação inválida para limpar o histórico.');
+  }
+  const deleted = getDb().prepare('DELETE FROM bathroom_checklists').run().changes || 0;
+  ok(res, {
+    deleted,
+    cleared_at: nowIso()
+  });
+});
+
 addRoute('POST', '/api/bathroom-checklists', async ({ body, res }) => {
   const db = getDb();
   const checklist = normalizeBathroomChecklistBody(body);
