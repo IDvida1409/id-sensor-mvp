@@ -33,45 +33,6 @@ body {
   min-height: 100vh;
 }
 
-body[data-auth="locked"] .topbar,
-body[data-auth="locked"] .shell,
-body[data-auth="unlocked"] .login-screen {
-  display: none !important;
-}
-
-.login-screen {
-  align-items: center;
-  display: grid;
-  min-height: 100vh;
-  padding: 18px;
-}
-
-.login-card {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  box-shadow: 0 20px 48px rgba(15, 35, 62, .12);
-  display: grid;
-  gap: 14px;
-  margin: 0 auto;
-  max-width: 380px;
-  padding: 22px;
-  width: 100%;
-}
-
-.login-card img {
-  height: 44px;
-  object-fit: contain;
-  object-position: left center;
-  width: 132px;
-}
-
-.login-card h1 {
-  font-size: 21px;
-  line-height: 1.15;
-  margin: 0;
-}
-
 body[data-step="welcome"] #bathroomStep,
 body[data-step="welcome"] #startChecklistCard,
 body[data-step="welcome"] #checklistForm,

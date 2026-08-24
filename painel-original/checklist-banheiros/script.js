@@ -131,9 +131,9 @@
   let currentReport = null;
   let currentGraphSvg = '';
   let appStarted = false;
+  let historyUnlocked = false;
 
   const ACCESS_PASSWORD = '12345678';
-  const ACCESS_KEY = 'bathroomChecklistAccess';
 
   const $ = (selector) => document.querySelector(selector);
   const $$ = (selector) => [...document.querySelectorAll(selector)];
@@ -157,37 +157,15 @@
     status.className = `status ${type}`;
   }
 
-  function hasAccess() {
-    return sessionStorage.getItem(ACCESS_KEY) === 'ok';
-  }
-
-  function setLoginStatus(message, type = '') {
-    const status = $('#loginStatus');
-    if (!status) return;
-    status.textContent = message;
-    status.className = `status ${type}`;
-  }
-
-  function applyAccessState() {
-    document.body.dataset.auth = hasAccess() ? 'unlocked' : 'locked';
-    if (!hasAccess()) setTimeout(() => $('#accessPassword')?.focus(), 100);
-  }
-
-  function setupAccessGate() {
-    applyAccessState();
-    $('#loginForm').addEventListener('submit', (event) => {
-      event.preventDefault();
-      const password = $('#accessPassword').value;
-      if (password !== ACCESS_PASSWORD) {
-        setLoginStatus('Senha inválida.', 'error');
-        return;
-      }
-      sessionStorage.setItem(ACCESS_KEY, 'ok');
-      $('#accessPassword').value = '';
-      setLoginStatus('');
-      applyAccessState();
-      startApp().catch((error) => setLoginStatus(error.message, 'error'));
-    });
+  function requestHistoryAccess() {
+    if (historyUnlocked) return true;
+    const password = prompt('Digite a senha para acessar o histórico:');
+    if (password === ACCESS_PASSWORD) {
+      historyUnlocked = true;
+      return true;
+    }
+    if (password !== null) alert('Senha inválida.');
+    return false;
   }
 
   function setStep(step) {
@@ -551,7 +529,7 @@
       resetChecklist(true);
       loadGraph().catch(() => {});
       loadReport().catch(() => {});
-      loadHistory().catch(() => {});
+      if (historyUnlocked) loadHistory().catch(() => {});
     } catch (error) {
       setStatus(error.message, 'error');
     }
@@ -1320,6 +1298,8 @@
   }
 
   async function clearHistory() {
+    if (!requestHistoryAccess()) return;
+
     const filters = selectedFilterText('history');
     const message = `Limpar o histórico de ${filters.from} até ${filters.to} para ${filters.bathroom}?`;
     if (!confirm(message)) return;
@@ -1473,6 +1453,8 @@
   }
 
   function activateView(viewName) {
+    if (viewName === 'history' && !requestHistoryAccess()) return;
+
     $$('.tab').forEach((tab) => tab.classList.toggle('active', tab.dataset.view === viewName));
     $$('.view').forEach((view) => view.classList.toggle('active', view.id === `${viewName}View`));
     if (viewName === 'checklist') {
@@ -1523,19 +1505,19 @@
     $('#checklistForm').addEventListener('submit', saveChecklist);
     $('#loadGraph').addEventListener('click', () => loadGraph().catch((error) => alert(error.message)));
     $('#loadReport').addEventListener('click', () => loadReport().catch((error) => alert(error.message)));
-    $('#loadHistory').addEventListener('click', () => loadHistory().catch((error) => alert(error.message)));
+    $('#loadHistory').addEventListener('click', () => {
+      if (requestHistoryAccess()) loadHistory().catch((error) => alert(error.message));
+    });
     $('#clearHistory').addEventListener('click', () => clearHistory().catch((error) => alert(error.message)));
     $('#downloadGraph').addEventListener('click', downloadGraphSvg);
     $('#downloadReport').addEventListener('click', downloadReportCsv);
     $('#downloadReportBottom').addEventListener('click', downloadReportCsv);
     loadGraph().catch(() => {});
     loadReport().catch(() => {});
-    loadHistory().catch(() => {});
   }
 
   function init() {
-    setupAccessGate();
-    if (hasAccess()) startApp().catch((error) => setLoginStatus(error.message, 'error'));
+    startApp().catch((error) => alert(error.message));
   }
 
   init();
