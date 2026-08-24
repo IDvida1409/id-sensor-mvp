@@ -534,6 +534,10 @@
     return value ? pluralText(value, 'pessoa', 'pessoas') : 'sem dados';
   }
 
+  function shortBathroomName(name) {
+    return String(name || 'Banheiro').replace(/^Banheiro\s+/i, '');
+  }
+
   function percentValue(count, total) {
     return total ? Math.round((count / total) * 100) : 0;
   }
@@ -777,11 +781,11 @@
         [numberText(groups.length), 'banheiros comparados'],
         [numberText(records.length), 'checklists gerados'],
         [numberText(peopleTotal), 'pessoas acumuladas'],
-        [topGroup ? topGroup.bathroom.name : '-', 'maior ocorrência']
+        [topGroup ? shortBathroomName(topGroup.bathroom.name) : '-', 'maior ocorrência']
       ];
 
     $('#graphMetricGrid').innerHTML = metrics.map(([value, label]) => `
-      <article class="metric-card">
+      <article class="metric-card ${String(value).length > 14 ? 'compact-value' : ''}">
         <strong>${value}</strong>
         <span>${label}</span>
       </article>
@@ -839,7 +843,7 @@
         ]);
         return `
           <div class="comparison-row graph">
-            <strong>${group.bathroom.name}</strong>
+            <strong title="${group.bathroom.name}">${shortBathroomName(group.bathroom.name)}</strong>
             <span>${peopleText(totalPeopleCount(groupRecords))}</span>
             ${miniMetricHtml(cleanRate, cleanRate >= 60 ? 'var(--red)' : cleanRate >= 35 ? 'var(--orange)' : 'var(--teal)')}
             ${miniMetricHtml(odorRate, odorRate >= 45 ? 'var(--red)' : odorRate >= 25 ? 'var(--orange)' : 'var(--teal)')}

@@ -588,6 +588,11 @@ textarea {
   margin-top: 8px;
 }
 
+.metric-card.compact-value strong {
+  font-size: 18px;
+  line-height: 1.15;
+}
+
 .section-heading {
   align-items: start;
   display: flex;
@@ -666,6 +671,71 @@ textarea {
 .comparison-row strong,
 .comparison-row span {
   overflow-wrap: anywhere;
+}
+
+body[data-step="graph"] .card {
+  border-radius: 12px;
+  padding: 11px;
+}
+
+body[data-step="graph"] .analysis-hero {
+  min-height: 60px;
+}
+
+body[data-step="graph"] .metric-grid,
+body[data-step="graph"] .graph-grid,
+body[data-step="graph"] .comparison-table {
+  gap: 8px;
+}
+
+body[data-step="graph"] .metric-card {
+  border-radius: 11px;
+  padding: 9px 10px;
+}
+
+body[data-step="graph"] .metric-card strong {
+  font-size: 20px;
+}
+
+body[data-step="graph"] .metric-card.compact-value strong {
+  font-size: 15px;
+}
+
+body[data-step="graph"] .metric-card span {
+  font-size: 11px;
+  margin-top: 5px;
+}
+
+body[data-step="graph"] .section-heading {
+  margin-bottom: 8px;
+}
+
+body[data-step="graph"] .comparison-row.graph {
+  gap: 7px;
+  grid-template-columns: minmax(135px, 1fr) 78px minmax(128px, .9fr) minmax(118px, .9fr) minmax(130px, .95fr) 104px;
+  min-width: 660px;
+  padding: 6px 8px;
+}
+
+body[data-step="graph"] .comparison-row.graph strong:first-child {
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body[data-step="graph"] .comparison-row.header {
+  font-size: 11px;
+}
+
+body[data-step="graph"] .mini-track {
+  height: 9px;
+  min-width: 70px;
+}
+
+body[data-step="graph"] .mini-metric {
+  gap: 6px;
+  grid-template-columns: minmax(64px, 1fr) 34px;
 }
 
 .mini-track,
