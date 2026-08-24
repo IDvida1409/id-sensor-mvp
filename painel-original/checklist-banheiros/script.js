@@ -486,8 +486,8 @@
       supplies,
       replenishments,
       actions,
-      notes: $('#notes').value,
-      responsible_name: $('#responsibleName').value
+      notes: $('#notes').value.trim(),
+      responsible_name: $('#responsibleName').value.trim()
     };
   }
 
@@ -518,6 +518,13 @@
 
   async function saveChecklist(event) {
     event.preventDefault();
+    const responsibleInput = $('#responsibleName');
+    if (!responsibleInput.value.trim()) {
+      setStatus('Informe o nome de quem realizou o checklist.', 'error');
+      responsibleInput.focus();
+      return;
+    }
+
     setStatus('Salvando checklist...');
     try {
       const payload = collectChecklist();

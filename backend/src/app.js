@@ -3217,6 +3217,10 @@ function normalizeBathroomChecklistBody(body = {}) {
   const actionsInput = Array.isArray(body.actions) ? body.actions : [];
   const actions = actionsInput.filter((actionValue) => BATHROOM_ACTIONS.includes(actionValue));
   const finalActions = actions.length ? Array.from(new Set(actions)) : ['nenhuma_acao'];
+  const responsibleName = normalizeBathroomText(body.responsible_name || body.responsibleName, 160);
+  if (!responsibleName) {
+    throw bathroomChecklistError('Informe o nome de quem realizou o checklist.');
+  }
 
   return {
     id: id('bathcheck'),
@@ -3230,7 +3234,7 @@ function normalizeBathroomChecklistBody(body = {}) {
     replenishments,
     actions: finalActions,
     notes: normalizeBathroomText(body.notes || body.observation, 1000),
-    responsibleName: normalizeBathroomText(body.responsible_name || body.responsibleName, 160),
+    responsibleName,
     createdAt: nowIso()
   };
 }
