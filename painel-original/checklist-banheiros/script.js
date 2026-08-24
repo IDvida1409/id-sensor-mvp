@@ -120,20 +120,6 @@
         { key: 'pia_suja', label: 'Pia/bancada suja' },
         { key: 'detalhe_manutencao', label: 'Necessita manutenção' }
       ]
-    },
-    piso_molhado: {
-      title: 'Detalhes do piso molhado',
-      hint: 'O checklist já registra o piso molhado e sugere a ação automaticamente.',
-      options: [
-        { key: 'piso_molhado', label: 'Piso molhado confirmado', locked: true }
-      ]
-    },
-    manutencao: {
-      title: 'Detalhes da manutenção',
-      hint: 'Registre a observação do problema no campo abaixo, se necessário.',
-      options: [
-        { key: 'detalhe_manutencao', label: 'Necessita manutenção', locked: true }
-      ]
     }
   };
 
@@ -299,7 +285,7 @@
 
   function applyReasonVisibility() {
     const reason = state.selected.reason;
-    const showCondition = ['limpeza', 'piso_molhado'].includes(reason);
+    const showCondition = reason === 'limpeza';
     $('#conditionFieldset').hidden = !showCondition;
     $('#supplyFieldset').hidden = reason !== 'reposicao';
     $('#replenishmentFieldset').hidden = reason !== 'reposicao';
@@ -333,11 +319,11 @@
   function currentConditionFlags() {
     const details = state.selected.reason_details;
     return {
-      piso_molhado: $('#pisoMolhado')?.checked || details.has('piso_molhado') || state.selected.reason === 'piso_molhado',
+      piso_molhado: $('#pisoMolhado')?.checked || details.has('piso_molhado'),
       lixeira_cheia: $('#lixeiraCheia')?.checked || details.has('lixeira_cheia'),
       vaso_sujo: $('#vasoSujo')?.checked || details.has('vaso_sujo'),
       pia_suja: $('#piaSuja')?.checked || details.has('pia_suja'),
-      detalhe_manutencao: details.has('detalhe_manutencao') || state.selected.reason === 'manutencao'
+      detalhe_manutencao: details.has('detalhe_manutencao')
     };
   }
 
@@ -361,14 +347,6 @@
       actions.add(needsComplete ? 'limpeza_completa' : 'limpeza_rapida');
       if (state.selected.odor_level !== 'nao') actions.add('correcao_odor');
       if (flags.detalhe_manutencao) actions.add('manutencao');
-    }
-
-    if (state.selected.reason === 'piso_molhado') {
-      actions.add('limpeza_rapida');
-    }
-
-    if (state.selected.reason === 'manutencao') {
-      actions.add('manutencao');
     }
 
     if (!actions.size) actions.add('nenhuma_acao');
@@ -939,10 +917,13 @@
   }
 
   function reasonRows(records) {
-    const reasons = ['reposicao', 'limpeza', 'piso_molhado', 'manutencao'];
+    const reasons = ['reposicao', 'limpeza'];
     return reasons.map((reason) => [
       labels[reason],
-      records.filter((record) => record.reason === reason).length,
+      records.filter((record) => {
+        const normalizedReason = ['piso_molhado', 'manutencao'].includes(record.reason) ? 'limpeza' : record.reason;
+        return normalizedReason === reason;
+      }).length,
       colors[reason]
     ]);
   }

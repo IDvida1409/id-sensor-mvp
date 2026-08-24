@@ -63,7 +63,7 @@ const BATHROOM_CHECKLIST_BATHROOMS = [
   { id: 'endoscopia-masculino', location: 'Endoscopia', gender: 'Masculino', name: 'Banheiro Masculino - Endoscopia' }
 ];
 const BATHROOM_BY_ID = new Map(BATHROOM_CHECKLIST_BATHROOMS.map((bathroom) => [bathroom.id, bathroom]));
-const BATHROOM_REASONS = ['reposicao', 'limpeza', 'piso_molhado', 'manutencao'];
+const BATHROOM_REASONS = ['reposicao', 'limpeza'];
 const BATHROOM_CLEAN_LEVELS = ['sim', 'parcial', 'nao'];
 const BATHROOM_ODOR_LEVELS = ['nao', 'leve', 'forte'];
 const BATHROOM_SUPPLY_LEVELS = ['cheio', 'medio', 'baixo', 'vazio'];
