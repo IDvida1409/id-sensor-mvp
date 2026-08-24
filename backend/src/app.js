@@ -79,6 +79,7 @@ const BATHROOM_ACTIONS = [
   'limpeza_rapida',
   'reposicao_papel',
   'reposicao_sabonete',
+  'reposicao_alcool',
   'correcao_odor',
   'manutencao',
   'nenhuma_acao'
@@ -3160,7 +3161,7 @@ function normalizeBathroomChecklistBody(body = {}) {
   const condition = body.condition && typeof body.condition === 'object' ? body.condition : {};
   const suppliesInput = body.supplies && typeof body.supplies === 'object' ? body.supplies : {};
   const peopleCount = normalizeBathroomNumber(body.people_count ?? body.peopleCount, 'Quantidade de pessoas');
-  const reason = normalizeBathroomChoiceValue(body.reason, BATHROOM_REASONS, '', 'Motivo do chamado');
+  const reason = normalizeBathroomChoiceValue(body.reason, BATHROOM_REASONS, '', 'Motivo');
   const cleanLevel = normalizeBathroomChoiceValue(
     condition.clean_level || condition.cleanLevel || body.clean_level,
     BATHROOM_CLEAN_LEVELS,
@@ -3184,13 +3185,15 @@ function normalizeBathroomChecklistBody(body = {}) {
   };
 
   const supplies = {};
-  for (const item of BATHROOM_SUPPLY_ITEMS) {
-    supplies[item.key] = normalizeBathroomChoiceValue(
-      suppliesInput[item.key],
-      BATHROOM_SUPPLY_LEVELS,
-      'cheio',
-      item.label
-    );
+  if (reason === 'reposicao' || Object.keys(suppliesInput).length > 0) {
+    for (const item of BATHROOM_SUPPLY_ITEMS) {
+      supplies[item.key] = normalizeBathroomChoiceValue(
+        suppliesInput[item.key],
+        BATHROOM_SUPPLY_LEVELS,
+        'cheio',
+        item.label
+      );
+    }
   }
 
   const replenishmentsInput = Array.isArray(body.replenishments) ? body.replenishments : [];

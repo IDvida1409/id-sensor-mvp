@@ -17,6 +17,7 @@
       'limpeza_rapida',
       'reposicao_papel',
       'reposicao_sabonete',
+      'reposicao_alcool',
       'correcao_odor',
       'manutencao',
       'nenhuma_acao'
@@ -37,8 +38,13 @@
     limpeza_rapida: 'Limpeza rápida',
     reposicao_papel: 'Reposição de papel',
     reposicao_sabonete: 'Reposição de sabonete',
+    reposicao_alcool: 'Reposição de álcool/outro insumo',
     correcao_odor: 'Correção de odor',
     nenhuma_acao: 'Nenhuma ação necessária',
+    lixeira_cheia: 'Lixeira cheia',
+    vaso_sujo: 'Vaso/mictório sujo',
+    pia_suja: 'Pia/bancada suja',
+    detalhe_manutencao: 'Necessita manutenção',
     cheio: 'Cheio',
     medio: 'Médio',
     baixo: 'Baixo',
@@ -76,7 +82,9 @@
     limpeza_rapida: 'var(--blue-strong)',
     reposicao_papel: 'var(--green)',
     reposicao_sabonete: 'var(--orange)',
+    reposicao_alcool: 'var(--teal)',
     correcao_odor: 'var(--red)',
+    detalhe_manutencao: 'var(--orange)',
     nenhuma_acao: 'var(--yellow)'
   };
 
@@ -90,13 +98,42 @@
 
   const state = {
     config: fallbackConfig,
+    peoplePerChecklist: 10,
     selectedBathroom: null,
     selected: {
       reason: '',
       clean_level: 'sim',
       odor_level: 'nao',
       supplies: {},
-      actions: new Set()
+      reason_details: new Set()
+    }
+  };
+
+  const reasonDetailConfig = {
+    limpeza: {
+      title: 'Detalhes da limpeza',
+      hint: 'Marque o que motivou a limpeza neste checklist.',
+      options: [
+        { key: 'piso_molhado', label: 'Piso molhado' },
+        { key: 'lixeira_cheia', label: 'Lixeira cheia' },
+        { key: 'vaso_sujo', label: 'Vaso/mictório sujo' },
+        { key: 'pia_suja', label: 'Pia/bancada suja' },
+        { key: 'detalhe_manutencao', label: 'Necessita manutenção' }
+      ]
+    },
+    piso_molhado: {
+      title: 'Detalhes do piso molhado',
+      hint: 'O checklist já registra o piso molhado e sugere a ação automaticamente.',
+      options: [
+        { key: 'piso_molhado', label: 'Piso molhado confirmado', locked: true }
+      ]
+    },
+    manutencao: {
+      title: 'Detalhes da manutenção',
+      hint: 'Registre a observação do problema no campo abaixo, se necessário.',
+      options: [
+        { key: 'detalhe_manutencao', label: 'Necessita manutenção', locked: true }
+      ]
     }
   };
 
@@ -211,7 +248,7 @@
     setNowFields();
     setStatus('');
     setStep('form');
-    setTimeout(() => $('#peopleCount').focus(), 250);
+    setTimeout(() => $('[data-radio-group="reason"] button')?.focus(), 250);
   }
 
   function changeBathroom() {
@@ -260,9 +297,93 @@
     `).join('');
   }
 
+  function applyReasonVisibility() {
+    const reason = state.selected.reason;
+    const showCondition = ['limpeza', 'piso_molhado'].includes(reason);
+    $('#conditionFieldset').hidden = !showCondition;
+    $('#supplyFieldset').hidden = reason !== 'reposicao';
+    $('#replenishmentFieldset').hidden = reason !== 'reposicao';
+  }
+
+  function renderReasonDetails() {
+    const reason = state.selected.reason;
+    const config = reasonDetailConfig[reason];
+    const field = $('#reasonDetailField');
+    if (!config) {
+      field.hidden = true;
+      $('#reasonDetailOptions').innerHTML = '';
+      return;
+    }
+
+    field.hidden = false;
+    $('#reasonDetailTitle').textContent = config.title;
+    $('#reasonDetailHint').textContent = config.hint;
+    $('#reasonDetailOptions').innerHTML = config.options.map((option) => {
+      const checked = option.locked || state.selected.reason_details.has(option.key);
+      if (option.locked) state.selected.reason_details.add(option.key);
+      return `
+        <label>
+          <input type="checkbox" data-reason-detail="${option.key}" ${checked ? 'checked' : ''} ${option.locked ? 'disabled' : ''}>
+          ${option.label}
+        </label>
+      `;
+    }).join('');
+  }
+
+  function currentConditionFlags() {
+    const details = state.selected.reason_details;
+    return {
+      piso_molhado: $('#pisoMolhado')?.checked || details.has('piso_molhado') || state.selected.reason === 'piso_molhado',
+      lixeira_cheia: $('#lixeiraCheia')?.checked || details.has('lixeira_cheia'),
+      vaso_sujo: $('#vasoSujo')?.checked || details.has('vaso_sujo'),
+      pia_suja: $('#piaSuja')?.checked || details.has('pia_suja'),
+      detalhe_manutencao: details.has('detalhe_manutencao') || state.selected.reason === 'manutencao'
+    };
+  }
+
+  function autoActions() {
+    if (!state.selected.reason) return [];
+
+    const actions = new Set();
+    const flags = currentConditionFlags();
+    const replenishments = collectReplenishments();
+    const replenished = (keys) => replenishments.some((item) => keys.includes(item.item));
+
+    if (state.selected.reason === 'reposicao') {
+      if (replenished(['papel_higienico', 'papel_toalha'])) actions.add('reposicao_papel');
+      if (replenished(['sabonete'])) actions.add('reposicao_sabonete');
+      if (replenished(['alcool_outro'])) actions.add('reposicao_alcool');
+    }
+
+    if (state.selected.reason === 'limpeza') {
+      const conditionCount = ['piso_molhado', 'lixeira_cheia', 'vaso_sujo', 'pia_suja'].filter((key) => flags[key]).length;
+      const needsComplete = state.selected.clean_level === 'nao' || state.selected.odor_level === 'forte' || conditionCount >= 2;
+      actions.add(needsComplete ? 'limpeza_completa' : 'limpeza_rapida');
+      if (state.selected.odor_level !== 'nao') actions.add('correcao_odor');
+      if (flags.detalhe_manutencao) actions.add('manutencao');
+    }
+
+    if (state.selected.reason === 'piso_molhado') {
+      actions.add('limpeza_rapida');
+    }
+
+    if (state.selected.reason === 'manutencao') {
+      actions.add('manutencao');
+    }
+
+    if (!actions.size) actions.add('nenhuma_acao');
+    return [...actions];
+  }
+
   function renderActions() {
-    $('#actionGrid').innerHTML = state.config.actions.map((action) => `
-      <button type="button" data-action="${action}">${labels[action] || action}</button>
+    const actions = autoActions();
+    if (!actions.length) {
+      $('#actionGrid').innerHTML = '<p class="auto-action-placeholder">Selecione o motivo para visualizar a ação realizada.</p>';
+      return;
+    }
+
+    $('#actionGrid').innerHTML = actions.map((action) => `
+      <span class="auto-action-chip ${action === 'nenhuma_acao' ? 'neutral' : ''}">${labels[action] || action}</span>
     `).join('');
   }
 
@@ -291,6 +412,12 @@
       if (radioButton) {
         const group = radioButton.closest('[data-radio-group]').dataset.radioGroup;
         selectRadio(group, radioButton.dataset.value);
+        if (group === 'reason') {
+          state.selected.reason_details.clear();
+          applyReasonVisibility();
+          renderReasonDetails();
+        }
+        renderActions();
         return;
       }
 
@@ -301,23 +428,31 @@
         supplyButton.closest('[data-supply]').querySelectorAll('button').forEach((button) => {
           button.classList.toggle('active', button === supplyButton);
         });
+        renderActions();
         return;
       }
 
-      const actionButton = event.target.closest('[data-action]');
-      if (actionButton) {
-        const action = actionButton.dataset.action;
-        if (action === 'nenhuma_acao') {
-          state.selected.actions.clear();
-          state.selected.actions.add(action);
-        } else {
-          state.selected.actions.delete('nenhuma_acao');
-          if (state.selected.actions.has(action)) state.selected.actions.delete(action);
-          else state.selected.actions.add(action);
-        }
-        $$('[data-action]').forEach((button) => {
-          button.classList.toggle('active', state.selected.actions.has(button.dataset.action));
-        });
+      const detailCheckbox = event.target.closest('[data-reason-detail]');
+      if (detailCheckbox) {
+        if (detailCheckbox.checked) state.selected.reason_details.add(detailCheckbox.dataset.reasonDetail);
+        else state.selected.reason_details.delete(detailCheckbox.dataset.reasonDetail);
+        renderActions();
+      }
+    });
+
+    document.addEventListener('input', (event) => {
+      if (event.target.matches('[data-repl-quantity], [data-repl-unit]')) renderActions();
+    });
+
+    document.addEventListener('change', (event) => {
+      if (event.target.matches('[data-reason-detail]')) {
+        if (event.target.checked) state.selected.reason_details.add(event.target.dataset.reasonDetail);
+        else state.selected.reason_details.delete(event.target.dataset.reasonDetail);
+        renderActions();
+      }
+
+      if (event.target.matches('#pisoMolhado, #lixeiraCheia, #vasoSujo, #piaSuja, [data-repl-quantity], [data-repl-unit]')) {
+        renderActions();
       }
     });
   }
@@ -332,9 +467,12 @@
 
   function collectChecklist() {
     if (!state.selectedBathroom) throw new Error('Selecione um banheiro.');
-    if (!state.selected.reason) throw new Error('Selecione o motivo do chamado.');
-    const people = Number($('#peopleCount').value);
-    if (!Number.isFinite(people) || people < 0) throw new Error('Informe a quantidade de pessoas vista no painel.');
+    if (!state.selected.reason) throw new Error('Selecione o motivo.');
+    const people = state.peoplePerChecklist;
+    const conditionFlags = currentConditionFlags();
+    const actions = autoActions();
+    const replenishments = state.selected.reason === 'reposicao' ? collectReplenishments() : [];
+    const supplies = state.selected.reason === 'reposicao' ? state.selected.supplies : {};
 
     return {
       bathroom_id: state.selectedBathroom.id,
@@ -343,14 +481,14 @@
       condition: {
         clean_level: state.selected.clean_level,
         odor_level: state.selected.odor_level,
-        piso_molhado: $('#pisoMolhado').checked,
-        lixeira_cheia: $('#lixeiraCheia').checked,
-        vaso_sujo: $('#vasoSujo').checked,
-        pia_suja: $('#piaSuja').checked
+        piso_molhado: conditionFlags.piso_molhado,
+        lixeira_cheia: conditionFlags.lixeira_cheia,
+        vaso_sujo: conditionFlags.vaso_sujo,
+        pia_suja: conditionFlags.pia_suja
       },
-      supplies: state.selected.supplies,
-      replenishments: collectReplenishments(),
-      actions: [...state.selected.actions],
+      supplies,
+      replenishments,
+      actions,
       notes: $('#notes').value,
       responsible_name: $('#responsibleName').value
     };
@@ -363,9 +501,12 @@
     state.selected.clean_level = 'sim';
     state.selected.odor_level = 'nao';
     state.selected.supplies = {};
-    state.selected.actions = new Set();
+    state.selected.reason_details = new Set();
+    $('#peopleCount').value = state.peoplePerChecklist;
     renderSupplyLevels();
     renderReplenishments();
+    applyReasonVisibility();
+    renderReasonDetails();
     renderActions();
     ['reason', 'clean_level', 'odor_level'].forEach((group) => selectRadio(group, state.selected[group]));
     setNowFields();
@@ -374,7 +515,7 @@
       $('#selectedBathroomName').textContent = bathroom.name;
       $('#checklistForm').hidden = false;
       setStep('form');
-      setTimeout(() => $('#peopleCount').focus(), 150);
+      setTimeout(() => $('[data-radio-group="reason"] button')?.focus(), 150);
     }
   }
 
@@ -427,6 +568,10 @@
     return new Set(records.map((record) => Number(record.people_count || 0)).filter((value) => value > 0)).size;
   }
 
+  function totalPeopleCount(records) {
+    return records.reduce((total, record) => total + Number(record.people_count || state.peoplePerChecklist), 0);
+  }
+
   function groupByBathroom(records) {
     const groups = new Map();
     records.forEach((record) => {
@@ -446,18 +591,23 @@
   }
 
   function recordsForBucket(records, bucket) {
-    return records.filter((record) => {
-      const people = Number(record.people_count || 0);
-      return people >= bucket.min && people <= bucket.max;
-    });
+    let accumulated = 0;
+    return [...records]
+      .sort((a, b) => new Date(a.created_at || 0) - new Date(b.created_at || 0))
+      .filter((record) => {
+        accumulated += Number(record.people_count || state.peoplePerChecklist);
+        return accumulated >= bucket.min && accumulated <= bucket.max;
+      });
   }
 
   function firstPeople(records, predicate) {
-    const values = records
-      .filter(predicate)
-      .map((record) => Number(record.people_count || 0))
-      .filter((value) => value > 0);
-    return values.length ? Math.min(...values) : null;
+    let accumulated = 0;
+    const orderedRecords = [...records].sort((a, b) => new Date(a.created_at || 0) - new Date(b.created_at || 0));
+    for (const record of orderedRecords) {
+      accumulated += Number(record.people_count || state.peoplePerChecklist);
+      if (predicate(record)) return accumulated;
+    }
+    return null;
   }
 
   function firstPeopleText(values) {
@@ -502,6 +652,14 @@
 
   function hasSupplyIssue(record) {
     return state.config.supply_items.some((item) => supplyCritical(record, item.key));
+  }
+
+  function hasSupplyLevel(record) {
+    return !!record.supplies && Object.keys(record.supplies).length > 0;
+  }
+
+  function supplyLevelRecords(records) {
+    return records.filter((record) => record.reason === 'reposicao' || hasSupplyLevel(record));
   }
 
   function conditionIssue(record) {
@@ -629,17 +787,18 @@
     const groups = comparisonGroups(records, selectedBathroomId).filter((group) => group.records.length);
     const topGroup = [...groups].sort((a, b) => occurrenceRate(b.records) - occurrenceRate(a.records))[0];
     const totalReplenishments = records.reduce((total, record) => total + (record.replenishments || []).filter((item) => Number(item.quantity || 0) > 0).length, 0);
+    const peopleTotal = totalPeopleCount(records);
     const metrics = selectedBathroomId
       ? [
         [numberText(records.length), 'checklists gerados'],
-        [numberText(distinctPeopleCount(records)), 'quantidades vistas no painel'],
+        [numberText(peopleTotal), 'pessoas acumuladas'],
         [numberText(records.filter(hasOccurrence).length), 'checklists com ocorrência'],
         [numberText(totalReplenishments), 'reposições registradas']
       ]
       : [
         [numberText(groups.length), 'banheiros comparados'],
         [numberText(records.length), 'checklists gerados'],
-        [numberText(distinctPeopleCount(records)), 'quantidades vistas no painel'],
+        [numberText(peopleTotal), 'pessoas acumuladas'],
         [topGroup ? topGroup.bathroom.name : '-', 'maior ocorrência']
       ];
 
@@ -657,7 +816,7 @@
     const metrics = [
       [selectedBathroomId ? '1' : numberText(groups.length), selectedBathroomId ? 'banheiro selecionado' : 'banheiros com dados'],
       [numberText(records.length), 'checklists no período'],
-      [numberText(distinctPeopleCount(records)), 'quantidades analisadas'],
+      [numberText(totalPeopleCount(records)), 'pessoas acumuladas'],
       [numberText(totalReplenishments), 'reposições registradas']
     ];
 
@@ -684,11 +843,11 @@
     $('#graphComparison').innerHTML = `
       <div class="comparison-row graph header">
         <span>Banheiro</span>
-        <span>Checklists</span>
+        <span>Pessoas</span>
         <span>Limpeza parcial/não</span>
         <span>Odor leve/forte</span>
         <span>Papel H. baixo/vazio</span>
-        <span>Ponto observado</span>
+        <span>Primeiro ponto</span>
       </div>
       ${groups.map((group) => {
         const groupRecords = group.records;
@@ -703,7 +862,7 @@
         return `
           <div class="comparison-row graph">
             <strong>${group.bathroom.name}</strong>
-            <span>${numberText(groupRecords.length)}</span>
+            <span>${peopleText(totalPeopleCount(groupRecords))}</span>
             ${miniMetricHtml(cleanRate, cleanRate >= 60 ? 'var(--red)' : cleanRate >= 35 ? 'var(--orange)' : 'var(--teal)')}
             ${miniMetricHtml(odorRate, odorRate >= 45 ? 'var(--red)' : odorRate >= 25 ? 'var(--orange)' : 'var(--teal)')}
             ${miniMetricHtml(paperRate, paperRate >= 55 ? 'var(--red)' : paperRate >= 35 ? 'var(--orange)' : 'var(--teal)')}
@@ -739,8 +898,9 @@
   }
 
   function renderSupplyStackChart(records) {
-    if (!records.length) {
-      renderEmpty('#supplyLevelsChart');
+    const supplyRecords = supplyLevelRecords(records);
+    if (!supplyRecords.length) {
+      renderEmpty('#supplyLevelsChart', 'Sem leitura de insumos no período selecionado.');
       return;
     }
 
@@ -755,7 +915,7 @@
         <article class="supply-stack-item">
           <strong>${item.label}</strong>
           ${peopleBuckets.map((bucket) => {
-            const bucketRecords = recordsForBucket(records, bucket);
+            const bucketRecords = recordsForBucket(supplyRecords, bucket);
             const parts = fieldDistribution(bucketRecords, ['cheio', 'medio', 'baixo', 'vazio'], (record) => record.supplies?.[item.key] || 'cheio');
             return `
               <div class="supply-stack-row">
@@ -788,7 +948,8 @@
   }
 
   function actionRows(records) {
-    const rows = state.config.actions.map((action) => [
+    const actions = [...new Set([...(state.config.actions || []), 'reposicao_alcool'])];
+    const rows = actions.map((action) => [
       labels[action] || action,
       records.filter((record) => (record.actions || []).includes(action)).length,
       colors[action] || 'var(--blue-strong)'
@@ -827,7 +988,7 @@
           events += 1;
         });
       });
-      const peopleSum = records.reduce((total, record) => total + Number(record.people_count || 0), 0);
+      const peopleSum = totalPeopleCount(records);
       const average = peopleSum > 0 ? (quantity / peopleSum) * 100 : 0;
       return {
         ...item,
@@ -863,7 +1024,7 @@
       <div class="comparison-row report header">
         <span>Banheiro</span>
         <span>Checklists</span>
-        <span>Qtd. pessoas</span>
+        <span>Pessoas</span>
         <span>Condição parcial/não</span>
         <span>Odor leve/forte</span>
         <span>Insumo crítico</span>
@@ -882,7 +1043,7 @@
           <div class="comparison-row report">
             <strong>${group.bathroom.name}</strong>
             <span>${numberText(groupRecords.length)}</span>
-            <span>${pluralText(distinctPeopleCount(groupRecords), 'valor', 'valores')}</span>
+            <span>${peopleText(totalPeopleCount(groupRecords))}</span>
             <strong>${cleanRate}%</strong>
             <strong>${odorRate}%</strong>
             <span>${criticalSupply && criticalSupply.count ? criticalSupply.label : 'sem crítico'}</span>
@@ -894,11 +1055,11 @@
 
   function observedFields(records) {
     return [
-      ['Limpeza parcial/não', firstPeople(records, (record) => record.clean_level !== 'sim'), 'primeira ocorrência no período'],
-      ['Odor leve/forte', firstPeople(records, (record) => record.odor_level !== 'nao'), 'primeira ocorrência no período'],
-      ['Papel higiênico baixo/vazio', firstPeople(records, (record) => supplyCritical(record, 'papel_higienico')), 'primeiro registro crítico'],
-      ['Papel toalha baixo/vazio', firstPeople(records, (record) => supplyCritical(record, 'papel_toalha')), 'primeiro registro crítico'],
-      ['Sabonete baixo/vazio', firstPeople(records, (record) => supplyCritical(record, 'sabonete')), 'primeiro registro crítico']
+      ['Limpeza parcial/não', firstPeople(records, (record) => record.clean_level !== 'sim'), 'pessoas acumuladas até a primeira ocorrência'],
+      ['Odor leve/forte', firstPeople(records, (record) => record.odor_level !== 'nao'), 'pessoas acumuladas até a primeira ocorrência'],
+      ['Papel higiênico baixo/vazio', firstPeople(records, (record) => supplyCritical(record, 'papel_higienico')), 'pessoas acumuladas até o primeiro registro crítico'],
+      ['Papel toalha baixo/vazio', firstPeople(records, (record) => supplyCritical(record, 'papel_toalha')), 'pessoas acumuladas até o primeiro registro crítico'],
+      ['Sabonete baixo/vazio', firstPeople(records, (record) => supplyCritical(record, 'sabonete')), 'pessoas acumuladas até o primeiro registro crítico']
     ];
   }
 
@@ -941,8 +1102,9 @@
   }
 
   function renderSupplyLevelReport(records) {
-    if (!records.length) {
-      renderEmpty('#supplyLevelReport');
+    const supplyRecords = supplyLevelRecords(records);
+    if (!supplyRecords.length) {
+      renderEmpty('#supplyLevelReport', 'Sem leitura de insumos no período selecionado.');
       return;
     }
     $('#supplyLevelReport').innerHTML = `
@@ -954,7 +1116,7 @@
         <div class="comparison-row levels">
           <strong>${item.label}</strong>
           ${peopleBuckets.slice(0, 4).map((bucket) => {
-            const bucketRecords = recordsForBucket(records, bucket);
+            const bucketRecords = recordsForBucket(supplyRecords, bucket);
             return `<span>${dominantLevel(bucketRecords, (record) => record.supplies?.[item.key] || 'cheio')}</span>`;
           }).join('')}
         </div>
@@ -997,12 +1159,13 @@
     const height = 820;
     const maxCondition = Math.max(...conditionRows.map((row) => row[1]), 1);
     const maxAction = Math.max(...action.map((row) => row[1]), 1);
+    const peopleTotal = totalPeopleCount(records);
     return `
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="Gráfico dos checklists">
         <rect width="${width}" height="${height}" rx="28" fill="#f4f7fb"/>
         <rect x="34" y="34" width="1132" height="96" rx="18" fill="#ffffff" stroke="${colorHex.line}"/>
         <text x="70" y="78" fill="${colorHex.text}" font-size="30" font-weight="700">Gráfico dos checklists</text>
-        <text x="70" y="108" fill="${colorHex.muted}" font-size="16">Quantidade de pessoas vista no painel, condição, odor, insumos e ação.</text>
+        <text x="70" y="108" fill="${colorHex.muted}" font-size="16">${numberText(records.length)} checklists | ${numberText(peopleTotal)} pessoas acumuladas | condição, odor, insumos e ação.</text>
         <rect x="34" y="160" width="1132" height="190" rx="18" fill="#ffffff" stroke="${colorHex.line}"/>
         <text x="70" y="204" fill="${colorHex.text}" font-size="22" font-weight="700">${selectedBathroomId ? 'Resumo do banheiro' : 'Todos os banheiros: comparativo'}</text>
         ${groups.slice(0, 4).map((group, index) => {
@@ -1102,14 +1265,14 @@
       csvLine(['De', filters.from, 'Até', filters.to, 'Banheiro', filters.bathroom]),
       '',
       csvLine(['Resumo por banheiro']),
-      csvLine(['Banheiro', 'Checklists', 'Quantidades analisadas', 'Condição parcial/não', 'Odor leve/forte', 'Ocorrências'])
+      csvLine(['Banheiro', 'Checklists', 'Pessoas acumuladas', 'Condição parcial/não', 'Odor leve/forte', 'Ocorrências'])
     ];
 
     groups.forEach((group) => {
       lines.push(csvLine([
         group.bathroom.name,
         group.records.length,
-        distinctPeopleCount(group.records),
+        totalPeopleCount(group.records),
         `${rate(group.records, (record) => record.clean_level !== 'sim')}%`,
         `${rate(group.records, (record) => record.odor_level !== 'nao')}%`,
         group.records.filter(hasOccurrence).length
@@ -1118,8 +1281,8 @@
 
     lines.push(
       '',
-      csvLine(['Quantidade observada por campo']),
-      csvLine(['Campo', 'Quantidade de pessoas', 'Observação'])
+      csvLine(['Pessoas acumuladas por campo']),
+      csvLine(['Campo', 'Pessoas acumuladas', 'Observação'])
     );
     observedFields(records).forEach(([label, people, note]) => {
       lines.push(csvLine([label, peopleText(people), note]));
@@ -1145,8 +1308,8 @@
       csvLine([
         'Data e hora',
         'Banheiro',
-        'Quantidade de pessoas vista no painel',
-        'Motivo do chamado',
+        'Pessoas consideradas no checklist',
+        'Motivo',
         'Banheiro limpo',
         'Odor',
         'Piso molhado',
@@ -1221,6 +1384,8 @@
     renderBathrooms();
     renderSupplyLevels();
     renderReplenishments();
+    applyReasonVisibility();
+    renderReasonDetails();
     renderActions();
     selectRadio('clean_level', 'sim');
     selectRadio('odor_level', 'nao');

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0b74bb">
   <title>Einstein | Checklist de Banheiros</title>
-  <link rel="stylesheet" href="styles.css?v=1.0.7">
+  <link rel="stylesheet" href="styles.css?v=1.0.8">
 </head>
 <body data-step="welcome">
   <header class="topbar">
@@ -13,7 +13,7 @@
       <img src="/assets/einstein-logo.png" alt="Hospital Israelita Einstein">
       <div>
         <strong>Checklist de banheiros</strong>
-        <span>Limpeza, reposição e análise por quantidade de pessoas</span>
+        <span>Limpeza, reposição e análise por checklist</span>
       </div>
     </div>
   </header>
@@ -29,7 +29,7 @@
       <section class="card hero-card welcome-card" id="welcomeStep">
         <p class="eyebrow">Einstein</p>
         <h1>Checklist de banheiros</h1>
-        <p class="muted">Registre a condição do banheiro, os níveis dos insumos e a ação realizada. Os dados ajudam a ajustar o parâmetro do sistema pela quantidade de pessoas vista no painel.</p>
+        <p class="muted">Registre a condição do banheiro, os níveis dos insumos e a ação realizada. Cada checklist representa 10 pessoas e alimenta os gráficos por banheiro.</p>
         <button class="primary-button compact" type="button" id="enterChecklist">Entrar</button>
       </section>
 
@@ -79,13 +79,10 @@
           </label>
         </div>
 
-        <label class="field field-highlight">
-          Quantidade de pessoas vista no painel
-          <input id="peopleCount" name="people_count" type="number" min="0" step="1" inputmode="numeric" placeholder="Ex.: 10" required>
-        </label>
+        <input id="peopleCount" name="people_count" type="hidden" value="10">
 
         <fieldset>
-          <legend>Motivo do chamado</legend>
+          <legend>Motivo</legend>
           <div class="choice-grid reason-grid" data-radio-group="reason">
             <button type="button" data-value="reposicao">Reposição</button>
             <button type="button" data-value="limpeza">Limpeza</button>
@@ -94,7 +91,13 @@
           </div>
         </fieldset>
 
-        <fieldset>
+        <fieldset class="reason-detail" id="reasonDetailField" hidden>
+          <legend id="reasonDetailTitle">Detalhes do motivo</legend>
+          <p class="muted small" id="reasonDetailHint"></p>
+          <div class="check-grid" id="reasonDetailOptions"></div>
+        </fieldset>
+
+        <fieldset id="conditionFieldset" class="conditional-section">
           <legend>Checklist de condição</legend>
           <label class="field">
             Banheiro limpo?
@@ -120,20 +123,20 @@
           </div>
         </fieldset>
 
-        <fieldset>
+        <fieldset id="supplyFieldset" class="conditional-section">
           <legend>Checklist de insumos</legend>
           <div class="supply-list" id="supplyLevels"></div>
         </fieldset>
 
-        <fieldset>
+        <fieldset id="replenishmentFieldset" class="conditional-section">
           <legend>Reposição realizada</legend>
           <p class="muted small">Informe somente os itens que foram repostos.</p>
           <div class="replenishment-list" id="replenishmentList"></div>
         </fieldset>
 
         <fieldset>
-          <legend>Ação realizada</legend>
-          <div class="action-grid" id="actionGrid"></div>
+          <legend>Ação realizada automaticamente</legend>
+          <div class="auto-action-list" id="actionGrid"></div>
         </fieldset>
 
         <label class="field">
@@ -156,7 +159,7 @@
         <div>
           <p class="eyebrow">Gráfico</p>
           <h1>Gráfico dos checklists</h1>
-          <p class="muted">Leitura visual das faixas de pessoas, condições, odor, insumos e ações.</p>
+          <p class="muted">Leitura visual dos checklists, pessoas acumuladas, condições, odor, insumos e ações.</p>
         </div>
       </section>
 
@@ -197,7 +200,7 @@
           <div class="section-heading">
             <div>
               <p class="eyebrow">Checklist de condição</p>
-              <h2>Condição por quantidade de pessoas</h2>
+              <h2>Condição por checklist</h2>
             </div>
             <span class="section-pill">Sim / Parcial / Não</span>
           </div>
@@ -208,7 +211,7 @@
           <div class="section-heading">
             <div>
               <p class="eyebrow">Checklist de condição</p>
-              <h2>Odor por quantidade de pessoas</h2>
+              <h2>Odor por checklist</h2>
             </div>
             <span class="section-pill">Não / Leve / Forte</span>
           </div>
@@ -220,7 +223,7 @@
         <div class="section-heading">
           <div>
             <p class="eyebrow">Checklist de insumos</p>
-            <h2>Nível dos insumos por quantidade de pessoas</h2>
+            <h2>Nível dos insumos por checklist</h2>
           </div>
           <span class="section-pill">Cheio / Médio / Baixo / Vazio</span>
         </div>
@@ -243,7 +246,7 @@
           <div class="section-heading">
             <div>
               <p class="eyebrow">Botoeira operacional</p>
-              <h2>Motivo do chamado</h2>
+              <h2>Motivo</h2>
             </div>
             <span class="section-pill">motivos</span>
           </div>
@@ -309,7 +312,7 @@
           <div class="section-heading">
             <div>
               <p class="eyebrow">Parâmetro do sistema</p>
-              <h2>Quantidade observada por campo</h2>
+              <h2>Pessoas acumuladas por campo</h2>
             </div>
             <span class="section-pill">sem número fixo</span>
           </div>
@@ -342,7 +345,7 @@
             <div class="bar-list report-list" id="conditionReport"></div>
           </section>
           <section>
-            <h3>Motivo do chamado</h3>
+            <h3>Motivo</h3>
             <div class="bar-list report-list" id="reasonReport"></div>
           </section>
           <section>
@@ -356,7 +359,7 @@
         <div class="section-heading">
           <div>
             <p class="eyebrow">Checklist de insumos</p>
-            <h2>Nível dos insumos por faixa de pessoas</h2>
+            <h2>Nível dos insumos por checklist</h2>
           </div>
           <span class="section-pill">Cheio / Médio / Baixo / Vazio</span>
         </div>
@@ -374,6 +377,6 @@
     </section>
   </main>
 
-  <script src="script.js?v=1.0.7"></script>
+  <script src="script.js?v=1.0.8"></script>
 </body>
 </html>

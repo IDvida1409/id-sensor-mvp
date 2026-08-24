@@ -372,7 +372,8 @@ textarea {
 
 .choice-grid,
 .action-grid,
-.check-grid {
+.check-grid,
+.auto-action-list {
   display: grid;
   gap: 9px;
 }
@@ -402,6 +403,17 @@ textarea {
   background: var(--blue-strong);
   border-color: var(--blue-strong);
   color: #fff;
+}
+
+.reason-detail {
+  background: linear-gradient(180deg, #ffffff 0%, var(--surface-soft) 100%);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.reason-detail .muted {
+  margin: -4px 0 10px;
 }
 
 .check-grid {
@@ -476,6 +488,35 @@ textarea {
 
 .action-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.auto-action-list {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.auto-action-chip,
+.auto-action-placeholder {
+  align-items: center;
+  background: var(--blue-soft);
+  border: 1px solid #cfe2ff;
+  border-radius: 11px;
+  color: var(--blue-strong);
+  display: flex;
+  font-weight: 900;
+  min-height: 38px;
+  padding: 9px 10px;
+}
+
+.auto-action-chip.neutral,
+.auto-action-placeholder {
+  background: var(--surface-soft);
+  border-color: var(--line);
+  color: var(--muted);
+}
+
+.auto-action-placeholder {
+  grid-column: 1 / -1;
+  margin: 0;
 }
 
 .primary-button,
@@ -883,6 +924,7 @@ textarea {
   .report-summary-grid,
   .check-grid,
   .action-grid,
+  .auto-action-list,
   .threshold-item {
     grid-template-columns: 1fr;
   }
