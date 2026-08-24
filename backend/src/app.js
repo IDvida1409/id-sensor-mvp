@@ -56,6 +56,34 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+const BATHROOM_CHECKLIST_BATHROOMS = [
+  { id: 'atrium-feminino', location: 'Atrium', gender: 'Feminino', name: 'Banheiro Feminino - Atrium' },
+  { id: 'atrium-masculino', location: 'Atrium', gender: 'Masculino', name: 'Banheiro Masculino - Atrium' },
+  { id: 'endoscopia-feminino', location: 'Endoscopia', gender: 'Feminino', name: 'Banheiro Feminino - Endoscopia' },
+  { id: 'endoscopia-masculino', location: 'Endoscopia', gender: 'Masculino', name: 'Banheiro Masculino - Endoscopia' }
+];
+const BATHROOM_BY_ID = new Map(BATHROOM_CHECKLIST_BATHROOMS.map((bathroom) => [bathroom.id, bathroom]));
+const BATHROOM_REASONS = ['reposicao', 'limpeza', 'piso_molhado', 'manutencao'];
+const BATHROOM_CLEAN_LEVELS = ['sim', 'parcial', 'nao'];
+const BATHROOM_ODOR_LEVELS = ['nao', 'leve', 'forte'];
+const BATHROOM_SUPPLY_LEVELS = ['cheio', 'medio', 'baixo', 'vazio'];
+const BATHROOM_SUPPLY_ITEMS = [
+  { key: 'papel_higienico', label: 'Papel higiênico', unit: 'rolos' },
+  { key: 'papel_toalha', label: 'Papel toalha', unit: 'refis' },
+  { key: 'sabonete', label: 'Sabonete', unit: 'refis' },
+  { key: 'alcool_outro', label: 'Álcool/outro insumo', unit: 'refis' }
+];
+const BATHROOM_SUPPLY_ITEM_BY_KEY = new Map(BATHROOM_SUPPLY_ITEMS.map((item) => [item.key, item]));
+const BATHROOM_ACTIONS = [
+  'limpeza_completa',
+  'limpeza_rapida',
+  'reposicao_papel',
+  'reposicao_sabonete',
+  'correcao_odor',
+  'manutencao',
+  'nenhuma_acao'
+];
+
 const CART_EMPTY_DISTANCE_MM = Number(process.env.CART_EMPTY_DISTANCE_MM || 720);
 const CART_FULL_DISTANCE_MM = Number(process.env.CART_FULL_DISTANCE_MM || 140);
 const CART_LID_OPEN_MARGIN_MM = Number(process.env.CART_LID_OPEN_MARGIN_MM || 250);
@@ -3081,6 +3109,346 @@ function buildAreasSummary(db, clienteId) {
   }));
 }
 
+function bathroomChecklistError(message, statusCode = 400) {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  return error;
+}
+
+function parseJsonObject(value, fallback) {
+  if (!value) return fallback;
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === 'object' ? parsed : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function normalizeBathroomChoice(value) {
+  const bathroom = BATHROOM_BY_ID.get(String(value || '').trim());
+  if (!bathroom) throw bathroomChecklistError('Selecione um banheiro válido.');
+  return bathroom;
+}
+
+function normalizeBathroomChoiceValue(value, allowed, fallback, label) {
+  const normalized = String(value || fallback || '').trim();
+  if (!allowed.includes(normalized)) {
+    throw bathroomChecklistError(`${label} inválido.`);
+  }
+  return normalized;
+}
+
+function normalizeBathroomBoolean(value) {
+  return value === true || value === 1 || value === '1' || String(value || '').toLowerCase() === 'sim';
+}
+
+function normalizeBathroomNumber(value, label) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number < 0) {
+    throw bathroomChecklistError(`${label} deve ser um número válido.`);
+  }
+  return Math.round(number);
+}
+
+function normalizeBathroomText(value, maxLength = 500) {
+  return String(value || '').trim().slice(0, maxLength);
+}
+
+function normalizeBathroomChecklistBody(body = {}) {
+  const bathroom = normalizeBathroomChoice(body.bathroom_id || body.bathroomId);
+  const condition = body.condition && typeof body.condition === 'object' ? body.condition : {};
+  const suppliesInput = body.supplies && typeof body.supplies === 'object' ? body.supplies : {};
+  const peopleCount = normalizeBathroomNumber(body.people_count ?? body.peopleCount, 'Quantidade de pessoas');
+  const reason = normalizeBathroomChoiceValue(body.reason, BATHROOM_REASONS, '', 'Motivo do chamado');
+  const cleanLevel = normalizeBathroomChoiceValue(
+    condition.clean_level || condition.cleanLevel || body.clean_level,
+    BATHROOM_CLEAN_LEVELS,
+    'sim',
+    'Nível de limpeza'
+  );
+  const odorLevel = normalizeBathroomChoiceValue(
+    condition.odor_level || condition.odorLevel || body.odor_level,
+    BATHROOM_ODOR_LEVELS,
+    'nao',
+    'Nível de odor'
+  );
+
+  const conditionJson = {
+    clean_level: cleanLevel,
+    odor_level: odorLevel,
+    piso_molhado: normalizeBathroomBoolean(condition.piso_molhado ?? condition.wetFloor),
+    lixeira_cheia: normalizeBathroomBoolean(condition.lixeira_cheia ?? condition.fullTrash),
+    vaso_sujo: normalizeBathroomBoolean(condition.vaso_sujo ?? condition.dirtyToilet),
+    pia_suja: normalizeBathroomBoolean(condition.pia_suja ?? condition.dirtySink)
+  };
+
+  const supplies = {};
+  for (const item of BATHROOM_SUPPLY_ITEMS) {
+    supplies[item.key] = normalizeBathroomChoiceValue(
+      suppliesInput[item.key],
+      BATHROOM_SUPPLY_LEVELS,
+      'cheio',
+      item.label
+    );
+  }
+
+  const replenishmentsInput = Array.isArray(body.replenishments) ? body.replenishments : [];
+  const replenishments = replenishmentsInput
+    .map((entry) => {
+      const item = BATHROOM_SUPPLY_ITEM_BY_KEY.get(String(entry?.item || '').trim());
+      if (!item) return null;
+      const quantity = Number(entry?.quantity || 0);
+      if (!Number.isFinite(quantity) || quantity <= 0) return null;
+      return {
+        item: item.key,
+        label: item.label,
+        quantity: Math.round(quantity * 100) / 100,
+        unit: normalizeBathroomText(entry?.unit, 40) || item.unit
+      };
+    })
+    .filter(Boolean);
+
+  const actionsInput = Array.isArray(body.actions) ? body.actions : [];
+  const actions = actionsInput.filter((actionValue) => BATHROOM_ACTIONS.includes(actionValue));
+  const finalActions = actions.length ? Array.from(new Set(actions)) : ['nenhuma_acao'];
+
+  return {
+    id: id('bathcheck'),
+    bathroom,
+    peopleCount,
+    reason,
+    cleanLevel,
+    odorLevel,
+    conditionJson,
+    supplies,
+    replenishments,
+    actions: finalActions,
+    notes: normalizeBathroomText(body.notes || body.observation, 1000),
+    responsibleName: normalizeBathroomText(body.responsible_name || body.responsibleName, 160),
+    createdAt: nowIso()
+  };
+}
+
+function bathroomChecklistRowToRecord(row) {
+  return {
+    id: row.id,
+    bathroom_id: row.bathroom_id,
+    bathroom_name: row.bathroom_name,
+    location_name: row.location_name,
+    bathroom_gender: row.bathroom_gender,
+    people_count: Number(row.people_count || 0),
+    reason: row.reason,
+    clean_level: row.clean_level,
+    odor_level: row.odor_level,
+    condition: parseJsonObject(row.condition_json, {}),
+    supplies: parseJsonObject(row.supplies_json, {}),
+    replenishments: parseJsonObject(row.replenishments_json, []),
+    actions: parseJsonObject(row.actions_json, []),
+    notes: row.notes || '',
+    responsible_name: row.responsible_name || '',
+    created_at: row.created_at
+  };
+}
+
+function bathroomReportDate(value, endOfDay = false) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  const dateText = /^\d{4}-\d{2}-\d{2}$/.test(raw)
+    ? `${raw}T${endOfDay ? '23:59:59.999' : '00:00:00.000'}-03:00`
+    : raw;
+  const date = new Date(dateText);
+  if (!Number.isFinite(date.getTime())) throw bathroomChecklistError('Período inválido.');
+  return date.toISOString();
+}
+
+function loadBathroomChecklistRows(query = {}, limit = 5000) {
+  const db = getDb();
+  const where = [];
+  const args = [];
+  const from = bathroomReportDate(query.from, false);
+  const to = bathroomReportDate(query.to, true);
+  if (from) {
+    where.push('created_at >= ?');
+    args.push(from);
+  }
+  if (to) {
+    where.push('created_at <= ?');
+    args.push(to);
+  }
+  if (query.bathroom_id) {
+    const bathroom = normalizeBathroomChoice(query.bathroom_id);
+    where.push('bathroom_id = ?');
+    args.push(bathroom.id);
+  }
+
+  const rows = db.prepare(`
+    SELECT *
+    FROM bathroom_checklists
+    ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
+    ORDER BY created_at DESC
+    LIMIT ?
+  `).all(...args, Math.max(1, Math.min(Number(limit) || 5000, 20000)));
+
+  return rows.map(bathroomChecklistRowToRecord);
+}
+
+function averageBathroomPeople(values) {
+  const numbers = values.filter((value) => Number.isFinite(value));
+  if (!numbers.length) return null;
+  return Math.round(numbers.reduce((total, value) => total + value, 0) / numbers.length);
+}
+
+function bathroomAlertSuggestion(average) {
+  if (!Number.isFinite(average) || average <= 0) return null;
+  return Math.max(5, Math.round((average * 0.85) / 5) * 5);
+}
+
+function emptyBathroomSupplyTotals() {
+  return Object.fromEntries(BATHROOM_SUPPLY_ITEMS.map((item) => [item.key, {
+    item: item.key,
+    label: item.label,
+    unit: item.unit,
+    quantity: 0,
+    events: 0
+  }]));
+}
+
+function summarizeBathroomChecklists(records) {
+  const overallSupplyTotals = emptyBathroomSupplyTotals();
+  const byBathroom = new Map(BATHROOM_CHECKLIST_BATHROOMS.map((bathroom) => [bathroom.id, {
+    bathroom,
+    checklists: 0,
+    people_total: 0,
+    action_count: 0,
+    cleaning_actions: 0,
+    replenishment_events: 0,
+    supply_totals: emptyBathroomSupplyTotals(),
+    supply_people_by_level: Object.fromEntries(BATHROOM_SUPPLY_ITEMS.map((item) => [item.key, {
+      cheio: [],
+      medio: [],
+      baixo: [],
+      vazio: [],
+      reposto: []
+    }])),
+    cleaning_people: {
+      parcial: [],
+      sujo: [],
+      acao_limpeza: []
+    }
+  }]));
+
+  for (const record of records) {
+    const summary = byBathroom.get(record.bathroom_id);
+    if (!summary) continue;
+    const people = Number(record.people_count || 0);
+    const actions = Array.isArray(record.actions) ? record.actions : [];
+    const replenishments = Array.isArray(record.replenishments) ? record.replenishments : [];
+
+    summary.checklists += 1;
+    summary.people_total += people;
+    if (actions.some((actionValue) => actionValue !== 'nenhuma_acao')) summary.action_count += 1;
+    if (actions.some((actionValue) => actionValue.includes('limpeza'))) {
+      summary.cleaning_actions += 1;
+      summary.cleaning_people.acao_limpeza.push(people);
+    }
+    if (record.clean_level === 'parcial') summary.cleaning_people.parcial.push(people);
+    if (record.clean_level === 'nao') summary.cleaning_people.sujo.push(people);
+
+    for (const item of BATHROOM_SUPPLY_ITEMS) {
+      const level = record.supplies?.[item.key];
+      if (BATHROOM_SUPPLY_LEVELS.includes(level)) {
+        summary.supply_people_by_level[item.key][level].push(people);
+      }
+    }
+
+    for (const replenishment of replenishments) {
+      const item = BATHROOM_SUPPLY_ITEM_BY_KEY.get(replenishment.item);
+      if (!item) continue;
+      const quantity = Number(replenishment.quantity || 0);
+      if (!Number.isFinite(quantity) || quantity <= 0) continue;
+
+      summary.replenishment_events += 1;
+      summary.supply_totals[item.key].quantity += quantity;
+      summary.supply_totals[item.key].events += 1;
+      summary.supply_people_by_level[item.key].reposto.push(people);
+      overallSupplyTotals[item.key].quantity += quantity;
+      overallSupplyTotals[item.key].events += 1;
+    }
+  }
+
+  const bathroomSummaries = Array.from(byBathroom.values()).map((summary) => {
+    const supplyThresholds = {};
+    for (const item of BATHROOM_SUPPLY_ITEMS) {
+      const levels = summary.supply_people_by_level[item.key];
+      const baixo = averageBathroomPeople(levels.baixo);
+      const vazio = averageBathroomPeople(levels.vazio);
+      const reposto = averageBathroomPeople(levels.reposto);
+      const trigger = reposto || vazio || baixo;
+      supplyThresholds[item.key] = {
+        label: item.label,
+        unit: item.unit,
+        cheio: averageBathroomPeople(levels.cheio),
+        medio: averageBathroomPeople(levels.medio),
+        baixo,
+        vazio,
+        reposto,
+        suggested_people: bathroomAlertSuggestion(trigger)
+      };
+    }
+
+    const cleaningParcial = averageBathroomPeople(summary.cleaning_people.parcial);
+    const cleaningDirty = averageBathroomPeople(summary.cleaning_people.sujo);
+    const cleaningAction = averageBathroomPeople(summary.cleaning_people.acao_limpeza);
+    const cleaningTrigger = cleaningAction || cleaningDirty || cleaningParcial;
+
+    return {
+      bathroom: summary.bathroom,
+      checklists: summary.checklists,
+      people_total: summary.people_total,
+      action_count: summary.action_count,
+      cleaning_actions: summary.cleaning_actions,
+      replenishment_events: summary.replenishment_events,
+      supply_totals: Object.values(summary.supply_totals).map((item) => ({
+        ...item,
+        quantity: Math.round(item.quantity * 100) / 100
+      })),
+      supply_thresholds: supplyThresholds,
+      cleaning_thresholds: {
+        parcial: cleaningParcial,
+        sujo: cleaningDirty,
+        acao_limpeza: cleaningAction,
+        suggested_people: bathroomAlertSuggestion(cleaningTrigger)
+      }
+    };
+  });
+
+  const itemRanking = Object.values(overallSupplyTotals)
+    .map((item) => ({ ...item, quantity: Math.round(item.quantity * 100) / 100 }))
+    .sort((a, b) => b.quantity - a.quantity || b.events - a.events);
+
+  const bathroomRanking = [...bathroomSummaries]
+    .sort((a, b) => b.action_count - a.action_count || b.replenishment_events - a.replenishment_events)
+    .map((item) => ({
+      bathroom: item.bathroom,
+      people_total: item.people_total,
+      action_count: item.action_count,
+      replenishment_events: item.replenishment_events,
+      cleaning_actions: item.cleaning_actions
+    }));
+
+  return {
+    generated_at: nowIso(),
+    total_checklists: records.length,
+    total_people: records.reduce((total, record) => total + Number(record.people_count || 0), 0),
+    total_actions: bathroomSummaries.reduce((total, item) => total + item.action_count, 0),
+    total_replenishment_events: bathroomSummaries.reduce((total, item) => total + item.replenishment_events, 0),
+    item_ranking: itemRanking,
+    bathroom_ranking: bathroomRanking,
+    bathrooms: bathroomSummaries
+  };
+}
+
 addRoute('GET', '/health', async ({ res }) => {
   ok(res, {
     status: 'online',
@@ -3097,6 +3465,70 @@ addRoute('GET', '/api/db/status', async ({ res }) => {
   ok(res, {
     dialect: databaseUrl ? 'postgres' : 'sqlite',
     databaseUrlConfigured: Boolean(databaseUrl)
+  });
+});
+
+addRoute('GET', '/api/bathroom-checklists/config', async ({ res }) => {
+  ok(res, {
+    bathrooms: BATHROOM_CHECKLIST_BATHROOMS,
+    reasons: BATHROOM_REASONS,
+    clean_levels: BATHROOM_CLEAN_LEVELS,
+    odor_levels: BATHROOM_ODOR_LEVELS,
+    supply_levels: BATHROOM_SUPPLY_LEVELS,
+    supply_items: BATHROOM_SUPPLY_ITEMS,
+    actions: BATHROOM_ACTIONS,
+    server_time: nowIso()
+  });
+});
+
+addRoute('GET', '/api/bathroom-checklists', async ({ query, res }) => {
+  const limit = Math.max(1, Math.min(Number(query.limit || 200), 1000));
+  ok(res, loadBathroomChecklistRows(query, limit));
+});
+
+addRoute('POST', '/api/bathroom-checklists', async ({ body, res }) => {
+  const db = getDb();
+  const checklist = normalizeBathroomChecklistBody(body);
+
+  db.prepare(`
+    INSERT INTO bathroom_checklists (
+      id, bathroom_id, bathroom_name, location_name, bathroom_gender,
+      people_count, reason, clean_level, odor_level, condition_json,
+      supplies_json, replenishments_json, actions_json, notes,
+      responsible_name, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    checklist.id,
+    checklist.bathroom.id,
+    checklist.bathroom.name,
+    checklist.bathroom.location,
+    checklist.bathroom.gender,
+    checklist.peopleCount,
+    checklist.reason,
+    checklist.cleanLevel,
+    checklist.odorLevel,
+    JSON.stringify(checklist.conditionJson),
+    JSON.stringify(checklist.supplies),
+    JSON.stringify(checklist.replenishments),
+    JSON.stringify(checklist.actions),
+    checklist.notes,
+    checklist.responsibleName,
+    checklist.createdAt
+  );
+
+  const record = db.prepare('SELECT * FROM bathroom_checklists WHERE id = ?').get(checklist.id);
+  ok(res, bathroomChecklistRowToRecord(record), 201);
+});
+
+addRoute('GET', '/api/bathroom-checklists/report', async ({ query, res }) => {
+  const records = loadBathroomChecklistRows(query, 20000);
+  ok(res, {
+    filters: {
+      from: query.from || '',
+      to: query.to || '',
+      bathroom_id: query.bathroom_id || ''
+    },
+    report: summarizeBathroomChecklists(records)
   });
 });
 

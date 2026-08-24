@@ -1,0 +1,398 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b74bb">
+  <title>Einstein | Checklist de Banheiros</title>
+  <link rel="stylesheet" href="styles.css?v=1.0.6">
+</head>
+<body data-step="welcome">
+  <header class="topbar">
+    <div class="brand">
+      <img src="/assets/einstein-logo.png" alt="Hospital Israelita Einstein">
+      <div>
+        <strong>Checklist de banheiros</strong>
+        <span>Limpeza, reposição e análise por quantidade de pessoas</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="shell">
+    <nav class="tabs" aria-label="Área do sistema">
+      <button class="tab active" type="button" data-view="checklist">Novo checklist</button>
+      <button class="tab" type="button" data-view="graph">Gráfico</button>
+      <button class="tab" type="button" data-view="report">Relatório</button>
+    </nav>
+
+    <section class="view active" id="checklistView">
+      <section class="card hero-card welcome-card" id="welcomeStep">
+        <p class="eyebrow">Einstein</p>
+        <h1>Checklist de banheiros</h1>
+        <p class="muted">Registre a condição do banheiro, os níveis dos insumos e a ação realizada. Os dados ajudam a ajustar o parâmetro do sistema pela quantidade de pessoas vista no painel.</p>
+        <button class="primary-button compact" type="button" id="enterChecklist">Entrar</button>
+      </section>
+
+      <section class="step-block" id="bathroomStep" hidden>
+        <section class="card hero-card">
+          <p class="eyebrow">Passo 1</p>
+          <h1>Escolha o banheiro</h1>
+          <p class="muted">Selecione o banheiro para iniciar o preenchimento. O local e o gênero já aparecem no cartão.</p>
+        </section>
+
+        <section class="bathroom-grid" id="bathroomGrid" aria-label="Banheiros disponíveis"></section>
+      </section>
+
+      <section class="card start-card" id="startChecklistCard" hidden>
+        <p class="eyebrow">Passo 2</p>
+        <h1 id="startBathroomName">--</h1>
+        <p class="muted">Confira o banheiro selecionado. Data e hora serão preenchidas automaticamente.</p>
+        <div class="start-actions">
+          <button class="text-button" type="button" id="changeBathroomBeforeStart">Trocar banheiro</button>
+          <button class="primary-button compact" type="button" id="startChecklist">Iniciar checklist</button>
+        </div>
+      </section>
+
+      <form class="card form-card" id="checklistForm" hidden>
+        <div class="form-intro">
+          <p class="eyebrow">Passo 3</p>
+          <h1>Preencher checklist</h1>
+          <p class="muted">Informe a quantidade de pessoas vista no painel e registre a situação encontrada.</p>
+        </div>
+
+        <div class="selected-card">
+          <div>
+            <span class="eyebrow">Banheiro selecionado</span>
+            <strong id="selectedBathroomName">--</strong>
+          </div>
+          <button class="text-button" type="button" id="changeBathroom">Trocar</button>
+        </div>
+
+        <div class="auto-row">
+          <label>
+            Data
+            <input id="checkDate" type="text" readonly>
+          </label>
+          <label>
+            Hora
+            <input id="checkTime" type="text" readonly>
+          </label>
+        </div>
+
+        <label class="field field-highlight">
+          Quantidade de pessoas vista no painel
+          <input id="peopleCount" name="people_count" type="number" min="0" step="1" inputmode="numeric" placeholder="Ex.: 10" required>
+        </label>
+
+        <fieldset>
+          <legend>Motivo do chamado</legend>
+          <div class="choice-grid reason-grid" data-radio-group="reason">
+            <button type="button" data-value="reposicao">Reposição</button>
+            <button type="button" data-value="limpeza">Limpeza</button>
+            <button type="button" data-value="piso_molhado">Piso molhado</button>
+            <button type="button" data-value="manutencao">Manutenção</button>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Checklist de condição</legend>
+          <label class="field">
+            Banheiro limpo?
+            <div class="choice-grid three" data-radio-group="clean_level">
+              <button type="button" data-value="sim">Sim</button>
+              <button type="button" data-value="parcial">Parcial</button>
+              <button type="button" data-value="nao">Não</button>
+            </div>
+          </label>
+          <label class="field">
+            Tem odor?
+            <div class="choice-grid three" data-radio-group="odor_level">
+              <button type="button" data-value="nao">Não</button>
+              <button type="button" data-value="leve">Leve</button>
+              <button type="button" data-value="forte">Forte</button>
+            </div>
+          </label>
+          <div class="check-grid">
+            <label><input type="checkbox" id="pisoMolhado"> Piso molhado</label>
+            <label><input type="checkbox" id="lixeiraCheia"> Lixeira cheia</label>
+            <label><input type="checkbox" id="vasoSujo"> Vaso/mictório sujo</label>
+            <label><input type="checkbox" id="piaSuja"> Pia/bancada suja</label>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Checklist de insumos</legend>
+          <div class="supply-list" id="supplyLevels"></div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Reposição realizada</legend>
+          <p class="muted small">Informe somente os itens que foram repostos.</p>
+          <div class="replenishment-list" id="replenishmentList"></div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Ação realizada</legend>
+          <div class="action-grid" id="actionGrid"></div>
+        </fieldset>
+
+        <label class="field">
+          Observação
+          <textarea id="notes" rows="3" placeholder="Ex.: papel baixo, odor forte, necessidade de manutenção..."></textarea>
+        </label>
+
+        <label class="field">
+          Responsável
+          <input id="responsibleName" type="text" placeholder="Nome de quem realizou">
+        </label>
+
+        <button class="primary-button" type="submit">Salvar checklist</button>
+        <div class="status" id="saveStatus" role="status" aria-live="polite"></div>
+      </form>
+    </section>
+
+    <section class="view" id="graphView">
+      <section class="card hero-card analysis-hero">
+        <div>
+          <p class="eyebrow">Gráfico</p>
+          <h1>Gráfico dos checklists</h1>
+          <p class="muted">Leitura visual por quantidade de pessoas vista no painel.</p>
+        </div>
+        <div class="analysis-switch" aria-label="Alternar análise">
+          <button class="active" type="button" data-view-shortcut="graph">Gráfico</button>
+          <button type="button" data-view-shortcut="report">Relatório</button>
+        </div>
+      </section>
+
+      <section class="card filters-card">
+        <label>
+          De
+          <input id="graphFromDate" type="date">
+        </label>
+        <label>
+          Até
+          <input id="graphToDate" type="date">
+        </label>
+        <label>
+          Banheiro
+          <select id="graphBathroom">
+            <option value="">Todos os banheiros</option>
+          </select>
+        </label>
+        <button class="primary-button compact" type="button" id="loadGraph">Gerar gráfico</button>
+        <button class="secondary-button compact" type="button" id="downloadGraph">Baixar gráfico</button>
+      </section>
+
+      <section class="metric-grid" id="graphMetricGrid"></section>
+
+      <section class="card">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow" id="graphComparisonEyebrow">Comparativo</p>
+            <h2 id="graphComparisonTitle">Todos os banheiros: comparativo</h2>
+          </div>
+          <span class="section-pill" id="graphComparisonPill">cada banheiro separado</span>
+        </div>
+        <div class="comparison-table" id="graphComparison"></div>
+      </section>
+
+      <section class="graph-grid">
+        <section class="card">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Checklist de condição</p>
+              <h2>Condição por quantidade de pessoas</h2>
+            </div>
+            <span class="section-pill">Sim / Parcial / Não</span>
+          </div>
+          <div class="stack-chart" id="conditionChart"></div>
+        </section>
+
+        <section class="card">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Checklist de condição</p>
+              <h2>Odor por quantidade de pessoas</h2>
+            </div>
+            <span class="section-pill">Não / Leve / Forte</span>
+          </div>
+          <div class="stack-chart" id="odorChart"></div>
+        </section>
+      </section>
+
+      <section class="card">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Checklist de insumos</p>
+            <h2>Nível dos insumos por quantidade de pessoas</h2>
+          </div>
+          <span class="section-pill">Cheio / Médio / Baixo / Vazio</span>
+        </div>
+        <div class="supply-stack-list" id="supplyLevelsChart"></div>
+      </section>
+
+      <section class="graph-grid three">
+        <section class="card">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Sim / Não</p>
+              <h2>Itens de condição</h2>
+            </div>
+            <span class="section-pill">ocorrência</span>
+          </div>
+          <div class="bar-list" id="conditionItemsChart"></div>
+        </section>
+
+        <section class="card">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Botoeira operacional</p>
+              <h2>Motivo do chamado</h2>
+            </div>
+            <span class="section-pill">motivos</span>
+          </div>
+          <div class="bar-list" id="reasonChart"></div>
+        </section>
+
+        <section class="card">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Campo do checklist</p>
+              <h2>Ação realizada</h2>
+            </div>
+            <span class="section-pill">quantidade</span>
+          </div>
+          <div class="bar-list" id="actionChart"></div>
+        </section>
+      </section>
+    </section>
+
+    <section class="view" id="reportView">
+      <section class="card hero-card analysis-hero">
+        <div>
+          <p class="eyebrow">Relatório</p>
+          <h1>Relatório dos checklists</h1>
+          <p class="muted">Resumo, comparação por banheiro, consumo, reposições e exportação.</p>
+        </div>
+        <div class="analysis-switch" aria-label="Alternar análise">
+          <button type="button" data-view-shortcut="graph">Gráfico</button>
+          <button class="active" type="button" data-view-shortcut="report">Relatório</button>
+        </div>
+      </section>
+
+      <section class="card filters-card">
+        <label>
+          De
+          <input id="reportFromDate" type="date">
+        </label>
+        <label>
+          Até
+          <input id="reportToDate" type="date">
+        </label>
+        <label>
+          Banheiro
+          <select id="reportBathroom">
+            <option value="">Todos os banheiros</option>
+          </select>
+        </label>
+        <button class="primary-button compact" type="button" id="loadReport">Gerar relatório</button>
+        <button class="secondary-button compact" type="button" id="downloadReport">Baixar relatório</button>
+      </section>
+
+      <section class="metric-grid" id="reportMetricGrid"></section>
+
+      <section class="card">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow" id="reportSummaryEyebrow">Comparação</p>
+            <h2 id="reportSummaryTitle">Resumo por banheiro</h2>
+          </div>
+          <span class="section-pill" id="reportSummaryPill">comparação</span>
+        </div>
+        <div class="comparison-table" id="reportSummary"></div>
+      </section>
+
+      <section class="report-grid">
+        <section class="card">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Parâmetro do sistema</p>
+              <h2>Quantidade observada por campo</h2>
+            </div>
+            <span class="section-pill">sem número fixo</span>
+          </div>
+          <div class="threshold-list" id="observedFieldsReport"></div>
+        </section>
+
+        <section class="card">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Insumos</p>
+              <h2>Insumos e reposições</h2>
+            </div>
+            <span class="section-pill">material</span>
+          </div>
+          <div class="comparison-table compact-table" id="supplyReport"></div>
+        </section>
+      </section>
+
+      <section class="graph-grid three">
+        <section class="card">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Sim / Não</p>
+              <h2>Itens de condição</h2>
+            </div>
+            <span class="section-pill">ocorrência</span>
+          </div>
+          <div class="bar-list" id="conditionReport"></div>
+        </section>
+
+        <section class="card">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Botoeira operacional</p>
+              <h2>Motivo do chamado</h2>
+            </div>
+            <span class="section-pill">quantidade</span>
+          </div>
+          <div class="bar-list" id="reasonReport"></div>
+        </section>
+
+        <section class="card">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Campo do checklist</p>
+              <h2>Ação realizada</h2>
+            </div>
+            <span class="section-pill">quantidade</span>
+          </div>
+          <div class="bar-list" id="actionReport"></div>
+        </section>
+      </section>
+
+      <section class="card">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Checklist de insumos</p>
+            <h2>Nível dos insumos por faixa de pessoas</h2>
+          </div>
+          <span class="section-pill">Cheio / Médio / Baixo / Vazio</span>
+        </div>
+        <div class="comparison-table" id="supplyLevelReport"></div>
+      </section>
+
+      <section class="card export-card">
+        <div>
+          <p class="eyebrow">Exportação</p>
+          <h2>Baixar relatório</h2>
+          <p class="muted">O arquivo exportado inclui os filtros aplicados, o resumo por banheiro, insumos, reposições, ações, motivos e os registros detalhados para auditoria.</p>
+        </div>
+        <button class="secondary-button compact" type="button" id="downloadReportBottom">Baixar relatório</button>
+      </section>
+    </section>
+  </main>
+
+  <script src="script.js?v=1.0.6"></script>
+</body>
+</html>

@@ -246,6 +246,25 @@ function initDb() {
       last_tick_at TEXT,
       updated_em TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS bathroom_checklists (
+      id TEXT PRIMARY KEY,
+      bathroom_id TEXT NOT NULL,
+      bathroom_name TEXT NOT NULL,
+      location_name TEXT NOT NULL,
+      bathroom_gender TEXT NOT NULL,
+      people_count INTEGER NOT NULL,
+      reason TEXT NOT NULL,
+      clean_level TEXT NOT NULL,
+      odor_level TEXT NOT NULL,
+      condition_json TEXT NOT NULL,
+      supplies_json TEXT NOT NULL,
+      replenishments_json TEXT NOT NULL,
+      actions_json TEXT NOT NULL,
+      notes TEXT,
+      responsible_name TEXT,
+      created_at TEXT NOT NULL
+    );
   `);
 
   ensureColumn(database, 'activation_codes', 'usuario_nome', 'TEXT');
@@ -295,6 +314,12 @@ function initDb() {
 
     CREATE INDEX IF NOT EXISTS idx_panel_users_cliente
     ON panel_users (cliente_id, ativo);
+
+    CREATE INDEX IF NOT EXISTS idx_bathroom_checklists_created
+    ON bathroom_checklists (created_at DESC);
+
+    CREATE INDEX IF NOT EXISTS idx_bathroom_checklists_bathroom_created
+    ON bathroom_checklists (bathroom_id, created_at DESC);
   `);
 }
 
