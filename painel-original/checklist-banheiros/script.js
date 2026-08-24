@@ -10,7 +10,7 @@
       { key: 'papel_higienico', label: 'Papel higiênico', unit: 'rolos' },
       { key: 'papel_toalha', label: 'Papel toalha', unit: 'refis' },
       { key: 'sabonete', label: 'Sabonete', unit: 'refis' },
-      { key: 'alcool_outro', label: 'Álcool/outro insumo', unit: 'refis' },
+      { key: 'alcool_outro', label: 'Álcool / outro insumo', unit: 'refis' },
       { key: 'protetor_assento', label: 'Protetor de assento', unit: 'unidades' },
       { key: 'absorvente', label: 'Absorvente', unit: 'unidades' }
     ],
@@ -40,13 +40,13 @@
     limpeza_rapida: 'Limpeza rápida',
     reposicao_papel: 'Reposição de papel',
     reposicao_sabonete: 'Reposição de sabonete',
-    reposicao_alcool: 'Reposição de outros insumos',
+    reposicao_alcool: 'Reposição de álcool ou outros insumos',
     correcao_odor: 'Correção de odor',
     nenhuma_acao: 'Nenhuma ação necessária',
     lixeira_cheia: 'Lixeira cheia',
     vaso_sujo: 'Vaso/mictório sujo',
     pia_suja: 'Pia/bancada suja',
-    detalhe_manutencao: 'Necessita manutenção',
+    detalhe_manutencao: 'Necessita de manutenção',
     cheio: 'Cheio',
     medio: 'Médio',
     baixo: 'Baixo',
@@ -120,7 +120,7 @@
         { key: 'lixeira_cheia', label: 'Lixeira cheia' },
         { key: 'vaso_sujo', label: 'Vaso/mictório sujo' },
         { key: 'pia_suja', label: 'Pia/bancada suja' },
-        { key: 'detalhe_manutencao', label: 'Necessita manutenção' }
+        { key: 'detalhe_manutencao', label: 'Necessita de manutenção' }
       ]
     }
   };
@@ -558,7 +558,7 @@
   }
 
   function peopleText(value) {
-    return value ? pluralText(value, 'pessoa', 'pessoas') : 'sem dados';
+    return value ? pluralText(value, 'pessoa', 'pessoas') : 'Sem dados';
   }
 
   function shortBathroomName(name) {
@@ -630,7 +630,7 @@
 
   function firstPeopleText(values) {
     const valid = values.filter((value) => Number.isFinite(Number(value)) && Number(value) > 0);
-    return valid.length ? peopleText(Math.min(...valid)) : 'sem dados';
+    return valid.length ? peopleText(Math.min(...valid)) : 'Sem dados';
   }
 
   function dateText(value) {
@@ -712,7 +712,7 @@
   }
 
   function dominantLevel(records, getter) {
-    if (!records.length) return 'sem dados';
+    if (!records.length) return 'Sem dados';
     const distribution = fieldDistribution(records, ['cheio', 'medio', 'baixo', 'vazio'], getter)
       .sort((a, b) => b.count - a.count);
     const top = distribution[0];
@@ -849,7 +849,7 @@
   function renderGraphComparison(records, selectedBathroomId) {
     const groups = comparisonGroups(records, selectedBathroomId).filter((group) => group.records.length);
     const isComparison = !selectedBathroomId;
-    $('#graphComparisonEyebrow').textContent = isComparison ? 'Filtro em modo todos' : 'Banheiro selecionado';
+    $('#graphComparisonEyebrow').textContent = isComparison ? 'Filtro: todos os banheiros' : 'Banheiro selecionado';
     $('#graphComparisonTitle').textContent = isComparison ? 'Todos os banheiros: comparativo' : 'Resumo do banheiro';
     $('#graphComparisonPill').textContent = isComparison ? 'cada banheiro separado' : 'leitura individual';
 
@@ -862,9 +862,9 @@
       <div class="comparison-row graph header">
         <span>Banheiro</span>
         <span>Pessoas</span>
-        <span>Limpeza parcial/não</span>
-        <span>Odor leve/forte</span>
-        <span>Papel H. baixo/vazio</span>
+        <span>Limpeza parcial ou não</span>
+        <span>Odor leve ou forte</span>
+        <span>Papel higiênico baixo ou vazio</span>
         <span>Primeiro ponto</span>
       </div>
       ${groups.map((group) => {
@@ -1046,8 +1046,8 @@
         <span>Banheiro</span>
         <span>Checklists</span>
         <span>Pessoas</span>
-        <span>Condição parcial/não</span>
-        <span>Odor leve/forte</span>
+        <span>Condição parcial ou não</span>
+        <span>Odor leve ou forte</span>
         <span>Insumo crítico</span>
       </div>
       ${groups.map((group) => {
@@ -1067,7 +1067,7 @@
             <span>${peopleText(totalPeopleCount(groupRecords))}</span>
             <strong>${cleanRate}%</strong>
             <strong>${odorRate}%</strong>
-            <span>${criticalSupply && criticalSupply.count ? criticalSupply.label : 'sem crítico'}</span>
+            <span>${criticalSupply && criticalSupply.count ? criticalSupply.label : 'Sem crítico'}</span>
           </div>
         `;
       }).join('')}
@@ -1076,11 +1076,11 @@
 
   function observedFields(records) {
     return [
-      ['Limpeza parcial/não', firstPeople(records, (record) => record.clean_level !== 'sim'), 'pessoas acumuladas até a primeira ocorrência'],
-      ['Odor leve/forte', firstPeople(records, (record) => record.odor_level !== 'nao'), 'pessoas acumuladas até a primeira ocorrência'],
-      ['Papel higiênico baixo/vazio', firstPeople(records, (record) => supplyCritical(record, 'papel_higienico')), 'pessoas acumuladas até o primeiro registro crítico'],
-      ['Papel toalha baixo/vazio', firstPeople(records, (record) => supplyCritical(record, 'papel_toalha')), 'pessoas acumuladas até o primeiro registro crítico'],
-      ['Sabonete baixo/vazio', firstPeople(records, (record) => supplyCritical(record, 'sabonete')), 'pessoas acumuladas até o primeiro registro crítico']
+      ['Limpeza parcial ou não', firstPeople(records, (record) => record.clean_level !== 'sim'), 'pessoas acumuladas até a primeira ocorrência'],
+      ['Odor leve ou forte', firstPeople(records, (record) => record.odor_level !== 'nao'), 'pessoas acumuladas até a primeira ocorrência'],
+      ['Papel higiênico baixo ou vazio', firstPeople(records, (record) => supplyCritical(record, 'papel_higienico')), 'pessoas acumuladas até o primeiro registro crítico'],
+      ['Papel toalha baixo ou vazio', firstPeople(records, (record) => supplyCritical(record, 'papel_toalha')), 'pessoas acumuladas até o primeiro registro crítico'],
+      ['Sabonete baixo ou vazio', firstPeople(records, (record) => supplyCritical(record, 'sabonete')), 'pessoas acumuladas até o primeiro registro crítico']
     ];
   }
 
@@ -1199,7 +1199,7 @@
             <text x="390" y="${y}" fill="${colorHex.text}" font-size="15">${numberText(group.records.length)} checklists</text>
             <text x="560" y="${y}" fill="${colorHex.red}" font-size="15" font-weight="700">Limpeza ${cleanRate}%</text>
             <text x="740" y="${y}" fill="${colorHex.orange}" font-size="15" font-weight="700">Odor ${odorRate}%</text>
-            <text x="900" y="${y}" fill="${colorHex.teal}" font-size="15" font-weight="700">Papel H. ${paperRate}%</text>
+            <text x="900" y="${y}" fill="${colorHex.teal}" font-size="15" font-weight="700">Papel higiênico ${paperRate}%</text>
           `;
         }).join('')}
         <rect x="34" y="382" width="548" height="370" rx="18" fill="#ffffff" stroke="${colorHex.line}"/>
@@ -1316,7 +1316,7 @@
     const result = await api(`/api/bathroom-checklists/history?${params.toString()}`, {
       method: 'DELETE'
     });
-    alert(`${numberText(result.deleted)} registro(s) apagado(s).`);
+    alert(`${pluralText(result.deleted, 'registro apagado', 'registros apagados')}.`);
     await Promise.all([
       loadHistory(),
       loadGraph(),
@@ -1377,7 +1377,7 @@
       csvLine(['De', filters.from, 'Até', filters.to, 'Banheiro', filters.bathroom]),
       '',
       csvLine(['Resumo por banheiro']),
-      csvLine(['Banheiro', 'Checklists', 'Pessoas acumuladas', 'Condição parcial/não', 'Odor leve/forte', 'Ocorrências'])
+      csvLine(['Banheiro', 'Checklists', 'Pessoas acumuladas', 'Condição parcial ou não', 'Odor leve ou forte', 'Ocorrências'])
     ];
 
     groups.forEach((group) => {

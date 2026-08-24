@@ -71,7 +71,7 @@ const BATHROOM_SUPPLY_ITEMS = [
   { key: 'papel_higienico', label: 'Papel higiênico', unit: 'rolos' },
   { key: 'papel_toalha', label: 'Papel toalha', unit: 'refis' },
   { key: 'sabonete', label: 'Sabonete', unit: 'refis' },
-  { key: 'alcool_outro', label: 'Álcool/outro insumo', unit: 'refis' },
+  { key: 'alcool_outro', label: 'Álcool / outro insumo', unit: 'refis' },
   { key: 'protetor_assento', label: 'Protetor de assento', unit: 'unidades' },
   { key: 'absorvente', label: 'Absorvente', unit: 'unidades' }
 ];
