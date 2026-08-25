@@ -1078,9 +1078,11 @@
     return [
       ['Limpeza parcial ou não', firstPeople(records, (record) => record.clean_level !== 'sim'), 'pessoas acumuladas até a primeira ocorrência'],
       ['Odor leve ou forte', firstPeople(records, (record) => record.odor_level !== 'nao'), 'pessoas acumuladas até a primeira ocorrência'],
-      ['Papel higiênico baixo ou vazio', firstPeople(records, (record) => supplyCritical(record, 'papel_higienico')), 'pessoas acumuladas até o primeiro registro crítico'],
-      ['Papel toalha baixo ou vazio', firstPeople(records, (record) => supplyCritical(record, 'papel_toalha')), 'pessoas acumuladas até o primeiro registro crítico'],
-      ['Sabonete baixo ou vazio', firstPeople(records, (record) => supplyCritical(record, 'sabonete')), 'pessoas acumuladas até o primeiro registro crítico']
+      ...state.config.supply_items.map((item) => [
+        `${item.label} baixo ou vazio`,
+        firstPeople(records, (record) => supplyCritical(record, item.key)),
+        'pessoas acumuladas até o primeiro registro crítico'
+      ])
     ];
   }
 
