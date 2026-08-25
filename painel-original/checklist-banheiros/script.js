@@ -654,8 +654,23 @@
     });
   }
 
+  function recordActions(record) {
+    const actions = new Set(Array.isArray(record.actions) ? record.actions : []);
+    const replenishments = Array.isArray(record.replenishments) ? record.replenishments : [];
+    const hasReplenished = (keys) => replenishments.some((item) => keys.includes(item.item) && Number(item.quantity || 0) > 0);
+
+    if (hasReplenished(['papel_higienico', 'papel_toalha'])) actions.add('reposicao_papel');
+    if (hasReplenished(['sabonete'])) actions.add('reposicao_sabonete');
+    if (hasReplenished(['alcool_outro'])) actions.add('reposicao_alcool');
+    if (hasReplenished(['protetor_assento'])) actions.add('reposicao_protetor_assento');
+    if (hasReplenished(['absorvente'])) actions.add('reposicao_absorvente');
+    if (actions.size > 1) actions.delete('nenhuma_acao');
+
+    return [...actions];
+  }
+
   function actionsText(record) {
-    const actions = Array.isArray(record.actions) ? record.actions : [];
+    const actions = recordActions(record);
     return actions.length ? actions.map((action) => labels[action] || action).join(', ') : 'Nenhuma ação registrada';
   }
 
@@ -668,7 +683,7 @@
   }
 
   function hasAction(record) {
-    const actions = Array.isArray(record.actions) ? record.actions : [];
+    const actions = recordActions(record);
     return actions.some((action) => action !== 'nenhuma_acao');
   }
 
@@ -985,7 +1000,7 @@
     ])];
     const rows = actions.map((action) => [
       labels[action] || action,
-      records.filter((record) => (record.actions || []).includes(action)).length,
+      records.filter((record) => recordActions(record).includes(action)).length,
       colors[action] || 'var(--blue-strong)'
     ]);
     return rows.filter((row) => row[1] > 0 || row[0] !== labels.nenhuma_acao);
