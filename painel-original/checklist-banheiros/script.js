@@ -96,6 +96,12 @@
     nenhuma_acao: 'var(--yellow)'
   };
 
+  const odorColors = {
+    nao: 'var(--green)',
+    leve: 'var(--yellow)',
+    forte: 'var(--red)'
+  };
+
   const peopleBuckets = [
     { label: '0-10 pessoas', short: '0-10', min: 0, max: 10 },
     { label: '11-20 pessoas', short: '11-20', min: 11, max: 20 },
@@ -721,7 +727,7 @@
     return rate(records, hasOccurrence);
   }
 
-  function fieldDistribution(records, levels, getter) {
+  function fieldDistribution(records, levels, getter, colorMap = colors) {
     return levels.map((level) => {
       const count = records.filter((record) => getter(record) === level).length;
       return {
@@ -729,7 +735,7 @@
         label: labels[level] || level,
         count,
         percent: percentValue(count, records.length),
-        color: colors[level] || 'var(--blue-strong)'
+        color: colorMap[level] || colors[level] || 'var(--blue-strong)'
       };
     });
   }
@@ -914,7 +920,7 @@
     `;
   }
 
-  function renderStackChart(target, records, levels, getter) {
+  function renderStackChart(target, records, levels, getter, colorMap = colors) {
     if (!records.length) {
       renderEmpty(target);
       return;
@@ -922,11 +928,11 @@
 
     const legendParts = levels.map((level) => ({
       label: labels[level],
-      color: colors[level]
+      color: colorMap[level] || colors[level]
     }));
     const rows = peopleBuckets.map((bucket) => {
       const bucketRecords = recordsForBucket(records, bucket);
-      const parts = fieldDistribution(bucketRecords, levels, getter);
+      const parts = fieldDistribution(bucketRecords, levels, getter, colorMap);
       return `
         <div class="stack-row">
           <strong>${bucket.label}</strong>
@@ -1050,7 +1056,7 @@
 
   function renderGraphBlocks(records) {
     renderStackChart('#conditionChart', records, ['sim', 'parcial', 'nao'], (record) => record.clean_level || 'sim');
-    renderStackChart('#odorChart', records, ['nao', 'leve', 'forte'], (record) => record.odor_level || 'nao');
+    renderStackChart('#odorChart', records, ['nao', 'leve', 'forte'], (record) => record.odor_level || 'nao', odorColors);
     renderSupplyStackChart(records);
     renderPercentBars('#conditionItemsChart', conditionItemRows(records));
     renderCountBars('#reasonChart', reasonRows(records));
@@ -1137,7 +1143,7 @@
     $('#supplyReport').innerHTML = `
       <div class="comparison-row compact-supply header">
         <span>Item</span>
-        <span>Consumo médio</span>
+        <span>Reposição média</span>
         <span>Qtd. reposta</span>
         <span>Reposições</span>
       </div>
@@ -1433,7 +1439,7 @@
     lines.push(
       '',
       csvLine(['Insumos e reposições']),
-      csvLine(['Item', 'Consumo médio', 'Quantidade reposta', 'Reposições'])
+      csvLine(['Item', 'Reposição média', 'Quantidade reposta', 'Reposições'])
     );
     totals.forEach((item) => {
       lines.push(csvLine([
