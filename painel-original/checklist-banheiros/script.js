@@ -20,6 +20,8 @@
       'reposicao_papel',
       'reposicao_sabonete',
       'reposicao_alcool',
+      'reposicao_protetor_assento',
+      'reposicao_absorvente',
       'correcao_odor',
       'manutencao',
       'nenhuma_acao'
@@ -40,7 +42,9 @@
     limpeza_rapida: 'Limpeza rápida',
     reposicao_papel: 'Reposição de papel',
     reposicao_sabonete: 'Reposição de sabonete',
-    reposicao_alcool: 'Reposição de álcool ou outros insumos',
+    reposicao_alcool: 'Reposição de álcool / outro insumo',
+    reposicao_protetor_assento: 'Reposição de protetor de assento',
+    reposicao_absorvente: 'Reposição de absorvente',
     correcao_odor: 'Correção de odor',
     nenhuma_acao: 'Nenhuma ação necessária',
     lixeira_cheia: 'Lixeira cheia',
@@ -85,6 +89,8 @@
     reposicao_papel: 'var(--green)',
     reposicao_sabonete: 'var(--orange)',
     reposicao_alcool: 'var(--teal)',
+    reposicao_protetor_assento: 'var(--blue-strong)',
+    reposicao_absorvente: 'var(--red)',
     correcao_odor: 'var(--red)',
     detalhe_manutencao: 'var(--orange)',
     nenhuma_acao: 'var(--yellow)'
@@ -357,7 +363,9 @@
     if (state.selected.reason === 'reposicao') {
       if (replenished(['papel_higienico', 'papel_toalha'])) actions.add('reposicao_papel');
       if (replenished(['sabonete'])) actions.add('reposicao_sabonete');
-      if (replenished(['alcool_outro', 'protetor_assento', 'absorvente'])) actions.add('reposicao_alcool');
+      if (replenished(['alcool_outro'])) actions.add('reposicao_alcool');
+      if (replenished(['protetor_assento'])) actions.add('reposicao_protetor_assento');
+      if (replenished(['absorvente'])) actions.add('reposicao_absorvente');
     }
 
     if (state.selected.reason === 'limpeza') {
@@ -969,7 +977,12 @@
   }
 
   function actionRows(records) {
-    const actions = [...new Set([...(state.config.actions || []), 'reposicao_alcool'])];
+    const actions = [...new Set([
+      ...(state.config.actions || []),
+      'reposicao_alcool',
+      'reposicao_protetor_assento',
+      'reposicao_absorvente'
+    ])];
     const rows = actions.map((action) => [
       labels[action] || action,
       records.filter((record) => (record.actions || []).includes(action)).length,

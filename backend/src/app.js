@@ -82,6 +82,8 @@ const BATHROOM_ACTIONS = [
   'reposicao_papel',
   'reposicao_sabonete',
   'reposicao_alcool',
+  'reposicao_protetor_assento',
+  'reposicao_absorvente',
   'correcao_odor',
   'manutencao',
   'nenhuma_acao'
