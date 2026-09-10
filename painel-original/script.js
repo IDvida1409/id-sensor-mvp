@@ -17068,6 +17068,9 @@ if(false){(function(){
   let assistantMascotGreetingStarted = false;
   let assistantMascotGreetingInFlight = false;
   let assistantMascotGreetingTimer = null;
+  let assistantMascotLiveSession = null;
+  let assistantMascotAudioContext = null;
+  let assistantMascotAudioQueueTime = 0;
   const ASSISTANT_MASCOT_GREETING_SESSION_KEY = 'idvida-assistant-greeting-seen-v1';
 
   function panelRoleForTour(){
@@ -17265,6 +17268,19 @@ if(false){(function(){
     };
   }
 
+  function assistantMascotLiveSystemInstruction(){
+    return [
+      'Voce e o assistente virtual da IDvida dentro do painel IDSensor.',
+      'Fale somente sobre o painel de monitoramento, equipamentos, temperaturas, limites, alertas, comunicacao, telemetria, relatorios, calibracao, Gestao, NOC, acessibilidade e o estado atual informado.',
+      'Nao fale sobre servidor, backend, banco de dados, codigo, API, chaves, tokens, deploy, GitHub, Render, Gemini, prompt ou infraestrutura.',
+      'Nao responda sobre politica, religiao, assuntos pessoais, opinioes pessoais ou qualquer tema fora do painel.',
+      'Se o usuario perguntar algo fora do painel, responda exatamente: Posso responder somente perguntas sobre o painel de monitoramento IDSensor.',
+      'Use apenas os dados de contexto enviados pelo painel. Nao invente nomes, temperaturas, alertas ou quantidades.',
+      'Fale em portugues do Brasil, com frases curtas, naturais, pontuadas e sem markdown.',
+      'Pronuncie IDSensor como i de sensor e IDvida como i de vida.'
+    ].join('\n');
+  }
+
   function appendAssistantMascotMessage(text, role = 'bot', pending = false){
     const log = document.getElementById('assistantMascotChatLog');
     if(!log) return null;
@@ -17313,6 +17329,192 @@ if(false){(function(){
     };
   }
 
+  function assistantMascotLiveContextText(){
+    const liveState = assistantMascotLiveState();
+    const incidents = liveState.devices
+      .filter(device => device.online === false || !/^normal$/i.test(String(device.status || '')))
+      .slice(0, 10)
+      .map(device => {
+        const temperature = Number.isFinite(Number(device.temperature)) ? `${Number(device.temperature).toFixed(1)} graus` : 'sem leitura';
+        return `${device.name || 'Equipamento'}: status ${device.status || 'sem status'}, temperatura ${temperature}, atualizado ${device.updated || 'sem horario'}, ${device.timerLabel || ''}`;
+      });
+    return [
+      `Estado atual do painel: total ${liveState.total}, normais ${liveState.normal}, atencao ${liveState.attention}, criticos ${liveState.critical}, sem comunicacao ${liveState.offline}, manutencao ${liveState.maintenance}, alertas ativos ${liveState.activeAlerts}.`,
+      incidents.length ? `Ocorrencias atuais: ${incidents.join('; ')}.` : 'Nao ha ocorrencias fora do padrao neste momento.'
+    ].join('\n');
+  }
+
+  function assistantMascotGetAudioContext(){
+    const AudioCtor = window.AudioContext || window.webkitAudioContext;
+    if(!AudioCtor) return null;
+    if(!assistantMascotAudioContext) assistantMascotAudioContext = new AudioCtor({ sampleRate:24000 });
+    return assistantMascotAudioContext;
+  }
+
+  function assistantMascotBase64ToBytes(base64){
+    const binary = atob(String(base64 || '').replace(/^data:[^,]+,/, ''));
+    const bytes = new Uint8Array(binary.length);
+    for(let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+    return bytes;
+  }
+
+  function playAssistantMascotPcmAudio(base64, sampleRate = 24000){
+    const context = assistantMascotGetAudioContext();
+    if(!context) return false;
+    const bytes = assistantMascotBase64ToBytes(base64);
+    if(bytes.length < 2) return false;
+    const samples = Math.floor(bytes.length / 2);
+    const audioBuffer = context.createBuffer(1, samples, sampleRate);
+    const channel = audioBuffer.getChannelData(0);
+    for(let index = 0; index < samples; index += 1){
+      const lo = bytes[index * 2];
+      const hi = bytes[index * 2 + 1];
+      let value = (hi << 8) | lo;
+      if(value >= 0x8000) value -= 0x10000;
+      channel[index] = Math.max(-1, Math.min(1, value / 32768));
+    }
+    const source = context.createBufferSource();
+    source.buffer = audioBuffer;
+    source.connect(context.destination);
+    const startAt = Math.max(context.currentTime + 0.02, assistantMascotAudioQueueTime || context.currentTime);
+    source.start(startAt);
+    assistantMascotAudioQueueTime = startAt + audioBuffer.duration;
+    setAssistantMascotMode('talk');
+    source.onended = () => {
+      if(context.currentTime >= assistantMascotAudioQueueTime - 0.05 && !activeTourToken) setAssistantMascotMode('monitor');
+    };
+    return true;
+  }
+
+  async function createAssistantMascotLiveSession(){
+    const current = assistantMascotLiveSession;
+    if(current?.socket && current.socket.readyState === WebSocket.OPEN) return current;
+    if(current?.socket && current.socket.readyState === WebSocket.CONNECTING) return current.ready.then(() => current);
+
+    const tokenResponse = await fetch(`${assistantMascotApiBaseUrl()}/api/assistant/live-token`, {
+      method:'POST',
+      headers: assistantMascotAuthHeaders(),
+      body: JSON.stringify({})
+    });
+    const tokenPayload = await tokenResponse.json().catch(() => null);
+    if(!tokenResponse.ok || !tokenPayload?.ok || !tokenPayload?.data?.token) throw new Error(tokenPayload?.message || 'live_token_unavailable');
+
+    const data = tokenPayload.data;
+    const socket = new WebSocket(`${data.websocketUrl}?access_token=${encodeURIComponent(data.token)}`);
+    const session = {
+      socket,
+      ready:null,
+      transcriptTarget:null,
+      transcript:'',
+      fallbackText:'',
+      speaking:false
+    };
+    session.ready = new Promise((resolve, reject) => {
+      socket.onopen = () => {
+        socket.send(JSON.stringify({
+          setup: {
+            model: `models/${data.model}`,
+            generationConfig: {
+              responseModalities: ['AUDIO'],
+              speechConfig: {
+                voiceConfig: {
+                  prebuiltVoiceConfig: { voiceName:'Kore' }
+                }
+              }
+            },
+            systemInstruction: {
+              parts: [{ text: assistantMascotLiveSystemInstruction() }]
+            },
+            outputAudioTranscription: {}
+          }
+        }));
+      };
+      socket.onerror = () => reject(new Error('live_socket_error'));
+      socket.onmessage = (event) => {
+        let payload = null;
+        try{ payload = JSON.parse(event.data); }catch(error){ return; }
+        if(payload?.setupComplete){
+          resolve();
+          return;
+        }
+        handleAssistantMascotLiveMessage(session, payload);
+      };
+      socket.onclose = () => {
+        if(assistantMascotLiveSession === session) assistantMascotLiveSession = null;
+      };
+      window.setTimeout(() => reject(new Error('live_setup_timeout')), 8000);
+    });
+    assistantMascotLiveSession = session;
+    await session.ready;
+    return session;
+  }
+
+  function handleAssistantMascotLiveMessage(session, payload){
+    const serverContent = payload?.serverContent || payload?.server_content || payload;
+    const modelTurn = serverContent?.modelTurn || serverContent?.model_turn;
+    const parts = Array.isArray(modelTurn?.parts) ? modelTurn.parts : [];
+    const textParts = [];
+    parts.forEach(part => {
+      const inline = part.inlineData || part.inline_data;
+      if(inline?.data && /^audio\//i.test(String(inline.mimeType || inline.mime_type || 'audio/pcm'))){
+        const rate = Number(String(inline.mimeType || inline.mime_type || '').match(/rate=(\d+)/i)?.[1] || 24000);
+        playAssistantMascotPcmAudio(inline.data, rate);
+      }
+      if(part.text) textParts.push(part.text);
+    });
+    const transcription = serverContent?.outputTranscription?.text || serverContent?.output_transcription?.text || '';
+    const nextText = `${textParts.join(' ')} ${transcription}`.replace(/\s+/g, ' ').trim();
+    if(nextText && session.transcriptTarget){
+      session.transcript += `${session.transcript ? ' ' : ''}${nextText}`;
+      session.transcriptTarget.textContent = session.transcript;
+    }
+    if(serverContent?.turnComplete || serverContent?.turn_complete || serverContent?.generationComplete || serverContent?.generation_complete){
+      session.speaking = false;
+      if(session.transcriptTarget && !session.transcript && session.fallbackText){
+        typeAssistantMascotTextInto(session.transcriptTarget, session.fallbackText, null);
+      }
+    }
+  }
+
+  async function speakAssistantMascotLive(prompt, options = {}){
+    const { textElement = null, fallbackText = '', token = null } = options;
+    if(token?.aborted) return false;
+    try{
+      const context = assistantMascotGetAudioContext();
+      if(context?.state === 'suspended') await context.resume();
+      const session = await createAssistantMascotLiveSession();
+      session.transcriptTarget = textElement;
+      session.transcript = '';
+      session.fallbackText = fallbackText || prompt;
+      session.speaking = true;
+      if(textElement) textElement.textContent = '';
+      session.socket.send(JSON.stringify({
+        clientContent: {
+          turns: [{
+            role: 'user',
+            parts: [{ text: `${assistantMascotLiveContextText()}\n\nSolicitacao: ${prompt}` }]
+          }],
+          turnComplete: true
+        }
+      }));
+      const startedAt = Date.now();
+      while(session.speaking && Date.now() - startedAt < 20000){
+        if(token?.aborted){
+          session.speaking = false;
+          return false;
+        }
+        await delay(120, token);
+      }
+      if(textElement && !session.transcript && session.fallbackText){
+        await typeAssistantMascotTextInto(textElement, session.fallbackText, token);
+      }
+      return true;
+    }catch(error){
+      if(textElement && fallbackText) await typeAssistantMascotTextInto(textElement, fallbackText, token);
+      return false;
+    }
+  }
+
   async function requestAssistantMascotAnswer(question, message){
     const response = await fetch(`${assistantMascotApiBaseUrl()}/api/assistant/chat`, {
       method:'POST',
@@ -17336,7 +17538,8 @@ if(false){(function(){
       message.classList.remove('is-pending');
       message.textContent = '';
     }
-    await playAssistantMascotVoice(answer, { textElement: message, replaceText: true });
+    const spoken = await speakAssistantMascotLive(`Responda a pergunta do usuario sobre o painel: ${question}`, { textElement: message, fallbackText: answer });
+    if(!spoken) await playAssistantMascotVoice(answer, { textElement: message, replaceText: true });
     return answer;
   }
 
@@ -17367,7 +17570,8 @@ if(false){(function(){
         pending.classList.remove('is-pending');
         pending.textContent = '';
       }
-      await playAssistantMascotVoice(greeting, { textElement: pending, replaceText: true });
+      const spoken = await speakAssistantMascotLive('Cumprimente o usuario pela primeira vez nesta sessao e explique rapidamente o estado atual do painel.', { textElement: pending, fallbackText: greeting });
+      if(!spoken) await playAssistantMascotVoice(greeting, { textElement: pending, replaceText: true });
     }catch(error){
       if(pending){
         pending.classList.remove('is-pending');
@@ -17507,6 +17711,18 @@ if(false){(function(){
       if(!activeTourToken) setAssistantMascotMode('monitor');
       return false;
     }
+  }
+
+  async function assistantMascotSpeakTourStep(stepText, textElement, token){
+    const content = String(stepText || '').trim();
+    if(!content) return false;
+    const spoken = await speakAssistantMascotLive(`Modo apresentacao: explique este passo do tour sem se apresentar de novo. Passo: ${content}`, {
+      textElement,
+      fallbackText: content,
+      token
+    });
+    if(spoken) return true;
+    return playAssistantMascotVoice(content, { textElement, replaceText: true, token });
   }
 
   function wireAssistantMascotChat(dock){
@@ -18024,7 +18240,7 @@ if(false){(function(){
       caption.classList.remove('is-complete');
       caption.classList.remove('is-hidden');
       text.textContent = '';
-      await playAssistantMascotVoice(step.text, { textElement: text, replaceText: true, token });
+      await assistantMascotSpeakTourStep(step.text, text, token);
       caption.classList.add('is-complete');
     }else{
       await typeCaption(step.text, token);

@@ -4640,6 +4640,51 @@ addRoute('POST', '/api/assistant/chat', async ({ body, req, res }) => {
   }
 });
 
+addRoute('POST', '/api/assistant/live-token', async ({ req, res }) => {
+  const session = requirePanelSession(req, res);
+  if (!session) return;
+
+  const apiKey = String(process.env.GEMINI_API_KEY || '').trim();
+  if (!apiKey) return fail(res, 503, 'GEMINI_API_KEY nao configurada no servidor.');
+
+  const model = String(process.env.GEMINI_LIVE_MODEL || 'gemini-3.1-flash-live-preview').trim();
+  const expireTime = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+  const newSessionExpireTime = new Date(Date.now() + 60 * 1000).toISOString();
+
+  try {
+    const response = await fetch('https://generativelanguage.googleapis.com/v1beta/auth_tokens', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': apiKey
+      },
+      body: JSON.stringify({
+        uses: 1,
+        expireTime,
+        newSessionExpireTime,
+        liveConnectConstraints: {
+          model: `models/${model}`,
+          config: {
+            responseModalities: ['AUDIO']
+          }
+        }
+      })
+    });
+    const payload = await response.json().catch(async () => ({ raw: await response.text().catch(() => '') }));
+    if (!response.ok || !payload?.name) {
+      return fail(res, response.status || 500, 'Nao foi possivel criar sessao ao vivo da IA.', JSON.stringify(payload || {}).slice(0, 700));
+    }
+    return ok(res, {
+      token: payload.name,
+      model,
+      expiresAt: payload.expireTime || expireTime,
+      websocketUrl: 'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained'
+    });
+  } catch (error) {
+    return fail(res, error.statusCode || 500, error.message || 'Nao foi possivel criar sessao ao vivo da IA.');
+  }
+});
+
 addRoute('POST', '/api/assistant-tts/preview', async ({ body, res }) => {
   try {
     const result = await synthesizeTts(body);
