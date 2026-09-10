@@ -17043,7 +17043,7 @@ if(false){(function(){
   const TOUR_BUTTON_ID = 'assistantTourBtn';
   const TOUR_LAYER_ID = 'assistantTourLayer';
   const ASSISTANT_MASCOT_DOCK_ID = 'assistantMascotDock';
-  const ASSISTANT_MASCOT_VERSION = '20260819-assistant-sidekick-v1';
+  const ASSISTANT_MASCOT_VERSION = '20260910-assistant-ai-v1';
   const ASSISTANT_MASCOT_FRAME_ROOT = './mascote/assets/frames-v6-motion';
   const ASSISTANT_MASCOT_WHATSAPP_IMAGE = `./mascote/assets/whatsapp-suporte-transparente-aprovacao.png?v=${ASSISTANT_MASCOT_VERSION}`;
   const ASSISTANT_MASCOT_FRAMES = {
@@ -17063,6 +17063,8 @@ if(false){(function(){
   let assistantMascotUserDismissed = false;
   let assistantMascotMenuCloseTimer = null;
   let assistantMascotLastActionAt = 0;
+  let assistantMascotVoiceProviderPromise = null;
+  let assistantMascotVoiceNoticeShown = false;
 
   function panelRoleForTour(){
     return String(
@@ -17121,6 +17123,13 @@ if(false){(function(){
               <small>Tour completo e temas do monitoramento.</small>
             </span>
           </button>
+          <button class="assistant-mascot-option assistant-mascot-option-primary" type="button" data-assistant-menu-target="chat">
+            <span class="assistant-mascot-option-icon" aria-hidden="true">?</span>
+            <span>
+              <strong>Perguntar ao assistente</strong>
+              <small>Respostas rápidas sobre o sistema.</small>
+            </span>
+          </button>
           <button class="assistant-mascot-option assistant-mascot-option-contact" type="button" aria-disabled="true">
             ${assistantMascotImageTag()}
             <span>
@@ -17153,6 +17162,30 @@ if(false){(function(){
           <button class="assistant-mascot-topic" type="button" aria-disabled="true">Relatórios e calibração</button>
           <button class="assistant-mascot-topic" type="button" aria-disabled="true">Gestão, NOC e acessibilidade</button>
         </div>
+
+        <div class="assistant-mascot-panel assistant-mascot-panel-chat" data-assistant-panel="chat" hidden>
+          <div class="assistant-mascot-subhead">
+            <button type="button" class="assistant-mascot-back" data-assistant-menu-target="main" aria-label="Voltar">‹</button>
+            <div>
+              <strong>Assistente IDVida</strong>
+              <span>Pergunte sobre o painel IDSensor.</span>
+            </div>
+          </div>
+          <div class="assistant-mascot-chat-log" id="assistantMascotChatLog" aria-live="polite">
+            <div class="assistant-mascot-message assistant-mascot-message-bot">Faça uma pergunta sobre cards, temperatura, alertas, comunicação, telemetria ou relatórios.</div>
+          </div>
+          <form class="assistant-mascot-chat-form" id="assistantMascotQuestionForm">
+            <textarea id="assistantMascotQuestionInput" maxlength="420" rows="2" placeholder="Ex.: como configurar temperatura?"></textarea>
+            <div class="assistant-mascot-chat-actions">
+              <label class="assistant-mascot-voice-toggle">
+                <input type="checkbox" id="assistantMascotVoiceToggle" checked>
+                <span>Voz</span>
+              </label>
+              <button class="assistant-mascot-send" type="submit">Enviar</button>
+            </div>
+          </form>
+          <audio id="assistantMascotAudio" hidden></audio>
+        </div>
       </div>
 
       <button class="assistant-mascot-close" type="button" data-assistant-mascot-close aria-label="Fechar assistente">×</button>
@@ -17175,18 +17208,192 @@ if(false){(function(){
     });
   }
 
+  function assistantMascotApiBaseUrl(){
+    if(typeof window.getPanelApiBaseUrl === 'function'){
+      return window.getPanelApiBaseUrl().replace(/\/+$/, '');
+    }
+    return String(window.location.origin || '').replace(/\/+$/, '') || 'http://localhost:4000';
+  }
+
+  function assistantMascotAuthHeaders(extra = {}){
+    return {
+      'Content-Type':'application/json',
+      ...(window.activePanelSession?.token ? { Authorization:`Bearer ${window.activePanelSession.token}` } : {}),
+      ...extra
+    };
+  }
+
+  function readAssistantMascotContextValue(value, limit = 80){
+    return String(value || '').replace(/\s+/g, ' ').trim().slice(0, limit);
+  }
+
+  function assistantMascotScreenContext(){
+    return {
+      profile: readAssistantMascotContextValue(window.activePanelSession?.role || document.body?.dataset?.authRole || document.body?.dataset?.panelRole || window.currentRole || '', 40),
+      pageTitle: readAssistantMascotContextValue(document.title || 'Painel IDSensor', 120),
+      panel: readAssistantMascotContextValue(document.body?.dataset?.panelRole || window.currentRole || '', 80)
+    };
+  }
+
+  function appendAssistantMascotMessage(text, role = 'bot', pending = false){
+    const log = document.getElementById('assistantMascotChatLog');
+    if(!log) return null;
+    const message = document.createElement('div');
+    message.className = `assistant-mascot-message assistant-mascot-message-${role}`;
+    if(pending) message.classList.add('is-pending');
+    message.textContent = text;
+    log.appendChild(message);
+    log.scrollTop = log.scrollHeight;
+    return message;
+  }
+
+  async function resolveAssistantMascotVoiceProvider(){
+    if(!assistantMascotVoiceProviderPromise){
+      assistantMascotVoiceProviderPromise = fetch(`${assistantMascotApiBaseUrl()}/api/assistant-tts/providers`, {
+        cache:'no-store'
+      })
+        .then(response => response.ok ? response.json() : null)
+        .then(payload => {
+          const providers = Array.isArray(payload?.data?.providers) ? payload.data.providers : [];
+          const preferred = ['gemini', 'openai', 'elevenlabs'];
+          return preferred
+            .map(id => providers.find(provider => provider.id === id && provider.configured))
+            .find(Boolean) || null;
+        })
+        .catch(() => null);
+    }
+    return assistantMascotVoiceProviderPromise;
+  }
+
+  async function playAssistantMascotVoice(text){
+    const enabled = document.getElementById('assistantMascotVoiceToggle')?.checked;
+    if(!enabled){
+      if(!activeTourToken) setAssistantMascotMode('monitor');
+      return;
+    }
+
+    try{
+      const provider = await resolveAssistantMascotVoiceProvider();
+      if(!provider){
+        if(!assistantMascotVoiceNoticeShown){
+          assistantMascotVoiceNoticeShown = true;
+          appendAssistantMascotMessage('A voz ainda não está disponível neste ambiente.', 'bot');
+        }
+        if(!activeTourToken) setAssistantMascotMode('monitor');
+        return;
+      }
+
+      const audioElement = document.getElementById('assistantMascotAudio');
+      if(!audioElement) return;
+      const voiceId = provider.voices?.[0]?.id || '';
+      const response = await fetch(`${assistantMascotApiBaseUrl()}/api/assistant-tts/preview`, {
+        method:'POST',
+        headers: assistantMascotAuthHeaders(),
+        body: JSON.stringify({
+          provider: provider.id,
+          voice: voiceId,
+          text,
+          instructions: 'Fale em portugues do Brasil, com voz natural, clara, acolhedora e objetiva. Nao adicione informacoes ao texto.'
+        })
+      });
+      if(!response.ok) throw new Error('voice_unavailable');
+
+      const blob = await response.blob();
+      if(audioElement.dataset.objectUrl){
+        URL.revokeObjectURL(audioElement.dataset.objectUrl);
+      }
+      const objectUrl = URL.createObjectURL(blob);
+      audioElement.dataset.objectUrl = objectUrl;
+      audioElement.src = objectUrl;
+      audioElement.onplay = () => setAssistantMascotMode('talk');
+      audioElement.onended = () => {
+        if(!activeTourToken) setAssistantMascotMode('monitor');
+      };
+      await audioElement.play();
+    }catch(error){
+      if(!assistantMascotVoiceNoticeShown){
+        assistantMascotVoiceNoticeShown = true;
+        appendAssistantMascotMessage('A voz ainda não está disponível neste momento.', 'bot');
+      }
+      if(!activeTourToken) setAssistantMascotMode('monitor');
+    }
+  }
+
+  function wireAssistantMascotChat(dock){
+    const form = dock.querySelector('#assistantMascotQuestionForm');
+    const input = dock.querySelector('#assistantMascotQuestionInput');
+    if(!form || !input || form.dataset.ready === 'true') return;
+    form.dataset.ready = 'true';
+
+    form.addEventListener('focusin', () => {
+      window.clearTimeout(assistantMascotMenuCloseTimer);
+    });
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      window.clearTimeout(assistantMascotMenuCloseTimer);
+
+      const question = String(input.value || '').trim();
+      if(!question) return;
+      input.value = '';
+      appendAssistantMascotMessage(question, 'user');
+      const pending = appendAssistantMascotMessage('Consultando a base do painel...', 'bot', true);
+      form.classList.add('is-loading');
+      input.disabled = true;
+      setAssistantMascotMode('talk');
+
+      try{
+        const response = await fetch(`${assistantMascotApiBaseUrl()}/api/assistant/chat`, {
+          method:'POST',
+          headers: assistantMascotAuthHeaders(),
+          body: JSON.stringify({
+            question,
+            context: assistantMascotScreenContext()
+          })
+        });
+        const payload = await response.json().catch(() => null);
+        if(response.status === 401 && typeof window.expirePanelSession === 'function'){
+          window.expirePanelSession('Sessão expirada. Faça login novamente.');
+          throw new Error('unauthorized');
+        }
+        if(!response.ok || !payload?.ok) throw new Error('assistant_unavailable');
+        const answer = String(payload?.data?.answer || '').trim() || 'Essa informação ainda não está na base do assistente.';
+        if(pending){
+          pending.classList.remove('is-pending');
+          pending.textContent = answer;
+        }
+        await playAssistantMascotVoice(answer);
+      }catch(error){
+        if(pending){
+          pending.classList.remove('is-pending');
+          pending.textContent = 'Não consegui responder agora. Tente novamente em instantes.';
+        }
+        if(!activeTourToken) setAssistantMascotMode('monitor');
+      }finally{
+        form.classList.remove('is-loading');
+        input.disabled = false;
+        input.focus({ preventScroll:true });
+      }
+    });
+  }
+
   function wireAssistantMascotDock(dock){
     dock.addEventListener('mouseenter', () => {
       if(activeTourToken) return;
+      if(document.getElementById('assistantMascotMenu')?.hidden === false) return;
       openAssistantMascotMenu('main');
     });
     dock.addEventListener('mouseleave', () => {
       if(activeTourToken) return;
+      if(dock.querySelector('[data-assistant-panel="chat"]')?.hidden === false) return;
+      if(dock.contains(document.activeElement)) return;
       scheduleAssistantMascotMenuClose();
     });
     dock.addEventListener('focusin', () => {
       if(activeTourToken) return;
-      openAssistantMascotMenu('main');
+      const activePanel = dock.querySelector('[data-assistant-panel]:not([hidden])')?.dataset?.assistantPanel || 'main';
+      openAssistantMascotMenu(activePanel);
     });
 
     dock.querySelector('#assistantMascotStage')?.addEventListener('click', () => {
@@ -17227,6 +17434,7 @@ if(false){(function(){
 
     dock.addEventListener('pointerdown', handleMenuAction, true);
     dock.addEventListener('click', handleMenuAction, true);
+    wireAssistantMascotChat(dock);
   }
 
   function setAssistantMascotMode(mode){
@@ -17263,6 +17471,11 @@ if(false){(function(){
       panel.hidden = panel.dataset.assistantPanel !== panelName;
     });
     setAssistantMascotMode('talk');
+    if(panelName === 'chat'){
+      window.setTimeout(() => {
+        document.getElementById('assistantMascotQuestionInput')?.focus({ preventScroll:true });
+      }, 0);
+    }
   }
 
   function closeAssistantMascotMenu(options = {}){

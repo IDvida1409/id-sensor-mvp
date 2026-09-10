@@ -18676,6 +18676,116 @@ body.assistant-tour-running .assistant-mascot-close{
   border-color:rgba(11,87,144,.13);
 }
 
+.assistant-mascot-panel-chat{
+  display:grid;
+  gap:10px;
+}
+
+.assistant-mascot-chat-log{
+  display:grid;
+  gap:8px;
+  max-height:194px;
+  overflow:auto;
+  padding:2px 2px 4px;
+}
+
+.assistant-mascot-message{
+  border:1px solid rgba(11,87,144,.12);
+  border-radius:8px;
+  box-shadow:0 6px 14px rgba(15,35,55,.05);
+  font-size:12px;
+  font-weight:650;
+  line-height:1.38;
+  max-width:92%;
+  overflow-wrap:anywhere;
+  padding:9px 10px;
+}
+
+.assistant-mascot-message-bot{
+  background:rgba(255,255,255,.76);
+  color:#173025;
+  justify-self:start;
+}
+
+.assistant-mascot-message-user{
+  background:linear-gradient(135deg, rgba(232,249,255,.96), rgba(236,255,239,.92));
+  border-color:rgba(13,124,196,.22);
+  color:#0b3457;
+  justify-self:end;
+}
+
+.assistant-mascot-message.is-pending{
+  color:#52687c;
+}
+
+.assistant-mascot-chat-form{
+  display:grid;
+  gap:8px;
+}
+
+.assistant-mascot-chat-form textarea{
+  background:rgba(255,255,255,.82);
+  border:1px solid rgba(11,87,144,.16);
+  border-radius:8px;
+  color:#14263a;
+  font:700 12px/1.35 inherit;
+  min-height:58px;
+  outline:none;
+  padding:9px 10px;
+  resize:none;
+  width:100%;
+}
+
+.assistant-mascot-chat-form textarea:focus{
+  border-color:rgba(13,124,196,.38);
+  box-shadow:0 0 0 3px rgba(13,124,196,.12);
+}
+
+.assistant-mascot-chat-actions{
+  align-items:center;
+  display:flex;
+  gap:8px;
+  justify-content:space-between;
+}
+
+.assistant-mascot-voice-toggle{
+  align-items:center;
+  color:#52687c;
+  display:inline-flex;
+  font-size:12px;
+  font-weight:800;
+  gap:6px;
+  line-height:1;
+}
+
+.assistant-mascot-voice-toggle input{
+  accent-color:#0d7cc4;
+  height:16px;
+  width:16px;
+}
+
+.assistant-mascot-send{
+  appearance:none;
+  background:#0d7cc4;
+  border:1px solid rgba(11,87,144,.22);
+  border-radius:8px;
+  color:#fff;
+  cursor:pointer;
+  font-size:12px;
+  font-weight:900;
+  min-height:34px;
+  padding:0 14px;
+}
+
+.assistant-mascot-send:hover{
+  background:#0b6faf;
+}
+
+.assistant-mascot-chat-form.is-loading .assistant-mascot-send{
+  cursor:wait;
+  opacity:.72;
+}
+
 body.assistant-tour-running .assistant-mascot-menu{
   display:none;
 }
@@ -18879,6 +18989,10 @@ body.assistant-tour-running{
     bottom:-8px;
     right:48px;
     transform:rotate(135deg);
+  }
+
+  .assistant-mascot-chat-log{
+    max-height:154px;
   }
 
   .assistant-tour-caption{

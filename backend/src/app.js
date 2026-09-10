@@ -18,6 +18,8 @@ const { sendActivationEmail } = require('./services/emailService');
 const { gatewayStatusSummary, getMqttBridgeStatus, parseMokoRawPayload } = require('./services/mqttBridge');
 const { sendExpoPush } = require('./services/pushService');
 const { alertMessageForAlert } = require('./services/alertText');
+const { answerAssistantQuestion, assistantStatus } = require('./services/assistantKnowledge');
+const { listTtsProviders, synthesizeTts } = require('./services/ttsProviders');
 const {
   OFFLINE_AFTER_MS,
   calculateFillPercentage,
@@ -2397,6 +2399,15 @@ function html(res, status, body) {
   res.end(body);
 }
 
+function audio(res, status, buffer, contentType = 'audio/mpeg') {
+  res.writeHead(status, {
+    'Content-Type': contentType,
+    'Cache-Control': 'no-store',
+    'Content-Length': buffer.length
+  });
+  res.end(buffer);
+}
+
 function requestPublicBase(req) {
   const host = req.headers['x-forwarded-host'] || req.headers.host;
   if (!host) return publicApiUrl;
@@ -4599,6 +4610,52 @@ addRoute('POST', '/alerts/:id/close', async ({ params, res }) => {
 addRoute('GET', '/notification-logs', async ({ res }) => {
   const rows = getDb().prepare('SELECT * FROM notification_logs ORDER BY criado_em DESC').all();
   ok(res, rows);
+});
+
+addRoute('GET', '/api/assistant-tts/providers', async ({ res }) => {
+  ok(res, listTtsProviders());
+});
+
+addRoute('GET', '/api/assistant/status', async ({ req, res }) => {
+  const session = requirePanelSession(req, res);
+  if (!session) return;
+
+  ok(res, assistantStatus());
+});
+
+addRoute('POST', '/api/assistant/chat', async ({ body, req, res }) => {
+  const session = requirePanelSession(req, res);
+  if (!session) return;
+
+  try {
+    const result = await answerAssistantQuestion({
+      question: body?.question,
+      context: body?.context || {},
+      session,
+      model: body?.model || ''
+    });
+    return ok(res, result);
+  } catch (error) {
+    return fail(res, error.statusCode || 500, error.message || 'Nao foi possivel responder agora.', error.details || null);
+  }
+});
+
+addRoute('POST', '/api/assistant-tts/preview', async ({ body, res }) => {
+  try {
+    const result = await synthesizeTts(body);
+    return audio(res, 200, result.buffer, result.contentType);
+  } catch (error) {
+    return fail(res, error.statusCode || 500, error.message || 'Nao foi possivel gerar a voz.', error.details || null);
+  }
+});
+
+addRoute('POST', '/api/assistant-voice-preview', async ({ body, res }) => {
+  try {
+    const result = await synthesizeTts({ ...body, provider: body.provider || 'openai' });
+    return audio(res, 200, result.buffer, result.contentType);
+  } catch (error) {
+    return fail(res, error.statusCode || 500, error.message || 'Nao foi possivel gerar a voz.', error.details || null);
+  }
 });
 
 async function app(req, res) {
