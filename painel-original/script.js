@@ -17071,6 +17071,7 @@ if(false){(function(){
   let assistantMascotLiveSession = null;
   let assistantMascotAudioContext = null;
   let assistantMascotAudioQueueTime = 0;
+  const assistantMascotVoiceCache = new Map();
   const ASSISTANT_MASCOT_GREETING_SESSION_KEY = 'idvida-assistant-greeting-seen-v1';
 
   function panelRoleForTour(){
@@ -17409,6 +17410,7 @@ if(false){(function(){
       transcriptTarget:null,
       transcript:'',
       fallbackText:'',
+      receivedContent:false,
       speaking:false
     };
     session.ready = new Promise((resolve, reject) => {
@@ -17460,11 +17462,16 @@ if(false){(function(){
       const inline = part.inlineData || part.inline_data;
       if(inline?.data && /^audio\//i.test(String(inline.mimeType || inline.mime_type || 'audio/pcm'))){
         const rate = Number(String(inline.mimeType || inline.mime_type || '').match(/rate=(\d+)/i)?.[1] || 24000);
+        session.receivedContent = true;
         playAssistantMascotPcmAudio(inline.data, rate);
       }
-      if(part.text) textParts.push(part.text);
+      if(part.text){
+        session.receivedContent = true;
+        textParts.push(part.text);
+      }
     });
     const transcription = serverContent?.outputTranscription?.text || serverContent?.output_transcription?.text || '';
+    if(transcription) session.receivedContent = true;
     const nextText = `${textParts.join(' ')} ${transcription}`.replace(/\s+/g, ' ').trim();
     if(nextText && session.transcriptTarget){
       session.transcript += `${session.transcript ? ' ' : ''}${nextText}`;
@@ -17487,7 +17494,8 @@ if(false){(function(){
       const session = await createAssistantMascotLiveSession();
       session.transcriptTarget = textElement;
       session.transcript = '';
-      session.fallbackText = fallbackText || prompt;
+      session.fallbackText = fallbackText;
+      session.receivedContent = false;
       session.speaking = true;
       if(textElement) textElement.textContent = '';
       session.socket.send(JSON.stringify({
@@ -17500,17 +17508,25 @@ if(false){(function(){
         }
       }));
       const startedAt = Date.now();
-      while(session.speaking && Date.now() - startedAt < 20000){
+      while(session.speaking && Date.now() - startedAt < 15000){
         if(token?.aborted){
           session.speaking = false;
           return false;
         }
         await delay(120, token);
       }
+      if(session.speaking){
+        session.speaking = false;
+        session.transcriptTarget = null;
+        session.fallbackText = '';
+        try{ session.socket.close(); }catch(error){}
+        if(assistantMascotLiveSession === session) assistantMascotLiveSession = null;
+        return false;
+      }
       if(textElement && !session.transcript && session.fallbackText){
         await typeAssistantMascotTextInto(textElement, session.fallbackText, token);
       }
-      return true;
+      return session.receivedContent || Boolean(session.transcript);
     }catch(error){
       if(textElement && fallbackText) await typeAssistantMascotTextInto(textElement, fallbackText, token);
       return false;
@@ -17518,6 +17534,16 @@ if(false){(function(){
   }
 
   async function requestAssistantMascotAnswer(question, message){
+    if(message){
+      message.classList.remove('is-pending');
+      message.textContent = '';
+    }
+    const liveSpoken = await speakAssistantMascotLive(`Responda diretamente ao usuario. Pergunta: ${question}`, {
+      textElement: message,
+      fallbackText: ''
+    });
+    if(liveSpoken) return message?.textContent || '';
+
     const response = await fetch(`${assistantMascotApiBaseUrl()}/api/assistant/chat`, {
       method:'POST',
       headers: assistantMascotAuthHeaders(),
@@ -17540,8 +17566,7 @@ if(false){(function(){
       message.classList.remove('is-pending');
       message.textContent = '';
     }
-    const spoken = await speakAssistantMascotLive(`Responda a pergunta do usuario sobre o painel: ${question}`, { textElement: message, fallbackText: answer });
-    if(!spoken) await playAssistantMascotVoice(answer, { textElement: message, replaceText: true });
+    await typeAssistantMascotTextInto(message, answer);
     return answer;
   }
 
@@ -17573,7 +17598,7 @@ if(false){(function(){
         pending.textContent = '';
       }
       const spoken = await speakAssistantMascotLive('Cumprimente o usuario pela primeira vez nesta sessao e explique rapidamente o estado atual do painel.', { textElement: pending, fallbackText: greeting });
-      if(!spoken) await playAssistantMascotVoice(greeting, { textElement: pending, replaceText: true });
+      if(!spoken) await typeAssistantMascotTextInto(pending, greeting);
     }catch(error){
       if(pending){
         pending.classList.remove('is-pending');
@@ -17650,28 +17675,55 @@ if(false){(function(){
     });
   }
 
-  async function fetchAssistantMascotVoice(text){
-    const response = await fetch(`${assistantMascotApiBaseUrl()}/api/assistant-tts/preview`, {
-      method:'POST',
-      headers: assistantMascotAuthHeaders(),
-      body: JSON.stringify({
-        provider: 'gemini',
-        voice: 'Kore',
-        text: assistantMascotSpeechText(text),
-        instructions: 'Fale em português do Brasil, com voz neural humana, natural, clara, acolhedora e objetiva. Pronuncie I D Sensor como "i dê sensor" e I D Vida como "i dê vida". Não adicione informações ao texto.'
-      })
-    });
-    if(!response.ok){
-      const payload = await response.json().catch(() => null);
-      const error = new Error(payload?.message || payload?.error || `tts_http_${response.status}`);
-      error.details = JSON.stringify(payload?.details || payload || {});
+  function assistantMascotVoiceCacheKey(text){
+    return assistantMascotSpeechText(text).replace(/\s+/g, ' ').trim();
+  }
+
+  function requestAssistantMascotVoiceBlob(text){
+    return (async () => {
+      const response = await fetch(`${assistantMascotApiBaseUrl()}/api/assistant-tts/preview`, {
+        method:'POST',
+        headers: assistantMascotAuthHeaders(),
+        body: JSON.stringify({
+          provider: 'gemini',
+          voice: 'Kore',
+          text: assistantMascotSpeechText(text),
+          instructions: 'Fale em português do Brasil, com voz neural humana, natural, clara, acolhedora e objetiva. Pronuncie I D Sensor como "i dê sensor" e I D Vida como "i dê vida". Não adicione informações ao texto.'
+        })
+      });
+      if(!response.ok){
+        const payload = await response.json().catch(() => null);
+        const error = new Error(payload?.message || payload?.error || `tts_http_${response.status}`);
+        error.details = JSON.stringify(payload?.details || payload || {});
+        throw error;
+      }
+      return response.blob();
+    })();
+  }
+
+  function prefetchAssistantMascotVoice(text){
+    if(!assistantMascotVoiceEnabled()) return null;
+    const key = assistantMascotVoiceCacheKey(text);
+    if(!key) return null;
+    if(assistantMascotVoiceCache.has(key)) return assistantMascotVoiceCache.get(key);
+    const promise = requestAssistantMascotVoiceBlob(text).catch(error => {
+      assistantMascotVoiceCache.delete(key);
       throw error;
+    });
+    assistantMascotVoiceCache.set(key, promise);
+    return promise;
+  }
+
+  async function fetchAssistantMascotVoice(text, options = {}){
+    if(options.useCache){
+      const cached = prefetchAssistantMascotVoice(text);
+      if(cached) return cached;
     }
-    return response.blob();
+    return requestAssistantMascotVoiceBlob(text);
   }
 
   async function playAssistantMascotVoice(text, options = {}){
-    const { textElement = null, replaceText = false, token = null } = options;
+    const { textElement = null, replaceText = false, token = null, useCache = false } = options;
     const content = String(text || '').trim();
     if(replaceText && textElement) textElement.textContent = '';
     if(!content) return false;
@@ -17685,7 +17737,7 @@ if(false){(function(){
     try{
       const audioElement = document.getElementById('assistantMascotAudio');
       if(!audioElement) throw new Error('audio_element_unavailable');
-      const blob = await fetchAssistantMascotVoice(content);
+      const blob = await fetchAssistantMascotVoice(content, { useCache });
       if(audioElement.dataset.objectUrl) URL.revokeObjectURL(audioElement.dataset.objectUrl);
       const objectUrl = URL.createObjectURL(blob);
       audioElement.dataset.objectUrl = objectUrl;
@@ -17718,13 +17770,7 @@ if(false){(function(){
   async function assistantMascotSpeakTourStep(stepText, textElement, token){
     const content = String(stepText || '').trim();
     if(!content) return false;
-    const spoken = await speakAssistantMascotLive(`Modo apresentacao: explique este passo do tour sem se apresentar de novo. Passo: ${content}`, {
-      textElement,
-      fallbackText: content,
-      token
-    });
-    if(spoken) return true;
-    return playAssistantMascotVoice(content, { textElement, replaceText: true, token });
+    return playAssistantMascotVoice(content, { textElement, replaceText: true, token, useCache: true });
   }
 
   function wireAssistantMascotChat(dock){
@@ -19246,8 +19292,12 @@ if(false){(function(){
       ];
 
       const steps = buildAssistantTourSteps();
+      prefetchAssistantMascotVoice(steps[0]?.text);
 
-      for(const step of steps){
+      for(let index = 0; index < steps.length; index += 1){
+        const step = steps[index];
+        prefetchAssistantMascotVoice(step?.text);
+        prefetchAssistantMascotVoice(steps[index + 1]?.text);
         const shouldContinue = await runStep(step, token);
         if(!shouldContinue) break;
       }
