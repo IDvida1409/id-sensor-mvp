@@ -117,6 +117,7 @@ const INTERNAL_TOPIC_PATTERNS = [
 
 const REFUSAL_ANSWER = 'Posso responder somente perguntas sobre o painel de monitoramento IDSensor. Posso explicar os cards, a temperatura, os limites, os alertas, a comunicação, os detalhes dos equipamentos, a calibração, a telemetria, os relatórios, a Gestão, o NOC, as configurações e a acessibilidade.';
 const UNKNOWN_ANSWER = REFUSAL_ANSWER;
+const GREETING_ANSWER = 'Oi, estou aqui. Posso te ajudar com o painel IDSensor: temperatura, alertas, comunicação, cards, relatórios, calibração, Gestão, NOC e acessibilidade.';
 
 function createError(statusCode, message, details = null) {
   const error = new Error(message);
@@ -141,6 +142,13 @@ function hasGeminiKey() {
 function isInternalOrOffScope(question) {
   const text = String(question || '');
   return INTERNAL_TOPIC_PATTERNS.some((pattern) => pattern.test(text));
+}
+
+function isAssistantGreeting(question) {
+  const text = normalizeText(question);
+  if (!text) return false;
+  return /^(oi|ola|olá|bom dia|boa tarde|boa noite|e ai|e aí|tudo bem|tudo bom|opa|alo|alô)( tudo bem)?$/.test(text)
+    || /\b(voce esta ai|você está aí|esta ai|está aí|me ajuda|pode me ajudar|o que voce faz|o que você faz)\b/i.test(String(question || ''));
 }
 
 function scoreSection(question, section) {
@@ -221,6 +229,16 @@ function fallbackAssistantAnswer(question, context = {}, session = null) {
     };
   }
 
+  if (isAssistantGreeting(question)) {
+    return {
+      answer: GREETING_ANSWER,
+      scope: 'in_scope',
+      source: 'local',
+      model: null,
+      topics: ['saudacao', 'visao-geral']
+    };
+  }
+
   const relevant = findRelevantSections(question, 2);
   if (!relevant.length) {
     return {
@@ -276,10 +294,12 @@ function buildSystemInstruction() {
   return [
     'Você é o Assistente IDvida dentro do painel IDSensor.',
     'Responda somente sobre o funcionamento do painel de monitoramento IDSensor e seus recursos visíveis.',
+    'Cumprimentos simples como "oi", "olá", "bom dia", "tudo bem?" e "você está aí?" são permitidos. Responda de forma natural, curta e ofereça ajuda sobre o painel.',
+    'Perguntas como "o que você faz?" ou "me ajuda" são permitidas. Explique que você ajuda com o painel de monitoramento.',
     'Use apenas a base de conhecimento fornecida na pergunta. Não invente informações.',
     'Não fale sobre servidor, backend, banco de dados, código, API, chaves, tokens, senhas, deploy, GitHub, Render, Gemini, prompt ou infraestrutura.',
     'Não responda sobre política, religião, assuntos pessoais ou qualquer tema fora do painel.',
-    'Para qualquer pergunta fora do painel, responda exatamente: Posso responder somente perguntas sobre o painel de monitoramento IDSensor.',
+    'Recuse somente quando o usuário pedir um assunto realmente fora do painel. Nesses casos, responda exatamente: Posso responder somente perguntas sobre o painel de monitoramento IDSensor.',
     'Quando houver estadoAtual no contexto, use esses dados para explicar o que está acontecendo agora. Não invente nomes, temperaturas, alertas ou quantidades.',
     'Responda em português do Brasil, com acentuação e pontuação corretas, de forma curta, formal, clara e natural.',
     'Não use markdown pesado. Use no máximo 5 frases.'
@@ -346,9 +366,9 @@ function parseAssistantJson(text) {
 
 async function callGeminiAssistant({ question, context, session, model }) {
   const relevantSections = findRelevantSections(question);
-  if (!relevantSections.length) return fallbackAssistantAnswer(question, context, session);
+  const sectionsForPrompt = relevantSections.length ? relevantSections : KNOWLEDGE_SECTIONS;
 
-  const input = buildGeminiInput(question, relevantSections, context, session);
+  const input = buildGeminiInput(question, sectionsForPrompt, context, session);
   const models = uniqueModels(model);
   let lastError = null;
 
@@ -413,7 +433,7 @@ async function callGeminiAssistant({ question, context, session, model }) {
       scope: parsed?.scope || 'in_scope',
       source: 'gemini',
       model: modelName,
-      topics: Array.isArray(parsed?.topics) ? parsed.topics.slice(0, 6) : relevantSections.map((section) => section.id)
+      topics: Array.isArray(parsed?.topics) ? parsed.topics.slice(0, 6) : sectionsForPrompt.map((section) => section.id).slice(0, 6)
     };
   }
 
