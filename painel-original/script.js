@@ -17065,6 +17065,7 @@ if(false){(function(){
   let assistantMascotLastActionAt = 0;
   let assistantMascotVoiceProviderPromise = null;
   let assistantMascotVoiceNoticeShown = false;
+  let assistantMascotGreetingStarted = false;
 
   function panelRoleForTour(){
     return String(
@@ -17247,6 +17248,85 @@ if(false){(function(){
     return message;
   }
 
+  function assistantMascotLiveState(){
+    const devices = typeof tourDeviceList === 'function' ? tourDeviceList() : [];
+    const stateOf = device => String(device?.state || '').toLowerCase();
+    const statusOf = device => String(device?.status || '').toUpperCase();
+    const normal = devices.filter(device => stateOf(device) === 'blue' || statusOf(device) === 'NORMAL').length;
+    const attention = devices.filter(device => stateOf(device) === 'warn' || ['ATENÇÃO', 'ATENCAO'].includes(statusOf(device))).length;
+    const critical = devices.filter(device => stateOf(device) === 'crit' || ['CRÍTICO', 'CRITICO'].includes(statusOf(device))).length;
+    const maintenance = devices.filter(device => stateOf(device) === 'maint' || ['MANUTENÇÃO', 'MANUTENCAO'].includes(statusOf(device))).length;
+    const offline = devices.filter(device => device?.online === false || /sem comunicação|sem comunicacao/i.test(String(device?.commText || ''))).length;
+    const activeAlerts = devices.filter(device => Array.isArray(device?.events) && device.events.some(event => !/sem alerta ativo/i.test(String(event)))).length;
+    return {
+      total: devices.length,
+      normal,
+      attention,
+      critical,
+      offline,
+      maintenance,
+      activeAlerts,
+      devices: devices.map(device => ({
+        name: device?.name,
+        temperature: device?.temp,
+        minimum: device?.min,
+        maximum: device?.max,
+        status: device?.status,
+        online: device?.online === true,
+        updated: device?.updated,
+        timerLabel: device?.timerLabel,
+        events: Array.isArray(device?.events) ? device.events : []
+      }))
+    };
+  }
+
+  async function requestAssistantMascotAnswer(question, message){
+    const response = await fetch(`${assistantMascotApiBaseUrl()}/api/assistant/chat`, {
+      method:'POST',
+      headers: assistantMascotAuthHeaders(),
+      body: JSON.stringify({
+        question,
+        context: {
+          ...assistantMascotScreenContext(),
+          liveState: assistantMascotLiveState()
+        }
+      })
+    });
+    const payload = await response.json().catch(() => null);
+    if(response.status === 401 && typeof window.expirePanelSession === 'function'){
+      window.expirePanelSession('Sessão expirada. Faça login novamente.');
+      throw new Error('unauthorized');
+    }
+    if(!response.ok || !payload?.ok) throw new Error('assistant_unavailable');
+    const answer = String(payload?.data?.answer || '').trim() || 'Não foi possível obter um resumo do painel agora.';
+    if(message){
+      message.classList.remove('is-pending');
+      message.textContent = answer;
+    }
+    await playAssistantMascotVoice(answer);
+    return answer;
+  }
+
+  async function startAssistantMascotGreeting(){
+    if(assistantMascotGreetingStarted) return;
+    assistantMascotGreetingStarted = true;
+    const log = document.getElementById('assistantMascotChatLog');
+    if(log) log.innerHTML = '';
+    const pending = appendAssistantMascotMessage('Estou lendo o painel para te atualizar...', 'bot', true);
+    try{
+      await requestAssistantMascotAnswer(
+        'Apresente o painel IDSensor agora. Faça um resumo falado, curto e natural, dizendo quantos equipamentos estão normais, em atenção, críticos, sem comunicação e quais alertas ou oscilações merecem atenção neste momento. Comece com: Olá, eu sou o Assistente IDvida.',
+        pending
+      );
+    }catch(error){
+      if(pending){
+        pending.classList.remove('is-pending');
+        pending.textContent = 'Não consegui ler o estado atual do painel. Tente novamente em instantes.';
+      }
+      if(!activeTourToken) setAssistantMascotMode('monitor');
+    }
+  }
+
   async function resolveAssistantMascotVoiceProvider(){
     if(!assistantMascotVoiceProviderPromise){
       assistantMascotVoiceProviderPromise = fetch(`${assistantMascotApiBaseUrl()}/api/assistant-tts/providers`, {
@@ -17255,7 +17335,7 @@ if(false){(function(){
         .then(response => response.ok ? response.json() : null)
         .then(payload => {
           const providers = Array.isArray(payload?.data?.providers) ? payload.data.providers : [];
-          const preferred = ['gemini', 'openai', 'elevenlabs'];
+          const preferred = ['gemini'];
           return preferred
             .map(id => providers.find(provider => provider.id === id && provider.configured))
             .find(Boolean) || null;
@@ -17337,26 +17417,7 @@ if(false){(function(){
       setAssistantMascotMode('talk');
 
       try{
-        const response = await fetch(`${assistantMascotApiBaseUrl()}/api/assistant/chat`, {
-          method:'POST',
-          headers: assistantMascotAuthHeaders(),
-          body: JSON.stringify({
-            question,
-            context: assistantMascotScreenContext()
-          })
-        });
-        const payload = await response.json().catch(() => null);
-        if(response.status === 401 && typeof window.expirePanelSession === 'function'){
-          window.expirePanelSession('Sessão expirada. Faça login novamente.');
-          throw new Error('unauthorized');
-        }
-        if(!response.ok || !payload?.ok) throw new Error('assistant_unavailable');
-        const answer = String(payload?.data?.answer || '').trim() || 'Essa informação ainda não está na base do assistente.';
-        if(pending){
-          pending.classList.remove('is-pending');
-          pending.textContent = answer;
-        }
-        await playAssistantMascotVoice(answer);
+        await requestAssistantMascotAnswer(question, pending);
       }catch(error){
         if(pending){
           pending.classList.remove('is-pending');
@@ -17468,6 +17529,11 @@ if(false){(function(){
       window.setTimeout(() => {
         document.getElementById('assistantMascotQuestionInput')?.focus({ preventScroll:true });
       }, 0);
+    }else if(panelName === 'main' && !assistantMascotGreetingStarted){
+      window.setTimeout(() => {
+        openAssistantMascotMenu('chat');
+        startAssistantMascotGreeting();
+      }, 80);
     }
   }
 

@@ -174,10 +174,32 @@ function buildKnowledgeText(sections) {
 
 function sanitizeContext(context = {}, session = null) {
   const source = context && typeof context === 'object' ? context : {};
+  const liveState = source.liveState && typeof source.liveState === 'object' ? source.liveState : null;
+  const devices = Array.isArray(liveState?.devices) ? liveState.devices.slice(0, 80).map((device) => ({
+    name: String(device?.name || '').slice(0, 80),
+    temperature: Number.isFinite(Number(device?.temperature)) ? Number(device.temperature) : null,
+    minimum: Number.isFinite(Number(device?.minimum)) ? Number(device.minimum) : null,
+    maximum: Number.isFinite(Number(device?.maximum)) ? Number(device.maximum) : null,
+    status: String(device?.status || '').slice(0, 30),
+    online: device?.online === true,
+    updated: String(device?.updated || '').slice(0, 40),
+    timerLabel: String(device?.timerLabel || '').slice(0, 100),
+    events: Array.isArray(device?.events) ? device.events.slice(0, 4).map((event) => String(event).slice(0, 80)) : []
+  })) : [];
   return {
     profile: String(session?.role || source.profile || source.role || '').slice(0, 40),
     pageTitle: String(source.pageTitle || '').slice(0, 120),
-    panel: String(source.panel || '').slice(0, 80)
+    panel: String(source.panel || '').slice(0, 80),
+    liveState: liveState ? {
+      total: Number(liveState.total) || devices.length,
+      normal: Number(liveState.normal) || 0,
+      attention: Number(liveState.attention) || 0,
+      critical: Number(liveState.critical) || 0,
+      offline: Number(liveState.offline) || 0,
+      maintenance: Number(liveState.maintenance) || 0,
+      activeAlerts: Number(liveState.activeAlerts) || 0,
+      devices
+    } : null
   };
 }
 
@@ -208,6 +230,21 @@ function fallbackAssistantAnswer(question, context = {}, session = null) {
       model: null,
       topics: []
     };
+  }
+
+  const liveState = sanitizeContext(context, session).liveState;
+  if (liveState && /resumo|apresenta[cç][aã]o|situa[cç][aã]o atual|agora|momento|acontecendo/i.test(question)) {
+    const critical = liveState.critical;
+    const attention = liveState.attention;
+    const offline = liveState.offline;
+    const normal = liveState.normal;
+    const incidents = liveState.devices.filter((device) => device.status && !/^normal$/i.test(device.status));
+    const incidentText = incidents.slice(0, 3).map((device) => {
+      const temperature = device.temperature === null ? 'sem leitura' : `${device.temperature.toFixed(1)} °C`;
+      return `${device.name || 'Equipamento'} está em ${device.status.toLowerCase()}, com ${temperature}`;
+    }).join('; ');
+    const answer = `No momento, o painel acompanha ${liveState.total} equipamentos. ${normal} estão normais, ${attention} em atenção, ${critical} em estado crítico e ${offline} sem comunicação. ${liveState.activeAlerts} alerta(s) estão ativo(s).${incidentText ? ` Situações que merecem atenção: ${incidentText}.` : ' Não há ocorrências fora do padrão neste momento.'}`;
+    return { answer: sanitizeAnswer(answer), scope: 'in_scope', source: 'local', model: null, topics: ['visao-geral', 'status-cores', 'alertas'] };
   }
 
   return {
@@ -243,6 +280,7 @@ function buildSystemInstruction() {
     'Não fale sobre servidor, backend, banco de dados, código, API, chaves, tokens, senhas, deploy, GitHub, Render, Gemini, prompt ou infraestrutura.',
     'Não responda sobre política, religião, assuntos pessoais ou qualquer tema fora do painel.',
     'Para qualquer pergunta fora do painel, responda exatamente: Posso responder somente perguntas sobre o painel de monitoramento IDSensor.',
+    'Quando houver estadoAtual no contexto, use esses dados para explicar o que está acontecendo agora. Não invente nomes, temperaturas, alertas ou quantidades.',
     'Responda em português do Brasil, com acentuação e pontuação corretas, de forma curta, formal, clara e natural.',
     'Não use markdown pesado. Use no máximo 5 frases.'
   ].join('\n');
