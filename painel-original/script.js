@@ -17272,69 +17272,41 @@ if(false){(function(){
       return;
     }
 
-    const speakInBrowser = () => new Promise((resolve, reject) => {
-      if(!('speechSynthesis' in window) || !('SpeechSynthesisUtterance' in window)){
-        reject(new Error('browser_voice_unavailable'));
-        return;
-      }
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(String(text || ''));
-      utterance.lang = 'pt-BR';
-      utterance.rate = 0.96;
-      utterance.pitch = 1;
-      const voices = window.speechSynthesis.getVoices?.() || [];
-      const portugueseVoice = voices.find(voice => /^pt-BR$/i.test(voice.lang))
-        || voices.find(voice => /^pt/i.test(voice.lang));
-      if(portugueseVoice) utterance.voice = portugueseVoice;
-      utterance.onstart = () => setAssistantMascotMode('talk');
-      utterance.onend = () => {
-        if(!activeTourToken) setAssistantMascotMode('monitor');
-        resolve();
-      };
-      utterance.onerror = (event) => reject(event.error || new Error('browser_voice_error'));
-      window.speechSynthesis.speak(utterance);
-    });
-
     try{
       const provider = await resolveAssistantMascotVoiceProvider();
-      if(provider){
-        try{
-          const audioElement = document.getElementById('assistantMascotAudio');
-          if(!audioElement) throw new Error('audio_element_unavailable');
-          const voiceId = provider.voices?.[0]?.id || '';
-          const response = await fetch(`${assistantMascotApiBaseUrl()}/api/assistant-tts/preview`, {
-            method:'POST',
-            headers: assistantMascotAuthHeaders(),
-            body: JSON.stringify({
-              provider: provider.id,
-              voice: voiceId,
-              text,
-              instructions: 'Fale em português do Brasil, com voz natural, clara, acolhedora e objetiva. Não adicione informações ao texto.'
-            })
-          });
-          if(!response.ok) throw new Error('voice_unavailable');
-
-          const blob = await response.blob();
-          if(audioElement.dataset.objectUrl) URL.revokeObjectURL(audioElement.dataset.objectUrl);
-          const objectUrl = URL.createObjectURL(blob);
-          audioElement.dataset.objectUrl = objectUrl;
-          audioElement.src = objectUrl;
-          audioElement.onplay = () => setAssistantMascotMode('talk');
-          audioElement.onended = () => {
-            if(!activeTourToken) setAssistantMascotMode('monitor');
-          };
-          await audioElement.play();
-          return;
-        }catch(error){
-          // A voz local mantém a conversa falada quando o provedor remoto falha.
-        }
+      if(!provider){
+        throw new Error('neural_voice_unavailable');
       }
 
-      await speakInBrowser();
+      const audioElement = document.getElementById('assistantMascotAudio');
+      if(!audioElement) throw new Error('audio_element_unavailable');
+      const voiceId = provider.voices?.[0]?.id || '';
+      const response = await fetch(`${assistantMascotApiBaseUrl()}/api/assistant-tts/preview`, {
+        method:'POST',
+        headers: assistantMascotAuthHeaders(),
+        body: JSON.stringify({
+          provider: provider.id,
+          voice: voiceId,
+          text,
+          instructions: 'Fale em português do Brasil, com voz humana neural, natural, clara, acolhedora e objetiva. Não adicione informações ao texto.'
+        })
+      });
+      if(!response.ok) throw new Error('neural_voice_request_failed');
+
+      const blob = await response.blob();
+      if(audioElement.dataset.objectUrl) URL.revokeObjectURL(audioElement.dataset.objectUrl);
+      const objectUrl = URL.createObjectURL(blob);
+      audioElement.dataset.objectUrl = objectUrl;
+      audioElement.src = objectUrl;
+      audioElement.onplay = () => setAssistantMascotMode('talk');
+      audioElement.onended = () => {
+        if(!activeTourToken) setAssistantMascotMode('monitor');
+      };
+      await audioElement.play();
     }catch(error){
       if(!assistantMascotVoiceNoticeShown){
         assistantMascotVoiceNoticeShown = true;
-        appendAssistantMascotMessage('Não foi possível reproduzir a voz neste navegador.', 'bot');
+        appendAssistantMascotMessage('A voz neural da IA ainda não está disponível. Verifique a configuração do Gemini TTS.', 'bot');
       }
       if(!activeTourToken) setAssistantMascotMode('monitor');
     }

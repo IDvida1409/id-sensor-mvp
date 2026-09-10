@@ -52,8 +52,8 @@ const GEMINI_TTS_VOICES = [
   { id: 'Achird', name: 'Achird' }
 ];
 
-const DEFAULT_TTS_TEXT = 'Seja bem-vindo ao painel IDSensor. Aqui voce acompanha os equipamentos monitorados em tempo real pela IDVida, incluindo Gateway, LoRa e BLE.';
-const DEFAULT_INSTRUCTIONS = 'Fale em portugues do Brasil, com diccao excelente, ritmo natural, tom profissional e pausas leves. Pronuncie IDSensor, IDVida, Gateway, LoRa e BLE com clareza.';
+const DEFAULT_TTS_TEXT = 'Seja bem-vindo ao painel IDSensor. Aqui você acompanha os equipamentos monitorados em tempo real pela IDvida, incluindo Gateway, LoRa e BLE.';
+const DEFAULT_INSTRUCTIONS = 'Fale em português do Brasil, com dicção excelente, ritmo natural, tom profissional e pausas leves. Pronuncie IDSensor, IDvida, Gateway, LoRa e BLE com clareza.';
 
 function hasEnv(name) {
   return Boolean(String(process.env[name] || '').trim());
@@ -95,17 +95,6 @@ function listTtsProviders() {
     defaultText: DEFAULT_TTS_TEXT,
     defaultInstructions: DEFAULT_INSTRUCTIONS,
     providers: [
-      {
-        id: 'browser',
-        name: 'Voz do navegador',
-        configured: true,
-        clientOnly: true,
-        approvalCandidate: false,
-        qualityTier: 'fallback',
-        costProfile: 'gratuito no navegador',
-        notes: 'Fallback tecnico. Nao deve ser usado para a apresentacao final porque pode soar como GPS.',
-        voices: []
-      },
       {
         id: 'gemini',
         name: 'Gemini TTS',
@@ -273,10 +262,11 @@ async function synthesizeGemini({ text, voice, instructions }) {
   let lastError = null;
 
   for (const model of uniqueTtsModels(process.env.GEMINI_TTS_MODEL || 'gemini-3.1-flash-tts-preview')) {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/interactions?key=${encodeURIComponent(process.env.GEMINI_API_KEY)}`, {
+    const response = await fetch('https://generativelanguage.googleapis.com/v1beta/interactions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'x-goog-api-key': process.env.GEMINI_API_KEY,
         'Api-Revision': '2026-05-20'
       },
       body: JSON.stringify({
