@@ -398,6 +398,15 @@ async function callGeminiAssistant({ question, context, session, model }) {
     }
 
     const parsed = parseAssistantJson(extractInteractionText(payload));
+    if (parsed?.scope && parsed.scope !== 'in_scope') {
+      return {
+        answer: REFUSAL_ANSWER,
+        scope: 'out_of_scope',
+        source: 'gemini',
+        model: modelName,
+        topics: []
+      };
+    }
     const answer = sanitizeAnswer(parsed?.answer);
     return {
       answer,

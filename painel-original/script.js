@@ -17306,9 +17306,9 @@ if(false){(function(){
     const answer = String(payload?.data?.answer || '').trim() || 'Não foi possível obter um resumo do painel agora.';
     if(message){
       message.classList.remove('is-pending');
-      message.textContent = answer;
+      message.textContent = '';
     }
-    await playAssistantMascotVoice(answer);
+    await playAssistantMascotVoice(answer, { textElement: message, replaceText: true });
     return answer;
   }
 
@@ -17334,9 +17334,9 @@ if(false){(function(){
       const greeting = `Olá, tudo bem? Eu sou o Assistente Virtual IDvida. Estou aqui para acompanhar o painel com você. Fiz uma varredura agora: são ${liveState.total} equipamentos, com ${liveState.normal} normais, ${liveState.attention} em atenção, ${liveState.critical} críticos, ${liveState.offline} sem comunicação e ${liveState.maintenance} em manutenção. Há ${liveState.activeAlerts} alerta(s) ativo(s).${incidentText} Posso explicar algum equipamento ou recurso do painel.`;
       if(pending){
         pending.classList.remove('is-pending');
-        pending.textContent = greeting;
+        pending.textContent = '';
       }
-      await playAssistantMascotVoice(greeting);
+      await playAssistantMascotVoice(greeting, { textElement: pending, replaceText: true });
     }catch(error){
       if(pending){
         pending.classList.remove('is-pending');
@@ -17355,45 +17355,108 @@ if(false){(function(){
       .replace(/BLE/gi, 'B L E');
   }
 
-  async function playAssistantMascotVoice(text){
+  function assistantMascotVoiceEnabled(){
     const voiceToggle = document.getElementById('assistantMascotVoiceToggle');
-    const enabled = voiceToggle ? voiceToggle.checked : true;
-    if(!enabled){
+    return voiceToggle ? voiceToggle.checked : true;
+  }
+
+  function assistantMascotVoiceErrorMessage(error){
+    const detail = `${error?.message || ''} ${error?.details || ''}`.toLowerCase();
+    if(detail.includes('quota') || detail.includes('too_many_requests') || detail.includes('rate') || detail.includes('429')){
+      return 'A voz neural não tocou porque a cota do Gemini TTS foi atingida neste momento. O assistente continua respondendo em texto.';
+    }
+    if(detail.includes('notallowed') || detail.includes('play()') || detail.includes('autoplay')){
+      return 'O navegador bloqueou a reprodução automática da voz. Clique no robô uma vez para liberar o áudio neural nesta aba.';
+    }
+    return 'A voz neural não tocou agora por falha no provedor de voz. O assistente continua respondendo em texto.';
+  }
+
+  async function typeAssistantMascotTextInto(element, message, token, durationMs = 0){
+    if(!element) return;
+    const content = String(message || '').trim();
+    element.textContent = '';
+    if(!content) return;
+    const perChar = durationMs > 0
+      ? Math.max(14, Math.min(58, Math.floor(durationMs / Math.max(content.length, 1))))
+      : CHAR_DELAY_MS;
+    for(let index = 0; index < content.length; index += 1){
+      if(token?.aborted) return;
+      element.textContent += content[index];
+      await delay(content[index] === '.' || content[index] === ':' ? Math.min(120, perChar * 3) : perChar, token);
+    }
+  }
+
+  function waitAssistantAudioMetadata(audioElement){
+    return new Promise(resolve => {
+      const done = () => resolve(Number.isFinite(audioElement.duration) ? audioElement.duration : 0);
+      if(Number.isFinite(audioElement.duration) && audioElement.duration > 0) return done();
+      audioElement.onloadedmetadata = done;
+      window.setTimeout(done, 900);
+    });
+  }
+
+  async function fetchAssistantMascotVoice(text){
+    const response = await fetch(`${assistantMascotApiBaseUrl()}/api/assistant-tts/preview`, {
+      method:'POST',
+      headers: assistantMascotAuthHeaders(),
+      body: JSON.stringify({
+        provider: 'gemini',
+        voice: 'Kore',
+        text: assistantMascotSpeechText(text),
+        instructions: 'Fale em português do Brasil, com voz neural humana, natural, clara, acolhedora e objetiva. Pronuncie I D Sensor como "i dê sensor" e I D Vida como "i dê vida". Não adicione informações ao texto.'
+      })
+    });
+    if(!response.ok){
+      const payload = await response.json().catch(() => null);
+      const error = new Error(payload?.message || payload?.error || `tts_http_${response.status}`);
+      error.details = JSON.stringify(payload?.details || payload || {});
+      throw error;
+    }
+    return response.blob();
+  }
+
+  async function playAssistantMascotVoice(text, options = {}){
+    const { textElement = null, replaceText = false, token = null } = options;
+    const content = String(text || '').trim();
+    if(replaceText && textElement) textElement.textContent = '';
+    if(!content) return false;
+
+    if(!assistantMascotVoiceEnabled()){
+      await typeAssistantMascotTextInto(textElement, content, token);
       if(!activeTourToken) setAssistantMascotMode('monitor');
-      return;
+      return false;
     }
 
     try{
       const audioElement = document.getElementById('assistantMascotAudio');
       if(!audioElement) throw new Error('audio_element_unavailable');
-      const response = await fetch(`${assistantMascotApiBaseUrl()}/api/assistant-tts/preview`, {
-        method:'POST',
-        headers: assistantMascotAuthHeaders(),
-        body: JSON.stringify({
-          provider: 'gemini',
-          voice: 'Kore',
-          text: assistantMascotSpeechText(text),
-          instructions: 'Fale em português do Brasil, com voz neural humana, natural, clara, acolhedora e objetiva. Pronuncie I D Sensor como "i dê sensor" e I D Vida como "i dê vida". Não adicione informações ao texto.'
-        })
-      });
-      if(!response.ok) throw new Error('neural_voice_request_failed');
-
-      const blob = await response.blob();
+      const blob = await fetchAssistantMascotVoice(content);
       if(audioElement.dataset.objectUrl) URL.revokeObjectURL(audioElement.dataset.objectUrl);
       const objectUrl = URL.createObjectURL(blob);
       audioElement.dataset.objectUrl = objectUrl;
       audioElement.src = objectUrl;
+      const durationSeconds = await waitAssistantAudioMetadata(audioElement);
+      const endedPromise = new Promise(resolve => {
+        audioElement.onended = () => {
+          if(!activeTourToken) setAssistantMascotMode('monitor');
+          resolve();
+        };
+        audioElement.onerror = () => resolve();
+      });
       audioElement.onplay = () => setAssistantMascotMode('talk');
-      audioElement.onended = () => {
-        if(!activeTourToken) setAssistantMascotMode('monitor');
-      };
-      await audioElement.play();
+      const playPromise = audioElement.play();
+      const textPromise = typeAssistantMascotTextInto(textElement, content, token, Math.round(durationSeconds * 1000));
+      await playPromise;
+      await Promise.allSettled([textPromise, endedPromise]);
+      return true;
     }catch(error){
       if(!assistantMascotVoiceNoticeShown){
         assistantMascotVoiceNoticeShown = true;
-        appendAssistantMascotMessage('A voz neural da IA ainda não está disponível. Verifique a configuração do Gemini TTS.', 'bot');
+        appendAssistantMascotMessage(assistantMascotVoiceErrorMessage(error), 'bot');
       }
+      await typeAssistantMascotTextInto(textElement, content, token);
       if(!activeTourToken) setAssistantMascotMode('monitor');
+      return false;
     }
   }
 
@@ -17891,9 +17954,16 @@ if(false){(function(){
     prepareCaptionMeasurement(step.text);
     positionCaption(element);
     finishCaptionMeasurement();
-    await typeCaption(step.text, token);
-    if(token?.aborted) return false;
-    await playAssistantMascotVoice(step.text);
+    const {caption, text} = tourParts();
+    if(caption && text){
+      caption.classList.remove('is-complete');
+      caption.classList.remove('is-hidden');
+      text.textContent = '';
+      await playAssistantMascotVoice(step.text, { textElement: text, replaceText: true, token });
+      caption.classList.add('is-complete');
+    }else{
+      await typeCaption(step.text, token);
+    }
     if(token?.aborted) return false;
 
     if(step.click && !step.clickBeforeText){
