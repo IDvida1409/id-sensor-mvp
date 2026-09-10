@@ -184,14 +184,24 @@ function sanitizeContext(context = {}, session = null) {
   const source = context && typeof context === 'object' ? context : {};
   const liveState = source.liveState && typeof source.liveState === 'object' ? source.liveState : null;
   const devices = Array.isArray(liveState?.devices) ? liveState.devices.slice(0, 80).map((device) => ({
+    id: Number.isFinite(Number(device?.id)) ? Number(device.id) : null,
     name: String(device?.name || '').slice(0, 80),
+    sector: String(device?.sector || '').slice(0, 80),
     temperature: Number.isFinite(Number(device?.temperature)) ? Number(device.temperature) : null,
+    dailyMin: Number.isFinite(Number(device?.dailyMin)) ? Number(device.dailyMin) : null,
+    dailyMax: Number.isFinite(Number(device?.dailyMax)) ? Number(device.dailyMax) : null,
     minimum: Number.isFinite(Number(device?.minimum)) ? Number(device.minimum) : null,
     maximum: Number.isFinite(Number(device?.maximum)) ? Number(device.maximum) : null,
     status: String(device?.status || '').slice(0, 30),
+    state: String(device?.state || '').slice(0, 20),
     online: device?.online === true,
+    battery: Number.isFinite(Number(device?.battery)) ? Number(device.battery) : null,
+    humidity1: Number.isFinite(Number(device?.humidity1)) ? Number(device.humidity1) : null,
+    humidity2: Number.isFinite(Number(device?.humidity2)) ? Number(device.humidity2) : null,
     updated: String(device?.updated || '').slice(0, 40),
     timerLabel: String(device?.timerLabel || '').slice(0, 100),
+    commText: String(device?.commText || '').slice(0, 100),
+    chart: Array.isArray(device?.chart) ? device.chart.slice(-36).map((value) => Number(value)).filter(Number.isFinite) : [],
     events: Array.isArray(device?.events) ? device.events.slice(0, 4).map((event) => String(event).slice(0, 80)) : []
   })) : [];
   return {
@@ -218,6 +228,190 @@ function sanitizeAnswer(answer) {
   return text.length > MAX_ANSWER_LENGTH ? `${text.slice(0, MAX_ANSWER_LENGTH - 1).trim()}...` : text;
 }
 
+function formatNumber(value, suffix = '') {
+  if (value === null || value === undefined || value === '') return 'sem leitura';
+  const number = Number(value);
+  if (!Number.isFinite(number)) return 'sem leitura';
+  return `${number.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}${suffix}`;
+}
+
+function formatTemperature(value) {
+  return formatNumber(value, ' °C');
+}
+
+function formatPercent(value) {
+  if (value === null || value === undefined || value === '') return 'sem leitura';
+  const number = Number(value);
+  if (!Number.isFinite(number)) return 'sem leitura';
+  return `${Math.round(number)}%`;
+}
+
+function deviceDisplayName(device) {
+  if (device?.name) return device.name;
+  if (device?.id !== null && device?.id !== undefined) return `Equipamento ${String(device.id).padStart(2, '0')}`;
+  return 'Equipamento';
+}
+
+function extractDeviceNumber(question) {
+  const normalized = normalizeText(question);
+  const explicit = normalized.match(/\b(?:geladeira|equipamento|dispositivo|sensor|card)\s*(?:n|numero|num)?\s*0*(\d{1,3})\b/);
+  if (explicit) return Number(explicit[1]);
+  if (/\b(geladeira|equipamento|dispositivo|sensor|card)\b/.test(normalized)) {
+    const loose = normalized.match(/\b0*(\d{1,3})\b/);
+    if (loose) return Number(loose[1]);
+  }
+  return null;
+}
+
+function findDeviceInLiveState(question, liveState) {
+  if (!liveState?.devices?.length) return null;
+  const normalizedQuestion = normalizeText(question);
+  const requestedNumber = extractDeviceNumber(question);
+  if (requestedNumber !== null) {
+    const byNumber = liveState.devices.find((device) => {
+      const nameNumber = normalizeText(device.name).match(/\b0*(\d{1,3})\b/);
+      return Number(device.id) === requestedNumber || Number(nameNumber?.[1]) === requestedNumber;
+    });
+    if (byNumber) return byNumber;
+  }
+  return liveState.devices.find((device) => {
+    const normalizedName = normalizeText(device.name);
+    return normalizedName && normalizedQuestion.includes(normalizedName);
+  }) || null;
+}
+
+function chartLimitStats(device) {
+  const min = Number(device?.minimum);
+  const max = Number(device?.maximum);
+  const values = Array.isArray(device?.chart) ? device.chart.map(Number).filter(Number.isFinite) : [];
+  if (!values.length || !Number.isFinite(min) || !Number.isFinite(max)) {
+    return { values, outPoints: 0, outSegments: 0, nearPoints: 0, low: null, high: null, trend: 'estável' };
+  }
+
+  let outPoints = 0;
+  let outSegments = 0;
+  let nearPoints = 0;
+  let wasOut = false;
+  values.forEach((value) => {
+    const isOut = value < min || value > max;
+    const isNear = !isOut && (Math.abs(value - min) <= 0.8 || Math.abs(max - value) <= 0.8);
+    if (isOut) outPoints += 1;
+    if (isNear) nearPoints += 1;
+    if (isOut && !wasOut) outSegments += 1;
+    wasOut = isOut;
+  });
+
+  const first = values[0];
+  const last = values[values.length - 1];
+  const trend = Number.isFinite(first) && Number.isFinite(last) && Math.abs(last - first) >= 0.4
+    ? (last > first ? 'subindo' : 'caindo')
+    : 'estável';
+
+  return {
+    values,
+    outPoints,
+    outSegments,
+    nearPoints,
+    low: Math.min(...values),
+    high: Math.max(...values),
+    trend
+  };
+}
+
+function cleanDeviceEvents(device) {
+  return (Array.isArray(device?.events) ? device.events : [])
+    .map((event) => String(event || '').trim())
+    .filter(Boolean);
+}
+
+function hasActiveAlertEvent(event) {
+  return !/sem alerta ativo|sem envio de alerta|alerta ainda n[aã]o enviado/i.test(String(event || ''));
+}
+
+function answerPanelSummary(liveState) {
+  const incidents = liveState.devices.filter((device) => device.online === false || (device.status && !/^normal$/i.test(device.status)));
+  const incidentText = incidents.slice(0, 4).map((device) => {
+    const temperature = device.temperature === null ? 'sem leitura' : formatTemperature(device.temperature);
+    return `${deviceDisplayName(device)} está em ${String(device.status || 'sem status').toLowerCase()}, com ${temperature}`;
+  }).join('; ');
+  const equipmentWord = Number(liveState.total) === 1 ? 'equipamento' : 'equipamentos';
+  const alertWord = Number(liveState.activeAlerts) === 1 ? 'alerta está ativo' : 'alertas estão ativos';
+  const answer = `No momento, o painel acompanha ${liveState.total} ${equipmentWord}. ${liveState.normal} estão normais, ${liveState.attention} em atenção, ${liveState.critical} em estado crítico e ${liveState.offline} sem comunicação. ${liveState.activeAlerts} ${alertWord}.${incidentText ? ` Situações que merecem atenção: ${incidentText}.` : ' Não há ocorrências fora do padrão neste momento.'}`;
+  return { answer: sanitizeAnswer(answer), scope: 'in_scope', source: 'tool:panel-summary', model: null, topics: ['visao-geral', 'status-cores', 'alertas'] };
+}
+
+function answerDeviceQuestion(question, context = {}, session = null) {
+  const liveState = sanitizeContext(context, session).liveState;
+  const device = findDeviceInLiveState(question, liveState);
+  if (!device) return null;
+
+  const normalized = normalizeText(question);
+  const name = deviceDisplayName(device);
+  const status = String(device.status || 'sem status').toLowerCase();
+  const onlineText = device.online ? 'online' : 'sem comunicação';
+  const temperatureText = device.temperature === null ? 'sem leitura de temperatura' : `com ${formatTemperature(device.temperature)}`;
+  const rangeText = device.minimum !== null && device.maximum !== null
+    ? `Faixa configurada: ${formatTemperature(device.minimum)} a ${formatTemperature(device.maximum)}.`
+    : 'Faixa de temperatura não informada no painel.';
+  const events = cleanDeviceEvents(device);
+  const activeEvents = events.filter(hasActiveAlertEvent);
+  const stats = chartLimitStats(device);
+  const wantsRecurrence = /\b(recorrencia|recorrente|recorreu|recorrer|historico|ultimos dias|ultimos|repetiu|frequencia|vezes|voltou|oscilacao|oscilou|pico)\b/.test(normalized);
+  const wantsAlert = /\b(alerta|alertas|sms|email|whatsapp|sino|ocorrencia|ocorrencias)\b/.test(normalized);
+  const wantsBatteryOrHumidity = /\b(bateria|umidade)\b/.test(normalized);
+  const wantsCalibration = /\b(calibrac|certificado|vencimento)\b/.test(normalized);
+  const wantsTemperature = /\b(temperatura|limite|minima|maxima|minimo|maximo|faixa|graus)\b/.test(normalized);
+
+  let answer = `${name} está ${onlineText}, em status ${status}, ${temperatureText}. ${rangeText}`;
+
+  if (wantsRecurrence) {
+    if (stats.outSegments > 1 || events.some((event) => /recorr/i.test(event))) {
+      answer = `${name} tem recorrência indicada nos dados disponíveis do painel. A série enviada mostra ${stats.outSegments} entradas fora da faixa, com mínimo de ${formatTemperature(stats.low)} e máximo de ${formatTemperature(stats.high)}. Status atual: ${status}, ${temperatureText}.`;
+    } else if (stats.outPoints > 0) {
+      answer = `${name} teve desvio de temperatura nos dados disponíveis do painel, mas não há recorrência confirmada. A série mostra ${stats.outPoints} leitura(s) fora da faixa em uma única sequência, com pico de ${formatTemperature(stats.high)}. Status atual: ${status}, ${temperatureText}.`;
+    } else if (stats.nearPoints > 0 || /proximo do limite|próximo do limite/i.test(`${device.timerLabel} ${events.join(' ')}`)) {
+      answer = `${name} não tem recorrência confirmada nos dados disponíveis do painel. O que aparece agora é aproximação do limite: temperatura em ${formatTemperature(device.temperature)}, limite máximo de ${formatTemperature(device.maximum)}, tendência ${stats.trend}. Eventos do card: ${events.join(', ') || 'sem eventos ativos'}.`;
+    } else {
+      answer = `${name} não tem recorrência indicada nos dados disponíveis do painel. A série enviada ficou dentro da faixa, com mínimo de ${formatTemperature(stats.low)} e máximo de ${formatTemperature(stats.high)}.`;
+    }
+  } else if (wantsAlert) {
+    answer = activeEvents.length
+      ? `${name} tem ocorrência registrada no painel: ${activeEvents.join(', ')}. Status atual: ${status}, ${temperatureText}.`
+      : `${name} não tem alerta enviado neste momento. Eventos do card: ${events.join(', ') || 'sem eventos ativos'}. Status atual: ${status}, ${temperatureText}.`;
+  } else if (wantsBatteryOrHumidity) {
+    const humidity = device.humidity2 !== null ? device.humidity2 : device.humidity1;
+    answer = `${name} está com bateria ${formatPercent(device.battery)} e umidade ${formatPercent(humidity)} nos dados atuais do painel. Status atual: ${status}, ${temperatureText}.`;
+  } else if (wantsCalibration) {
+    answer = `${name} não trouxe dados de calibração ou certificado no estado atual enviado ao assistente. Pelo painel, consulte a área de calibração do equipamento para verificar certificado, validade e vencimento.`;
+  } else if (wantsTemperature) {
+    answer = `${name} está ${temperatureText}. ${rangeText} No período disponível no card, o mínimo foi ${formatTemperature(device.dailyMin ?? stats.low)} e o máximo foi ${formatTemperature(device.dailyMax ?? stats.high)}. Status atual: ${status}.`;
+  } else if (device.timerLabel || events.length || device.commText) {
+    answer += ` Situação do card: ${device.timerLabel || device.commText || events.join(', ')}.`;
+  }
+
+  return {
+    answer: sanitizeAnswer(answer),
+    scope: 'in_scope',
+    source: 'tool:device-state',
+    model: null,
+    topics: ['cards', 'temperatura', 'telemetria', 'alertas']
+  };
+}
+
+function answerPanelTool(question, context = {}, session = null) {
+  const liveState = sanitizeContext(context, session).liveState;
+  if (!liveState) return null;
+
+  const deviceAnswer = answerDeviceQuestion(question, context, session);
+  if (deviceAnswer) return deviceAnswer;
+
+  if (/resumo|apresenta[cç][aã]o|situa[cç][aã]o atual|agora|momento|acontecendo|status atual|como est[aá] o painel/i.test(question)) {
+    return answerPanelSummary(liveState);
+  }
+
+  return null;
+}
+
 function fallbackAssistantAnswer(question, context = {}, session = null) {
   if (isInternalOrOffScope(question)) {
     return {
@@ -239,6 +433,9 @@ function fallbackAssistantAnswer(question, context = {}, session = null) {
     };
   }
 
+  const toolAnswer = answerPanelTool(question, context, session);
+  if (toolAnswer) return toolAnswer;
+
   const relevant = findRelevantSections(question, 2);
   if (!relevant.length) {
     return {
@@ -252,17 +449,7 @@ function fallbackAssistantAnswer(question, context = {}, session = null) {
 
   const liveState = sanitizeContext(context, session).liveState;
   if (liveState && /resumo|apresenta[cç][aã]o|situa[cç][aã]o atual|agora|momento|acontecendo/i.test(question)) {
-    const critical = liveState.critical;
-    const attention = liveState.attention;
-    const offline = liveState.offline;
-    const normal = liveState.normal;
-    const incidents = liveState.devices.filter((device) => device.status && !/^normal$/i.test(device.status));
-    const incidentText = incidents.slice(0, 3).map((device) => {
-      const temperature = device.temperature === null ? 'sem leitura' : `${device.temperature.toFixed(1)} °C`;
-      return `${device.name || 'Equipamento'} está em ${device.status.toLowerCase()}, com ${temperature}`;
-    }).join('; ');
-    const answer = `No momento, o painel acompanha ${liveState.total} equipamentos. ${normal} estão normais, ${attention} em atenção, ${critical} em estado crítico e ${offline} sem comunicação. ${liveState.activeAlerts} alerta(s) estão ativo(s).${incidentText ? ` Situações que merecem atenção: ${incidentText}.` : ' Não há ocorrências fora do padrão neste momento.'}`;
-    return { answer: sanitizeAnswer(answer), scope: 'in_scope', source: 'local', model: null, topics: ['visao-geral', 'status-cores', 'alertas'] };
+    return answerPanelSummary(liveState);
   }
 
   return {
@@ -447,6 +634,8 @@ async function answerAssistantQuestion({ question, context = {}, session = null,
   if (text.length > MAX_QUESTION_LENGTH) throw createError(400, `A pergunta aceita no maximo ${MAX_QUESTION_LENGTH} caracteres.`);
 
   if (isInternalOrOffScope(text)) return fallbackAssistantAnswer(text, context, session);
+  const toolAnswer = answerPanelTool(text, context, session);
+  if (toolAnswer) return toolAnswer;
   if (!hasGeminiKey()) return fallbackAssistantAnswer(text, context, session);
 
   try {

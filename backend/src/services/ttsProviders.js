@@ -258,7 +258,7 @@ async function synthesizeGemini({ text, voice, instructions }) {
   }
 
   const selectedVoice = pickVoice(voice || process.env.GEMINI_TTS_VOICE, GEMINI_TTS_VOICES, 'Kore');
-  const prompt = `${instructions || DEFAULT_INSTRUCTIONS}\n\nTexto para falar:\n${text}`;
+  const prompt = String(text || '').trim();
   let lastError = null;
 
   for (const model of uniqueTtsModels(process.env.GEMINI_TTS_MODEL || 'gemini-3.1-flash-tts-preview')) {

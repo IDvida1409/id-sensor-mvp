@@ -17309,7 +17309,7 @@ if(false){(function(){
     const critical = devices.filter(device => !isOffline(device) && isCritical(device)).length;
     const attention = devices.filter(device => !isOffline(device) && !isCritical(device) && isAttention(device)).length;
     const normal = devices.filter(device => !isOffline(device) && !isMaintenance(device) && !isCritical(device) && !isAttention(device)).length;
-    const activeAlerts = devices.filter(device => Array.isArray(device?.events) && device.events.some(event => !/sem alerta ativo/i.test(String(event)))).length;
+    const activeAlerts = devices.filter(device => Array.isArray(device?.events) && device.events.some(event => !/sem alerta ativo|sem envio de alerta|alerta ainda n[aã]o enviado/i.test(String(event)))).length;
     return {
       total: devices.length,
       normal,
@@ -17319,14 +17319,24 @@ if(false){(function(){
       maintenance,
       activeAlerts,
       devices: devices.map(device => ({
+        id: device?.id,
         name: device?.name,
+        sector: device?.sector,
         temperature: device?.temp,
+        dailyMin: device?.dailyMin,
+        dailyMax: device?.dailyMax,
         minimum: device?.min,
         maximum: device?.max,
         status: device?.status,
+        state: device?.state,
         online: device?.online === true,
+        battery: device?.battery,
+        humidity1: device?.hum1,
+        humidity2: device?.hum2,
         updated: device?.updated,
         timerLabel: device?.timerLabel,
+        commText: device?.commText,
+        chart: Array.isArray(device?.chart) ? device.chart : [],
         events: Array.isArray(device?.events) ? device.events : []
       }))
     };
@@ -17628,6 +17638,9 @@ if(false){(function(){
 
   function assistantMascotVoiceErrorMessage(error){
     const detail = `${error?.message || ''} ${error?.details || ''}`.toLowerCase();
+    if(detail.includes('tts_timeout') || detail.includes('aborted') || detail.includes('timeout')){
+      return 'A voz neural demorou demais para responder. O assistente continuou em texto para não travar a apresentação.';
+    }
     if(detail.includes('quota') || detail.includes('too_many_requests') || detail.includes('rate') || detail.includes('429')){
       return 'A voz neural não tocou porque a cota do Gemini TTS foi atingida neste momento. O assistente continua respondendo em texto.';
     }
@@ -17679,18 +17692,33 @@ if(false){(function(){
     return assistantMascotSpeechText(text).replace(/\s+/g, ' ').trim();
   }
 
-  function requestAssistantMascotVoiceBlob(text){
+  function requestAssistantMascotVoiceBlob(text, options = {}){
     return (async () => {
-      const response = await fetch(`${assistantMascotApiBaseUrl()}/api/assistant-tts/preview`, {
-        method:'POST',
-        headers: assistantMascotAuthHeaders(),
-        body: JSON.stringify({
-          provider: 'gemini',
-          voice: 'Kore',
-          text: assistantMascotSpeechText(text),
-          instructions: 'Fale em português do Brasil, com voz neural humana, natural, clara, acolhedora e objetiva. Pronuncie I D Sensor como "i dê sensor" e I D Vida como "i dê vida". Não adicione informações ao texto.'
-        })
-      });
+      const timeoutMs = Number.isFinite(Number(options.timeoutMs)) ? Number(options.timeoutMs) : 12000;
+      const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      const timer = controller ? window.setTimeout(() => controller.abort(), timeoutMs) : null;
+      let response;
+      try{
+        response = await fetch(`${assistantMascotApiBaseUrl()}/api/assistant-tts/preview`, {
+          method:'POST',
+          headers: assistantMascotAuthHeaders(),
+          signal: controller ? controller.signal : undefined,
+          body: JSON.stringify({
+            provider: 'gemini',
+            voice: 'Kore',
+            text: assistantMascotSpeechText(text)
+          })
+        });
+      }catch(error){
+        if(error?.name === 'AbortError'){
+          const timeoutError = new Error('tts_timeout');
+          timeoutError.details = `timeout_ms_${timeoutMs}`;
+          throw timeoutError;
+        }
+        throw error;
+      }finally{
+        if(timer) window.clearTimeout(timer);
+      }
       if(!response.ok){
         const payload = await response.json().catch(() => null);
         const error = new Error(payload?.message || payload?.error || `tts_http_${response.status}`);
@@ -17706,7 +17734,7 @@ if(false){(function(){
     const key = assistantMascotVoiceCacheKey(text);
     if(!key) return null;
     if(assistantMascotVoiceCache.has(key)) return assistantMascotVoiceCache.get(key);
-    const promise = requestAssistantMascotVoiceBlob(text).catch(error => {
+    const promise = requestAssistantMascotVoiceBlob(text, { timeoutMs: 12000 }).catch(error => {
       assistantMascotVoiceCache.delete(key);
       throw error;
     });
@@ -17719,7 +17747,7 @@ if(false){(function(){
       const cached = prefetchAssistantMascotVoice(text);
       if(cached) return cached;
     }
-    return requestAssistantMascotVoiceBlob(text);
+    return requestAssistantMascotVoiceBlob(text, { timeoutMs: options.timeoutMs });
   }
 
   async function playAssistantMascotVoice(text, options = {}){
@@ -17757,7 +17785,7 @@ if(false){(function(){
       await Promise.allSettled([textPromise, endedPromise]);
       return true;
     }catch(error){
-      if(!assistantMascotVoiceNoticeShown){
+      if(!assistantMascotVoiceNoticeShown && !activeTourToken){
         assistantMascotVoiceNoticeShown = true;
         appendAssistantMascotMessage(assistantMascotVoiceErrorMessage(error), 'bot');
       }
