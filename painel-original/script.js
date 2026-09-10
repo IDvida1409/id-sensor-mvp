@@ -17066,7 +17066,9 @@ if(false){(function(){
   let assistantMascotVoiceProviderPromise = null;
   let assistantMascotVoiceNoticeShown = false;
   let assistantMascotGreetingStarted = false;
+  let assistantMascotGreetingInFlight = false;
   let assistantMascotGreetingTimer = null;
+  const ASSISTANT_MASCOT_GREETING_SESSION_KEY = 'idvida-assistant-greeting-seen-v1';
 
   function panelRoleForTour(){
     return String(
@@ -17097,6 +17099,31 @@ if(false){(function(){
       button.title = allowed ? 'Iniciar apresentação do painel' : 'Disponível apenas para IDvida Master';
     }
     syncAssistantMascotDock(allowed);
+  }
+
+  function assistantMascotSessionGet(key){
+    try{ return window.sessionStorage?.getItem(key) || ''; }catch(error){ return ''; }
+  }
+
+  function assistantMascotSessionSet(key, value){
+    try{ window.sessionStorage?.setItem(key, value); }catch(error){}
+  }
+
+  function assistantMascotGreetingSeen(){
+    return assistantMascotGreetingStarted || assistantMascotGreetingInFlight || assistantMascotSessionGet(ASSISTANT_MASCOT_GREETING_SESSION_KEY) === 'true';
+  }
+
+  function ensureAssistantMascotChatReady(root = document){
+    const form = root.querySelector?.('#assistantMascotQuestionForm') || document.getElementById('assistantMascotQuestionForm');
+    const input = root.querySelector?.('#assistantMascotQuestionInput') || document.getElementById('assistantMascotQuestionInput');
+    const send = root.querySelector?.('.assistant-mascot-send') || document.querySelector('.assistant-mascot-send');
+    form?.classList.remove('is-loading');
+    if(input){
+      input.disabled = false;
+      input.readOnly = false;
+      input.removeAttribute('aria-disabled');
+    }
+    if(send && form?.dataset.sending !== 'true') send.disabled = false;
   }
 
   function assistantMascotImageTag(){
@@ -17198,6 +17225,7 @@ if(false){(function(){
 
     document.body.appendChild(dock);
     wireAssistantMascotDock(dock);
+    ensureAssistantMascotChatReady(dock);
     preloadAssistantMascotFrames();
     setAssistantMascotMode('monitor');
     return dock;
@@ -17313,8 +17341,11 @@ if(false){(function(){
   }
 
   async function startAssistantMascotGreeting(){
-    if(assistantMascotGreetingStarted) return;
+    if(assistantMascotGreetingSeen() || activeTourToken) return;
+    assistantMascotGreetingInFlight = true;
     assistantMascotGreetingStarted = true;
+    assistantMascotSessionSet(ASSISTANT_MASCOT_GREETING_SESSION_KEY, 'true');
+    ensureAssistantMascotChatReady();
     const log = document.getElementById('assistantMascotChatLog');
     if(log) log.innerHTML = '';
     const pending = appendAssistantMascotMessage('Estou lendo o painel para te atualizar...', 'bot', true);
@@ -17331,7 +17362,7 @@ if(false){(function(){
       const incidentText = incidents.length
         ? ` Merecem atenção: ${incidents.join('; ')}.`
         : ' Não encontrei ocorrências fora do padrão neste momento.';
-      const greeting = `Olá, tudo bem? Eu sou o Assistente Virtual IDvida. Estou aqui para acompanhar o painel com você. Fiz uma varredura agora: são ${liveState.total} equipamentos, com ${liveState.normal} normais, ${liveState.attention} em atenção, ${liveState.critical} críticos, ${liveState.offline} sem comunicação e ${liveState.maintenance} em manutenção. Há ${liveState.activeAlerts} alerta(s) ativo(s).${incidentText} Posso explicar algum equipamento ou recurso do painel.`;
+      const greeting = `Oi. Eu sou o assistente virtual da IDvida e estou ativo neste painel. Fiz uma varredura agora: são ${liveState.total} equipamentos, com ${liveState.normal} normais, ${liveState.attention} em atenção, ${liveState.critical} críticos, ${liveState.offline} sem comunicação e ${liveState.maintenance} em manutenção. Há ${liveState.activeAlerts} alerta(s) ativo(s).${incidentText} A partir daqui, pode perguntar sobre qualquer ponto do monitoramento.`;
       if(pending){
         pending.classList.remove('is-pending');
         pending.textContent = '';
@@ -17343,13 +17374,17 @@ if(false){(function(){
         pending.textContent = 'Olá, tudo bem? Eu sou o Assistente Virtual IDvida. Estou aqui para acompanhar o painel. Posso explicar os equipamentos, temperaturas, alertas e recursos do sistema.';
       }
       if(!activeTourToken) setAssistantMascotMode('monitor');
+    }finally{
+      assistantMascotGreetingInFlight = false;
+      ensureAssistantMascotChatReady();
     }
   }
 
   function assistantMascotSpeechText(text){
     return String(text || '')
-      .replace(/IDSensor/gi, 'I D Sensor')
-      .replace(/IDvida/gi, 'I D Vida')
+      .replace(/IDSensor/gi, 'i dê sensor')
+      .replace(/IDVida/gi, 'i dê vida')
+      .replace(/IDvida/gi, 'i dê vida')
       .replace(/NOC/gi, 'N O C')
       .replace(/LoRa/gi, 'Lo Ra')
       .replace(/BLE/gi, 'B L E');
@@ -17369,6 +17404,20 @@ if(false){(function(){
       return 'O navegador bloqueou a reprodução automática da voz. Clique no robô uma vez para liberar o áudio neural nesta aba.';
     }
     return 'A voz neural não tocou agora por falha no provedor de voz. O assistente continua respondendo em texto.';
+  }
+
+  function stopAssistantMascotAudio(){
+    const audioElement = document.getElementById('assistantMascotAudio');
+    if(!audioElement) return;
+    try{
+      audioElement.pause();
+      audioElement.removeAttribute('src');
+      audioElement.load();
+    }catch(error){}
+    if(audioElement.dataset.objectUrl){
+      URL.revokeObjectURL(audioElement.dataset.objectUrl);
+      delete audioElement.dataset.objectUrl;
+    }
   }
 
   async function typeAssistantMascotTextInto(element, message, token, durationMs = 0){
@@ -17465,6 +17514,7 @@ if(false){(function(){
     const input = dock.querySelector('#assistantMascotQuestionInput');
     if(!form || !input || form.dataset.ready === 'true') return;
     form.dataset.ready = 'true';
+    ensureAssistantMascotChatReady(dock);
 
     form.addEventListener('focusin', () => {
       window.clearTimeout(assistantMascotMenuCloseTimer);
@@ -17477,11 +17527,15 @@ if(false){(function(){
 
       const question = String(input.value || '').trim();
       if(!question) return;
+      if(form.dataset.sending === 'true') return;
+      form.dataset.sending = 'true';
       input.value = '';
       appendAssistantMascotMessage(question, 'user');
       const pending = appendAssistantMascotMessage('Consultando a base do painel...', 'bot', true);
       form.classList.add('is-loading');
-      input.disabled = true;
+      const send = form.querySelector('.assistant-mascot-send');
+      if(send) send.disabled = true;
+      input.disabled = false;
       setAssistantMascotMode('talk');
 
       try{
@@ -17493,8 +17547,10 @@ if(false){(function(){
         }
         if(!activeTourToken) setAssistantMascotMode('monitor');
       }finally{
+        form.dataset.sending = 'false';
         form.classList.remove('is-loading');
         input.disabled = false;
+        if(send) send.disabled = false;
         input.focus({ preventScroll:true });
       }
     });
@@ -17520,6 +17576,7 @@ if(false){(function(){
 
     dock.querySelector('#assistantMascotStage')?.addEventListener('click', () => {
       if(activeTourToken) return;
+      ensureAssistantMascotChatReady(dock);
       const menu = document.getElementById('assistantMascotMenu');
       if(menu && !menu.hidden) closeAssistantMascotMenu();
       else openAssistantMascotMenu('main');
@@ -17540,6 +17597,7 @@ if(false){(function(){
         assistantMascotLastActionAt = now;
         event.preventDefault();
         event.stopPropagation();
+        ensureAssistantMascotChatReady(dock);
         openAssistantMascotMenu(menuButton.dataset.assistantMenuTarget || 'main');
         return;
       }
@@ -17549,6 +17607,10 @@ if(false){(function(){
         assistantMascotLastActionAt = now;
         event.preventDefault();
         event.stopPropagation();
+        stopAssistantMascotAudio();
+        assistantMascotGreetingStarted = true;
+        assistantMascotGreetingInFlight = false;
+        assistantMascotSessionSet(ASSISTANT_MASCOT_GREETING_SESSION_KEY, 'true');
         closeAssistantMascotMenu({keepMode:true});
         startAssistantTour();
       }
@@ -17589,15 +17651,17 @@ if(false){(function(){
     const stage = document.getElementById('assistantMascotStage');
     if(menu) menu.hidden = false;
     if(stage) stage.setAttribute('aria-expanded', 'true');
+    ensureAssistantMascotChatReady(dock);
     dock.querySelectorAll('[data-assistant-panel]').forEach((panel) => {
       panel.hidden = panel.dataset.assistantPanel !== panelName;
     });
     setAssistantMascotMode('talk');
     if(panelName === 'chat'){
       window.setTimeout(() => {
+        ensureAssistantMascotChatReady(dock);
         document.getElementById('assistantMascotQuestionInput')?.focus({ preventScroll:true });
       }, 0);
-    }else if(panelName === 'main' && !assistantMascotGreetingStarted){
+    }else if(panelName === 'main' && !assistantMascotGreetingSeen()){
       window.setTimeout(() => {
         openAssistantMascotMenu('chat');
         startAssistantMascotGreeting();
@@ -17672,13 +17736,14 @@ if(false){(function(){
     if(assistantMascotUserDismissed) return;
     const createdDock = createAssistantMascotDock();
     createdDock.classList.add('is-visible');
+    ensureAssistantMascotChatReady(createdDock);
     if(!activeTourToken) {
       setAssistantMascotMode('monitor');
-      if(!assistantMascotGreetingStarted && !assistantMascotUserDismissed && createdDock.dataset.autoGreetingQueued !== 'true'){
+      if(!assistantMascotGreetingSeen() && !assistantMascotUserDismissed && createdDock.dataset.autoGreetingQueued !== 'true'){
         createdDock.dataset.autoGreetingQueued = 'true';
         window.clearTimeout(assistantMascotGreetingTimer);
         assistantMascotGreetingTimer = window.setTimeout(() => {
-          if(isAssistantTourAllowed() && !assistantMascotGreetingStarted && !assistantMascotUserDismissed){
+          if(isAssistantTourAllowed() && !assistantMascotGreetingSeen() && !assistantMascotUserDismissed){
             openAssistantMascotMenu('main');
           }
         }, 650);
@@ -18124,7 +18189,7 @@ if(false){(function(){
     return [
       {
         selector:'.brand-title-row',
-        text:'Olá. Vou apresentar o painel de monitoramento IDvida.',
+        text:'Vamos começar a apresentação. Estou no modo tour e vou percorrer o painel por partes.',
         pause:1400
       },
       {
@@ -18583,6 +18648,10 @@ if(false){(function(){
     }
 
     stopAssistantTour();
+    stopAssistantMascotAudio();
+    assistantMascotGreetingStarted = true;
+    assistantMascotGreetingInFlight = false;
+    assistantMascotSessionSet(ASSISTANT_MASCOT_GREETING_SESSION_KEY, 'true');
     assistantMascotUserDismissed = false;
     const mascotDock = createAssistantMascotDock();
     mascotDock.classList.add('is-visible', 'is-presenting');
