@@ -17327,24 +17327,6 @@ if(false){(function(){
     }
   }
 
-  async function resolveAssistantMascotVoiceProvider(){
-    if(!assistantMascotVoiceProviderPromise){
-      assistantMascotVoiceProviderPromise = fetch(`${assistantMascotApiBaseUrl()}/api/assistant-tts/providers`, {
-        cache:'no-store'
-      })
-        .then(response => response.ok ? response.json() : null)
-        .then(payload => {
-          const providers = Array.isArray(payload?.data?.providers) ? payload.data.providers : [];
-          const preferred = ['gemini'];
-          return preferred
-            .map(id => providers.find(provider => provider.id === id && provider.configured))
-            .find(Boolean) || null;
-        })
-        .catch(() => null);
-    }
-    return assistantMascotVoiceProviderPromise;
-  }
-
   async function playAssistantMascotVoice(text){
     const enabled = document.getElementById('assistantMascotVoiceToggle')?.checked;
     if(!enabled){
@@ -17353,20 +17335,14 @@ if(false){(function(){
     }
 
     try{
-      const provider = await resolveAssistantMascotVoiceProvider();
-      if(!provider){
-        throw new Error('neural_voice_unavailable');
-      }
-
       const audioElement = document.getElementById('assistantMascotAudio');
       if(!audioElement) throw new Error('audio_element_unavailable');
-      const voiceId = provider.voices?.[0]?.id || '';
       const response = await fetch(`${assistantMascotApiBaseUrl()}/api/assistant-tts/preview`, {
         method:'POST',
         headers: assistantMascotAuthHeaders(),
         body: JSON.stringify({
-          provider: provider.id,
-          voice: voiceId,
+          provider: 'gemini',
+          voice: 'Kore',
           text,
           instructions: 'Fale em português do Brasil, com voz humana neural, natural, clara, acolhedora e objetiva. Não adicione informações ao texto.'
         })
