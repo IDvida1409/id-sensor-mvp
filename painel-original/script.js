@@ -17319,21 +17319,45 @@ if(false){(function(){
     if(log) log.innerHTML = '';
     const pending = appendAssistantMascotMessage('Estou lendo o painel para te atualizar...', 'bot', true);
     try{
-      await requestAssistantMascotAnswer(
-        'Você acabou de ser ativado no painel. Faça sua apresentação inicial de forma natural e curta: diga "Olá, tudo bem? Eu sou o Assistente Virtual IDvida. Estou aqui para acompanhar o painel com você." Em seguida, faça uma varredura do estadoAtual e informe o total de equipamentos, quantos estão normais, em atenção, críticos, sem comunicação e em manutenção. Cite somente os equipamentos e ocorrências que realmente aparecerem no estadoAtual, incluindo temperatura fora da faixa, alertas, oscilações ou tempo sem comunicação. Termine perguntando se o usuário quer detalhes de algum equipamento ou recurso do painel.',
-        pending
-      );
+      const liveState = assistantMascotLiveState();
+      const incidents = liveState.devices
+        .filter(device => device.online === false || !/^normal$/i.test(String(device.status || '')))
+        .slice(0, 4)
+        .map(device => {
+          const temperature = Number.isFinite(Number(device.temperature)) ? ` com ${Number(device.temperature).toFixed(1).replace('.', ',')} graus` : '';
+          const status = String(device.status || (device.online === false ? 'sem comunicação' : 'atenção')).toLowerCase();
+          return `${device.name || 'Equipamento'} está em ${status}${temperature}`;
+        });
+      const incidentText = incidents.length
+        ? ` Merecem atenção: ${incidents.join('; ')}.`
+        : ' Não encontrei ocorrências fora do padrão neste momento.';
+      const greeting = `Olá, tudo bem? Eu sou o Assistente Virtual IDvida. Estou aqui para acompanhar o painel com você. Fiz uma varredura agora: são ${liveState.total} equipamentos, com ${liveState.normal} normais, ${liveState.attention} em atenção, ${liveState.critical} críticos, ${liveState.offline} sem comunicação e ${liveState.maintenance} em manutenção. Há ${liveState.activeAlerts} alerta(s) ativo(s).${incidentText} Posso explicar algum equipamento ou recurso do painel.`;
+      if(pending){
+        pending.classList.remove('is-pending');
+        pending.textContent = greeting;
+      }
+      await playAssistantMascotVoice(greeting);
     }catch(error){
       if(pending){
         pending.classList.remove('is-pending');
-        pending.textContent = 'Não consegui ler o estado atual do painel. Tente novamente em instantes.';
+        pending.textContent = 'Olá, tudo bem? Eu sou o Assistente Virtual IDvida. Estou aqui para acompanhar o painel. Posso explicar os equipamentos, temperaturas, alertas e recursos do sistema.';
       }
       if(!activeTourToken) setAssistantMascotMode('monitor');
     }
   }
 
+  function assistantMascotSpeechText(text){
+    return String(text || '')
+      .replace(/IDSensor/gi, 'I D Sensor')
+      .replace(/IDvida/gi, 'I D Vida')
+      .replace(/NOC/gi, 'N O C')
+      .replace(/LoRa/gi, 'Lo Ra')
+      .replace(/BLE/gi, 'B L E');
+  }
+
   async function playAssistantMascotVoice(text){
-    const enabled = document.getElementById('assistantMascotVoiceToggle')?.checked;
+    const voiceToggle = document.getElementById('assistantMascotVoiceToggle');
+    const enabled = voiceToggle ? voiceToggle.checked : true;
     if(!enabled){
       if(!activeTourToken) setAssistantMascotMode('monitor');
       return;
@@ -17348,8 +17372,8 @@ if(false){(function(){
         body: JSON.stringify({
           provider: 'gemini',
           voice: 'Kore',
-          text,
-          instructions: 'Fale em português do Brasil, com voz humana neural, natural, clara, acolhedora e objetiva. Não adicione informações ao texto.'
+          text: assistantMascotSpeechText(text),
+          instructions: 'Fale em português do Brasil, com voz neural humana, natural, clara, acolhedora e objetiva. Pronuncie I D Sensor como "i dê sensor" e I D Vida como "i dê vida". Não adicione informações ao texto.'
         })
       });
       if(!response.ok) throw new Error('neural_voice_request_failed');
@@ -17868,6 +17892,8 @@ if(false){(function(){
     positionCaption(element);
     finishCaptionMeasurement();
     await typeCaption(step.text, token);
+    if(token?.aborted) return false;
+    await playAssistantMascotVoice(step.text);
     if(token?.aborted) return false;
 
     if(step.click && !step.clickBeforeText){
