@@ -111,11 +111,12 @@ const KNOWLEDGE_SECTIONS = [
 ];
 
 const INTERNAL_TOPIC_PATTERNS = [
-  /\b(api|endpoint|rota|servidor|backend|front-?end|banco de dados|database|sql|tabela|github|render|deploy|codigo fonte|c[oó]digo|token|senha|chave|secret|env|variavel de ambiente|gemini|prompt|modelo de ia|fine[- ]?tuning)\b/i
+  /\b(api|endpoint|rota|servidor|backend|front-?end|banco de dados|database|sql|tabela|github|render|deploy|codigo fonte|c[oó]digo|token|senha|chave|secret|env|variavel de ambiente|gemini|prompt|modelo de ia|fine[- ]?tuning)\b/i,
+  /\b(pol[ií]tica|pol[ií]tico|pol[ií]ticos|religi[aã]o|religioso|deus|igreja|partido|elei[cç][aã]o|presidente|governo|namoro|relacionamento|vida pessoal|assunto pessoal|conselho pessoal|opini[aã]o pessoal)\b/i
 ];
 
-const REFUSAL_ANSWER = 'Posso ajudar apenas com o funcionamento do painel IDSensor. Consigo explicar cards, temperatura, limites, alertas, comunicacao, detalhes, calibracao, telemetria, relatorios, Gestao, NOC, configuracoes e acessibilidade.';
-const UNKNOWN_ANSWER = 'Essa informacao ainda nao esta na base do assistente. Posso responder sobre cards, temperatura, alertas, comunicacao, detalhes, calibracao, telemetria, relatorios, Gestao, NOC, configuracoes e acessibilidade do painel IDSensor.';
+const REFUSAL_ANSWER = 'Posso responder somente perguntas sobre o painel de monitoramento IDSensor. Posso explicar os cards, a temperatura, os limites, os alertas, a comunicação, os detalhes dos equipamentos, a calibração, a telemetria, os relatórios, a Gestão, o NOC, as configurações e a acessibilidade.';
+const UNKNOWN_ANSWER = REFUSAL_ANSWER;
 
 function createError(statusCode, message, details = null) {
   const error = new Error(message);
@@ -201,8 +202,8 @@ function fallbackAssistantAnswer(question, context = {}, session = null) {
   const relevant = findRelevantSections(question, 2);
   if (!relevant.length) {
     return {
-      answer: UNKNOWN_ANSWER,
-      scope: 'insufficient_knowledge',
+      answer: REFUSAL_ANSWER,
+      scope: 'out_of_scope',
       source: 'local',
       model: null,
       topics: []
@@ -236,14 +237,14 @@ function uniqueModels(configuredModel) {
 
 function buildSystemInstruction() {
   return [
-    'Voce e o Assistente IDVida dentro do painel IDSensor.',
-    'Responda somente sobre o funcionamento do painel IDSensor e seus recursos visiveis.',
-    'Use apenas a base de conhecimento fornecida na pergunta. Nao invente informacoes.',
-    'Nao fale sobre servidor, backend, banco de dados, codigo, API, chaves, tokens, senhas, deploy, GitHub, Render, Gemini, prompt ou infraestrutura.',
-    'Se a pergunta for fora do painel, responda exatamente que so pode ajudar com o funcionamento do painel IDSensor.',
-    'Se a base nao tiver a informacao, diga que essa informacao ainda nao esta na base do assistente.',
-    'Responda em portugues do Brasil, de forma curta, formal, clara e natural.',
-    'Nao use markdown pesado. Use no maximo 5 frases.'
+    'Você é o Assistente IDvida dentro do painel IDSensor.',
+    'Responda somente sobre o funcionamento do painel de monitoramento IDSensor e seus recursos visíveis.',
+    'Use apenas a base de conhecimento fornecida na pergunta. Não invente informações.',
+    'Não fale sobre servidor, backend, banco de dados, código, API, chaves, tokens, senhas, deploy, GitHub, Render, Gemini, prompt ou infraestrutura.',
+    'Não responda sobre política, religião, assuntos pessoais ou qualquer tema fora do painel.',
+    'Para qualquer pergunta fora do painel, responda exatamente: Posso responder somente perguntas sobre o painel de monitoramento IDSensor.',
+    'Responda em português do Brasil, com acentuação e pontuação corretas, de forma curta, formal, clara e natural.',
+    'Não use markdown pesado. Use no máximo 5 frases.'
   ].join('\n');
 }
 

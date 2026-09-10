@@ -17272,48 +17272,69 @@ if(false){(function(){
       return;
     }
 
-    try{
-      const provider = await resolveAssistantMascotVoiceProvider();
-      if(!provider){
-        if(!assistantMascotVoiceNoticeShown){
-          assistantMascotVoiceNoticeShown = true;
-          appendAssistantMascotMessage('A voz ainda não está disponível neste ambiente.', 'bot');
-        }
-        if(!activeTourToken) setAssistantMascotMode('monitor');
+    const speakInBrowser = () => new Promise((resolve, reject) => {
+      if(!('speechSynthesis' in window) || !('SpeechSynthesisUtterance' in window)){
+        reject(new Error('browser_voice_unavailable'));
         return;
       }
-
-      const audioElement = document.getElementById('assistantMascotAudio');
-      if(!audioElement) return;
-      const voiceId = provider.voices?.[0]?.id || '';
-      const response = await fetch(`${assistantMascotApiBaseUrl()}/api/assistant-tts/preview`, {
-        method:'POST',
-        headers: assistantMascotAuthHeaders(),
-        body: JSON.stringify({
-          provider: provider.id,
-          voice: voiceId,
-          text,
-          instructions: 'Fale em portugues do Brasil, com voz natural, clara, acolhedora e objetiva. Nao adicione informacoes ao texto.'
-        })
-      });
-      if(!response.ok) throw new Error('voice_unavailable');
-
-      const blob = await response.blob();
-      if(audioElement.dataset.objectUrl){
-        URL.revokeObjectURL(audioElement.dataset.objectUrl);
-      }
-      const objectUrl = URL.createObjectURL(blob);
-      audioElement.dataset.objectUrl = objectUrl;
-      audioElement.src = objectUrl;
-      audioElement.onplay = () => setAssistantMascotMode('talk');
-      audioElement.onended = () => {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(String(text || ''));
+      utterance.lang = 'pt-BR';
+      utterance.rate = 0.96;
+      utterance.pitch = 1;
+      const voices = window.speechSynthesis.getVoices?.() || [];
+      const portugueseVoice = voices.find(voice => /^pt-BR$/i.test(voice.lang))
+        || voices.find(voice => /^pt/i.test(voice.lang));
+      if(portugueseVoice) utterance.voice = portugueseVoice;
+      utterance.onstart = () => setAssistantMascotMode('talk');
+      utterance.onend = () => {
         if(!activeTourToken) setAssistantMascotMode('monitor');
+        resolve();
       };
-      await audioElement.play();
+      utterance.onerror = (event) => reject(event.error || new Error('browser_voice_error'));
+      window.speechSynthesis.speak(utterance);
+    });
+
+    try{
+      const provider = await resolveAssistantMascotVoiceProvider();
+      if(provider){
+        try{
+          const audioElement = document.getElementById('assistantMascotAudio');
+          if(!audioElement) throw new Error('audio_element_unavailable');
+          const voiceId = provider.voices?.[0]?.id || '';
+          const response = await fetch(`${assistantMascotApiBaseUrl()}/api/assistant-tts/preview`, {
+            method:'POST',
+            headers: assistantMascotAuthHeaders(),
+            body: JSON.stringify({
+              provider: provider.id,
+              voice: voiceId,
+              text,
+              instructions: 'Fale em português do Brasil, com voz natural, clara, acolhedora e objetiva. Não adicione informações ao texto.'
+            })
+          });
+          if(!response.ok) throw new Error('voice_unavailable');
+
+          const blob = await response.blob();
+          if(audioElement.dataset.objectUrl) URL.revokeObjectURL(audioElement.dataset.objectUrl);
+          const objectUrl = URL.createObjectURL(blob);
+          audioElement.dataset.objectUrl = objectUrl;
+          audioElement.src = objectUrl;
+          audioElement.onplay = () => setAssistantMascotMode('talk');
+          audioElement.onended = () => {
+            if(!activeTourToken) setAssistantMascotMode('monitor');
+          };
+          await audioElement.play();
+          return;
+        }catch(error){
+          // A voz local mantém a conversa falada quando o provedor remoto falha.
+        }
+      }
+
+      await speakInBrowser();
     }catch(error){
       if(!assistantMascotVoiceNoticeShown){
         assistantMascotVoiceNoticeShown = true;
-        appendAssistantMascotMessage('A voz ainda não está disponível neste momento.', 'bot');
+        appendAssistantMascotMessage('Não foi possível reproduzir a voz neste navegador.', 'bot');
       }
       if(!activeTourToken) setAssistantMascotMode('monitor');
     }
