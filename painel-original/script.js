@@ -17066,6 +17066,7 @@ if(false){(function(){
   let assistantMascotVoiceProviderPromise = null;
   let assistantMascotVoiceNoticeShown = false;
   let assistantMascotGreetingStarted = false;
+  let assistantMascotGreetingTimer = null;
 
   function panelRoleForTour(){
     return String(
@@ -17252,11 +17253,15 @@ if(false){(function(){
     const devices = typeof tourDeviceList === 'function' ? tourDeviceList() : [];
     const stateOf = device => String(device?.state || '').toLowerCase();
     const statusOf = device => String(device?.status || '').toUpperCase();
-    const normal = devices.filter(device => stateOf(device) === 'blue' || statusOf(device) === 'NORMAL').length;
-    const attention = devices.filter(device => stateOf(device) === 'warn' || ['ATENÇÃO', 'ATENCAO'].includes(statusOf(device))).length;
-    const critical = devices.filter(device => stateOf(device) === 'crit' || ['CRÍTICO', 'CRITICO'].includes(statusOf(device))).length;
-    const maintenance = devices.filter(device => stateOf(device) === 'maint' || ['MANUTENÇÃO', 'MANUTENCAO'].includes(statusOf(device))).length;
-    const offline = devices.filter(device => device?.online === false || /sem comunicação|sem comunicacao/i.test(String(device?.commText || ''))).length;
+    const isOffline = device => device?.online === false || /sem comunicação|sem comunicacao/i.test(String(device?.commText || ''));
+    const isMaintenance = device => stateOf(device) === 'maint' || ['MANUTENÇÃO', 'MANUTENCAO'].includes(statusOf(device));
+    const isCritical = device => stateOf(device) === 'crit' || ['CRÍTICO', 'CRITICO'].includes(statusOf(device));
+    const isAttention = device => stateOf(device) === 'warn' || ['ATENÇÃO', 'ATENCAO'].includes(statusOf(device));
+    const offline = devices.filter(isOffline).length;
+    const maintenance = devices.filter(isMaintenance).length;
+    const critical = devices.filter(device => !isOffline(device) && isCritical(device)).length;
+    const attention = devices.filter(device => !isOffline(device) && !isCritical(device) && isAttention(device)).length;
+    const normal = devices.filter(device => !isOffline(device) && !isMaintenance(device) && !isCritical(device) && !isAttention(device)).length;
     const activeAlerts = devices.filter(device => Array.isArray(device?.events) && device.events.some(event => !/sem alerta ativo/i.test(String(event)))).length;
     return {
       total: devices.length,
@@ -17315,7 +17320,7 @@ if(false){(function(){
     const pending = appendAssistantMascotMessage('Estou lendo o painel para te atualizar...', 'bot', true);
     try{
       await requestAssistantMascotAnswer(
-        'Apresente o painel IDSensor agora. Faça um resumo falado, curto e natural, dizendo quantos equipamentos estão normais, em atenção, críticos, sem comunicação e quais alertas ou oscilações merecem atenção neste momento. Comece com: Olá, eu sou o Assistente IDvida.',
+        'Você acabou de ser ativado no painel. Faça sua apresentação inicial de forma natural e curta: diga "Olá, tudo bem? Eu sou o Assistente Virtual IDvida. Estou aqui para acompanhar o painel com você." Em seguida, faça uma varredura do estadoAtual e informe o total de equipamentos, quantos estão normais, em atenção, críticos, sem comunicação e em manutenção. Cite somente os equipamentos e ocorrências que realmente aparecerem no estadoAtual, incluindo temperatura fora da faixa, alertas, oscilações ou tempo sem comunicação. Termine perguntando se o usuário quer detalhes de algum equipamento ou recurso do painel.',
         pending
       );
     }catch(error){
@@ -17580,7 +17585,18 @@ if(false){(function(){
     if(assistantMascotUserDismissed) return;
     const createdDock = createAssistantMascotDock();
     createdDock.classList.add('is-visible');
-    if(!activeTourToken) setAssistantMascotMode('monitor');
+    if(!activeTourToken) {
+      setAssistantMascotMode('monitor');
+      if(!assistantMascotGreetingStarted && !assistantMascotUserDismissed && createdDock.dataset.autoGreetingQueued !== 'true'){
+        createdDock.dataset.autoGreetingQueued = 'true';
+        window.clearTimeout(assistantMascotGreetingTimer);
+        assistantMascotGreetingTimer = window.setTimeout(() => {
+          if(isAssistantTourAllowed() && !assistantMascotGreetingStarted && !assistantMascotUserDismissed){
+            openAssistantMascotMenu('main');
+          }
+        }, 650);
+      }
+    }
   }
 
   function delay(ms, token){
