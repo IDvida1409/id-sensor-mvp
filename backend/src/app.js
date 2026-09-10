@@ -4645,6 +4645,7 @@ addRoute('POST', '/api/assistant-tts/preview', async ({ body, res }) => {
     const result = await synthesizeTts(body);
     return audio(res, 200, result.buffer, result.contentType);
   } catch (error) {
+    console.error('[assistant-tts]', error.message, error.details || '');
     return fail(res, error.statusCode || 500, error.message || 'Nao foi possivel gerar a voz.', error.details || null);
   }
 });

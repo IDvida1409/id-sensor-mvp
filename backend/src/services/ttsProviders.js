@@ -266,8 +266,7 @@ async function synthesizeGemini({ text, voice, instructions }) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-goog-api-key': process.env.GEMINI_API_KEY,
-        'Api-Revision': '2026-05-20'
+        'x-goog-api-key': process.env.GEMINI_API_KEY
       },
       body: JSON.stringify({
         model,
@@ -278,8 +277,7 @@ async function synthesizeGemini({ text, voice, instructions }) {
         generation_config: {
           speech_config: [
             { voice: selectedVoice }
-          ],
-          thinking_level: 'low'
+          ]
         }
       })
     });
