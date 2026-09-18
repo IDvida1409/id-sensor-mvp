@@ -145,8 +145,6 @@
   let appStarted = false;
   let historyUnlocked = false;
 
-  const ACCESS_PASSWORD = '12345678';
-
   const $ = (selector) => document.querySelector(selector);
   const $$ = (selector) => [...document.querySelectorAll(selector)];
 
@@ -169,15 +167,10 @@
     status.className = `status ${type}`;
   }
 
-  function requestHistoryAccess() {
-    if (historyUnlocked) return true;
-    const password = prompt('Digite a senha para acessar o histórico:');
-    if (password === ACCESS_PASSWORD) {
-      historyUnlocked = true;
-      return true;
-    }
-    if (password !== null) alert('Senha inválida.');
-    return false;
+  async function requestHistoryAccess() {
+    const allowed = await window.BathroomUI.requestAccess();
+    historyUnlocked = allowed;
+    return allowed;
   }
 
   function setStep(step) {
@@ -812,6 +805,7 @@
 
   async function fetchAnalysis(mode) {
     const params = paramsForMode(mode);
+    params.set('limit', '20000');
     const [data, records] = await Promise.all([
       api(`/api/bathroom-checklists/report?${params.toString()}`),
       api(`/api/bathroom-checklists?${params.toString()}`)
@@ -1257,6 +1251,7 @@
     renderGraphComparison(records, selectedBathroomId);
     renderGraphBlocks(records);
     currentGraphSvg = records.length ? buildGraphSvg(records, selectedBathroomId) : '';
+    window.BathroomUI.renderDashboard(records, state.config, selectedFilterText('graph'));
   }
 
   async function loadReport() {
@@ -1267,6 +1262,7 @@
     renderReportMetrics(records, selectedBathroomId);
     renderReportSummary(records, selectedBathroomId);
     renderReportBlocks(records);
+    window.BathroomUI.renderReportTimes(records);
   }
 
   function historyDetailsText(record) {
@@ -1341,7 +1337,7 @@
   }
 
   async function clearHistory() {
-    if (!requestHistoryAccess()) return;
+    if (!await requestHistoryAccess()) return;
 
     const filters = selectedFilterText('history');
     const message = `Limpar o histórico de ${filters.from} até ${filters.to} para ${filters.bathroom}?`;
@@ -1495,8 +1491,8 @@
     downloadBlob(`relatorio-checklist-banheiros-${new Date().toISOString().slice(0, 10)}.csv`, `\ufeff${lines.join('\r\n')}`, 'text/csv;charset=utf-8');
   }
 
-  function activateView(viewName) {
-    if (viewName === 'history' && !requestHistoryAccess()) return;
+  async function activateView(viewName) {
+    if (viewName !== 'checklist' && !await requestHistoryAccess()) return;
 
     $$('.tab').forEach((tab) => tab.classList.toggle('active', tab.dataset.view === viewName));
     $$('.view').forEach((view) => view.classList.toggle('active', view.id === `${viewName}View`));
@@ -1509,9 +1505,9 @@
       return;
     }
     setStep(viewName);
-    if (viewName === 'graph') loadGraph().catch(() => {});
-    if (viewName === 'report') loadReport().catch(() => {});
-    if (viewName === 'history') loadHistory().catch(() => {});
+    if (viewName === 'graph') loadGraph().catch((error) => alert(error.message));
+    if (viewName === 'report') loadReport().catch((error) => alert(error.message));
+    if (viewName === 'history') loadHistory().catch((error) => alert(error.message));
   }
 
   function setupTabs() {
@@ -1548,15 +1544,14 @@
     $('#checklistForm').addEventListener('submit', saveChecklist);
     $('#loadGraph').addEventListener('click', () => loadGraph().catch((error) => alert(error.message)));
     $('#loadReport').addEventListener('click', () => loadReport().catch((error) => alert(error.message)));
-    $('#loadHistory').addEventListener('click', () => {
-      if (requestHistoryAccess()) loadHistory().catch((error) => alert(error.message));
+    $('#loadHistory').addEventListener('click', async () => {
+      if (await requestHistoryAccess()) loadHistory().catch((error) => alert(error.message));
     });
     $('#clearHistory').addEventListener('click', () => clearHistory().catch((error) => alert(error.message)));
     $('#downloadGraph').addEventListener('click', downloadGraphSvg);
-    $('#downloadReport').addEventListener('click', downloadReportCsv);
-    $('#downloadReportBottom').addEventListener('click', downloadReportCsv);
-    loadGraph().catch(() => {});
-    loadReport().catch(() => {});
+    $('#downloadReport').addEventListener('click', () => window.BathroomUI.printReport('report'));
+    $('#downloadReportBottom').addEventListener('click', () => window.BathroomUI.printReport('report'));
+    window.BathroomUI.init(state.config, api, downloadReportCsv, (mode) => mode === 'graph' ? loadGraph() : loadReport());
   }
 
   function init() {

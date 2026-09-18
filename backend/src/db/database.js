@@ -267,6 +267,7 @@ function initDb() {
     );
   `);
 
+  ensureColumn(database, 'bathroom_checklists', 'service_json', 'TEXT');
   ensureColumn(database, 'activation_codes', 'usuario_nome', 'TEXT');
   ensureColumn(database, 'activation_codes', 'usuario_email', 'TEXT');
   ensureColumn(database, 'activation_codes', 'area_nome', 'TEXT');

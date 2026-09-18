@@ -14,6 +14,7 @@ const { seedDatabase } = require('./db/seed');
 const { id, activationCode } = require('./utils/ids');
 const { buildDeviceCard } = require('./services/deviceCard');
 const { buildCartAnalyticReportHtml } = require('./services/cartAnalyticReport');
+const bathroomManagement = require('./services/bathroomManagement');
 const { sendActivationEmail } = require('./services/emailService');
 const { gatewayStatusSummary, getMqttBridgeStatus, parseMokoRawPayload } = require('./services/mqttBridge');
 const { sendExpoPush } = require('./services/pushService');
@@ -3172,6 +3173,9 @@ function normalizeBathroomText(value, maxLength = 500) {
 }
 
 function normalizeBathroomChecklistBody(body = {}) {
+  let service;
+  try { service = bathroomManagement.normalizeService(body.service); }
+  catch (error) { throw bathroomChecklistError(error.message); }
   const bathroom = normalizeBathroomChoice(body.bathroom_id || body.bathroomId);
   const condition = body.condition && typeof body.condition === 'object' ? body.condition : {};
   const suppliesInput = body.supplies && typeof body.supplies === 'object' ? body.supplies : {};
@@ -3196,7 +3200,8 @@ function normalizeBathroomChecklistBody(body = {}) {
     piso_molhado: normalizeBathroomBoolean(condition.piso_molhado ?? condition.wetFloor),
     lixeira_cheia: normalizeBathroomBoolean(condition.lixeira_cheia ?? condition.fullTrash),
     vaso_sujo: normalizeBathroomBoolean(condition.vaso_sujo ?? condition.dirtyToilet),
-    pia_suja: normalizeBathroomBoolean(condition.pia_suja ?? condition.dirtySink)
+    pia_suja: normalizeBathroomBoolean(condition.pia_suja ?? condition.dirtySink),
+    detalhe_manutencao: normalizeBathroomBoolean(condition.detalhe_manutencao)
   };
 
   const supplies = {};
@@ -3246,7 +3251,8 @@ function normalizeBathroomChecklistBody(body = {}) {
     supplies,
     replenishments,
     actions: finalActions,
-    notes: normalizeBathroomText(body.notes || body.observation, 1000),
+    service,
+    notes: normalizeBathroomText([service?.has_ticket === 'nao' ? 'Atendimento sem chamado.' : '', body.notes || body.observation || ''].filter(Boolean).join(' '), 1000),
     responsibleName,
     createdAt: nowIso()
   };
@@ -3269,7 +3275,8 @@ function bathroomChecklistRowToRecord(row) {
     actions: parseJsonObject(row.actions_json, []),
     notes: row.notes || '',
     responsible_name: row.responsible_name || '',
-    created_at: row.created_at
+    created_at: row.created_at,
+    service: parseJsonObject(row.service_json, null)
   };
 }
 
@@ -3503,12 +3510,38 @@ addRoute('GET', '/api/bathroom-checklists/config', async ({ res }) => {
   });
 });
 
-addRoute('GET', '/api/bathroom-checklists', async ({ query, res }) => {
-  const limit = Math.max(1, Math.min(Number(query.limit || 200), 1000));
+addRoute('POST', '/api/bathroom-checklists/access', async ({ req, body, res }) => {
+  const status = bathroomManagement.login(req, res, body.password);
+  if (status !== 200) return fail(res, status, status === 429 ? 'Aguarde antes de tentar novamente.' : 'Senha inválida.');
+  res.setHeader('Cache-Control', 'no-store');
+  ok(res, { authenticated: true });
+});
+
+addRoute('GET', '/api/bathroom-checklists/access', async ({ req, res }) => {
+  res.setHeader('Cache-Control', 'no-store');
+  ok(res, { authenticated: bathroomManagement.sessionFromRequest(req) });
+});
+
+addRoute('DELETE', '/api/bathroom-checklists/access', async ({ req, res }) => {
+  bathroomManagement.logout(req, res);
+  ok(res, { authenticated: false });
+});
+
+function requireBathroomManagement(req, res) {
+  res.setHeader('Cache-Control', 'no-store');
+  if (bathroomManagement.sessionFromRequest(req)) return true;
+  fail(res, 401, 'Informe a senha para acessar os dados gerenciais.');
+  return false;
+}
+
+addRoute('GET', '/api/bathroom-checklists', async ({ query, req, res }) => {
+  if (!requireBathroomManagement(req, res)) return;
+  const limit = Math.max(1, Math.min(Number(query.limit || 200), 20000));
   ok(res, loadBathroomChecklistRows(query, limit));
 });
 
-addRoute('DELETE', '/api/bathroom-checklists/history', async ({ query, res }) => {
+addRoute('DELETE', '/api/bathroom-checklists/history', async ({ query, req, res }) => {
+  if (!requireBathroomManagement(req, res)) return;
   if (query.confirm !== 'limpar-historico-checklists') {
     return fail(res, 400, 'Confirmação inválida para limpar o histórico.');
   }
@@ -3549,8 +3582,8 @@ addRoute('POST', '/api/bathroom-checklists', async ({ body, res }) => {
       id, bathroom_id, bathroom_name, location_name, bathroom_gender,
       people_count, reason, clean_level, odor_level, condition_json,
       supplies_json, replenishments_json, actions_json, notes,
-      responsible_name, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      responsible_name, created_at, service_json
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     checklist.id,
     checklist.bathroom.id,
@@ -3567,14 +3600,16 @@ addRoute('POST', '/api/bathroom-checklists', async ({ body, res }) => {
     JSON.stringify(checklist.actions),
     checklist.notes,
     checklist.responsibleName,
-    checklist.createdAt
+    checklist.createdAt,
+    checklist.service ? JSON.stringify(checklist.service) : null
   );
 
   const record = db.prepare('SELECT * FROM bathroom_checklists WHERE id = ?').get(checklist.id);
-  ok(res, bathroomChecklistRowToRecord(record), 201);
+  ok(res, { id: record.id, created_at: record.created_at }, 201);
 });
 
-addRoute('GET', '/api/bathroom-checklists/report', async ({ query, res }) => {
+addRoute('GET', '/api/bathroom-checklists/report', async ({ query, req, res }) => {
+  if (!requireBathroomManagement(req, res)) return;
   const records = loadBathroomChecklistRows(query, 20000);
   ok(res, {
     filters: {
