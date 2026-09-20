@@ -828,18 +828,18 @@
     const groups = comparisonGroups(records, selectedBathroomId).filter((group) => group.records.length);
     const topGroup = [...groups].sort((a, b) => occurrenceRate(b.records) - occurrenceRate(a.records))[0];
     const totalReplenishments = records.reduce((total, record) => total + (record.replenishments || []).filter((item) => Number(item.quantity || 0) > 0).length, 0);
-    const peopleTotal = totalPeopleCount(records);
+    const ticketTotal = records.filter((record) => record.service?.has_ticket === 'sim').length;
     const metrics = selectedBathroomId
       ? [
         [numberText(records.length), 'checklists gerados'],
-        [numberText(peopleTotal), 'pessoas acumuladas'],
+        [numberText(ticketTotal), 'chamados registrados'],
         [numberText(records.filter(hasOccurrence).length), 'checklists com ocorrência'],
         [numberText(totalReplenishments), 'reposições registradas']
       ]
       : [
         [numberText(groups.length), 'banheiros comparados'],
         [numberText(records.length), 'checklists gerados'],
-        [numberText(peopleTotal), 'pessoas acumuladas'],
+        [numberText(ticketTotal), 'chamados registrados'],
         [topGroup ? shortBathroomName(topGroup.bathroom.name) : '-', 'maior ocorrência']
       ];
 
@@ -857,7 +857,7 @@
     const metrics = [
       [selectedBathroomId ? '1' : numberText(groups.length), selectedBathroomId ? 'banheiro selecionado' : 'banheiros com dados'],
       [numberText(records.length), 'checklists no período'],
-      [numberText(totalPeopleCount(records)), 'pessoas acumuladas'],
+      [numberText(records.filter((record) => record.service?.has_ticket === 'sim').length), 'chamados registrados'],
       [numberText(totalReplenishments), 'reposições registradas']
     ];
 
@@ -884,30 +884,26 @@
     $('#graphComparison').innerHTML = `
       <div class="comparison-row graph header">
         <span>Banheiro</span>
-        <span>Pessoas</span>
+        <span>Checklists</span>
         <span>Limpeza parcial ou não</span>
         <span>Odor leve ou forte</span>
         <span>Papel higiênico baixo ou vazio</span>
-        <span>Primeiro ponto</span>
+        <span>Chamados</span>
       </div>
       ${groups.map((group) => {
         const groupRecords = group.records;
         const cleanRate = rate(groupRecords, (record) => record.clean_level !== 'sim');
         const odorRate = rate(groupRecords, (record) => record.odor_level !== 'nao');
         const paperRate = rate(groupRecords, (record) => supplyCritical(record, 'papel_higienico'));
-        const observed = firstPeopleText([
-          firstPeople(groupRecords, (record) => record.clean_level !== 'sim'),
-          firstPeople(groupRecords, (record) => record.odor_level !== 'nao'),
-          firstPeople(groupRecords, (record) => supplyCritical(record, 'papel_higienico'))
-        ]);
+        const tickets = groupRecords.filter((record) => record.service?.has_ticket === 'sim').length;
         return `
           <div class="comparison-row graph">
             <strong title="${group.bathroom.name}">${shortBathroomName(group.bathroom.name)}</strong>
-            <span>${peopleText(totalPeopleCount(groupRecords))}</span>
+            <span>${numberText(groupRecords.length)}</span>
             ${miniMetricHtml(cleanRate, cleanRate >= 60 ? 'var(--red)' : cleanRate >= 35 ? 'var(--orange)' : 'var(--teal)')}
             ${miniMetricHtml(odorRate, odorRate >= 45 ? 'var(--red)' : odorRate >= 25 ? 'var(--orange)' : 'var(--teal)')}
             ${miniMetricHtml(paperRate, paperRate >= 55 ? 'var(--red)' : paperRate >= 35 ? 'var(--orange)' : 'var(--teal)')}
-            <strong>${observed}</strong>
+            <strong>${numberText(tickets)}</strong>
           </div>
         `;
       }).join('')}
@@ -1037,8 +1033,7 @@
           events += 1;
         });
       });
-      const peopleSum = totalPeopleCount(records);
-      const average = peopleSum > 0 ? (quantity / peopleSum) * 100 : 0;
+      const average = events > 0 ? quantity / events : 0;
       return {
         ...item,
         quantity: Math.round(quantity * 100) / 100,
@@ -1062,70 +1057,31 @@
     const isComparison = !selectedBathroomId;
     $('#reportSummaryEyebrow').textContent = isComparison ? 'Comparação' : 'Banheiro selecionado';
     $('#reportSummaryTitle').textContent = isComparison ? 'Resumo por banheiro' : 'Resumo do banheiro';
-    $('#reportSummaryPill').textContent = isComparison ? 'comparação' : 'individual';
+    $('#reportSummaryPill').hidden = !isComparison;
+    $('#reportSummaryPill').textContent = 'comparação';
 
     if (!groups.length) {
       renderEmpty('#reportSummary');
       return;
     }
 
-    $('#reportSummary').innerHTML = `
-      <div class="comparison-row report header">
-        <span>Banheiro</span>
-        <span>Checklists</span>
-        <span>Pessoas</span>
-        <span>Condição parcial ou não</span>
-        <span>Odor leve ou forte</span>
-        <span>Insumo crítico</span>
-      </div>
-      ${groups.map((group) => {
+    $('#reportSummary').innerHTML = `<div class="report-bathroom-grid">${groups.map((group) => {
         const groupRecords = group.records;
-        const cleanRate = rate(groupRecords, (record) => record.clean_level !== 'sim');
-        const odorRate = rate(groupRecords, (record) => record.odor_level !== 'nao');
-        const criticalSupply = state.config.supply_items
-          .map((item) => ({
-            label: item.label,
-            count: groupRecords.filter((record) => supplyCritical(record, item.key)).length
-          }))
-          .sort((a, b) => b.count - a.count)[0];
+        const calls = groupRecords.filter((record) => record.service?.has_ticket === 'sim').length;
+        const replenishments = groupRecords.filter(hasReplenishment).length;
+        const conditions = conditionItemRows(groupRecords).filter((row) => row[1] > 0);
+        const actions = actionRows(groupRecords).filter((row) => row[1] > 0 && row[0] !== labels.nenhuma_acao);
+        const clean = [['sim', 'Limpo'], ['parcial', 'Parcial'], ['nao', 'Não limpo']].map(([key, label]) => [label, groupRecords.filter((record) => record.clean_level === key).length]);
+        const odor = [['nao', 'Sem odor'], ['leve', 'Leve'], ['forte', 'Forte']].map(([key, label]) => [label, groupRecords.filter((record) => record.odor_level === key).length]);
         return `
-          <div class="comparison-row report">
-            <strong>${group.bathroom.name}</strong>
-            <span>${numberText(groupRecords.length)}</span>
-            <span>${peopleText(totalPeopleCount(groupRecords))}</span>
-            <strong>${cleanRate}%</strong>
-            <strong>${odorRate}%</strong>
-            <span>${criticalSupply && criticalSupply.count ? criticalSupply.label : 'Sem crítico'}</span>
-          </div>
+          <article class="report-bathroom-card">
+            <header><h3>${group.bathroom.name}</h3><span>${pluralText(groupRecords.length, 'checklist', 'checklists')}</span></header>
+            <div class="report-kpis"><span><strong>${calls}</strong> chamados</span><span><strong>${replenishments}</strong> reposições</span><span><strong>${groupRecords.filter(hasOccurrence).length}</strong> ocorrências</span></div>
+            <div class="report-status"><div><b>Condição</b>${clean.map(([label, count]) => `<span>${label}<strong>${count}</strong></span>`).join('')}</div><div><b>Odor</b>${odor.map(([label, count]) => `<span>${label}<strong>${count}</strong></span>`).join('')}</div></div>
+            <div class="report-relevant"><div><b>Itens observados</b><span>${conditions.length ? conditions.map((row) => `${row[0]} (${row[1]})`).join(' · ') : 'Nenhum'}</span></div><div><b>Ações realizadas</b><span>${actions.length ? actions.map((row) => `${row[0]} (${row[1]})`).join(' · ') : 'Nenhuma'}</span></div></div>
+          </article>
         `;
-      }).join('')}
-    `;
-  }
-
-  function observedFields(records) {
-    return [
-      ['Limpeza parcial ou não', firstPeople(records, (record) => record.clean_level !== 'sim'), 'pessoas acumuladas até a primeira ocorrência'],
-      ['Odor leve ou forte', firstPeople(records, (record) => record.odor_level !== 'nao'), 'pessoas acumuladas até a primeira ocorrência'],
-      ...state.config.supply_items.map((item) => [
-        `${item.label} baixo ou vazio`,
-        firstPeople(records, (record) => supplyCritical(record, item.key)),
-        'pessoas acumuladas até o primeiro registro crítico'
-      ])
-    ];
-  }
-
-  function renderObservedFields(records) {
-    if (!records.length) {
-      renderEmpty('#observedFieldsReport');
-      return;
-    }
-    $('#observedFieldsReport').innerHTML = observedFields(records).map(([label, people, note]) => `
-      <div class="threshold-item">
-        <strong>${label}</strong>
-        <strong>${peopleText(people)}</strong>
-        <span>${note}</span>
-      </div>
-    `).join('');
+      }).join('')}</div>`;
   }
 
   function renderSupplyReport(records) {
@@ -1137,14 +1093,14 @@
     $('#supplyReport').innerHTML = `
       <div class="comparison-row compact-supply header">
         <span>Item</span>
-        <span>Reposição média</span>
+        <span>Média por reposição</span>
         <span>Qtd. reposta</span>
         <span>Reposições</span>
       </div>
       ${totals.map((item) => `
         <div class="comparison-row compact-supply">
           <strong>${item.label}</strong>
-          <span>${decimalText(item.average, 1)} ${item.unit}/100 pessoas</span>
+          <span>${decimalText(item.average, 1)} ${item.unit}</span>
           <strong>${decimalText(item.quantity, item.quantity % 1 ? 1 : 0)} ${item.unit}</strong>
           <span>${numberText(item.events)}</span>
         </div>
@@ -1158,29 +1114,13 @@
       renderEmpty('#supplyLevelReport', 'Sem leitura de insumos no período selecionado.');
       return;
     }
-    $('#supplyLevelReport').innerHTML = `
-      <div class="comparison-row levels header">
-        <span>Insumo</span>
-        ${peopleBuckets.slice(0, 4).map((bucket) => `<span>${bucket.label}</span>`).join('')}
-      </div>
-      ${state.config.supply_items.map((item) => `
-        <div class="comparison-row levels">
-          <strong>${item.label}</strong>
-          ${peopleBuckets.slice(0, 4).map((bucket) => {
-            const bucketRecords = recordsForBucket(supplyRecords, bucket);
-            return `<span>${dominantLevel(bucketRecords, (record) => record.supplies?.[item.key] || 'cheio')}</span>`;
-          }).join('')}
-        </div>
-      `).join('')}
-    `;
+    const groups = groupByBathroom(supplyRecords).filter((group) => group.records.length);
+    const levels = ['cheio', 'medio', 'baixo', 'vazio'];
+    $('#supplyLevelReport').innerHTML = `${legendHtml(levels.map((level) => ({ label: labels[level], color: colors[level] })))}<div class="report-supply-groups">${groups.map((group) => `<section class="report-supply-bathroom"><h3>${group.bathroom.name}</h3>${state.config.supply_items.map((item) => { const evaluated = group.records.filter((record) => record.supplies?.[item.key]); const parts = fieldDistribution(evaluated, levels, (record) => record.supplies?.[item.key]); return `<div class="report-supply-row"><div><span>${item.label}</span><strong>${pluralText(evaluated.length, 'avaliação', 'avaliações')}</strong></div>${stackHtml(parts)}</div>`; }).join('')}</section>`).join('')}</div>`;
   }
 
   function renderReportBlocks(records) {
-    renderObservedFields(records);
     renderSupplyReport(records);
-    renderPercentBars('#conditionReport', conditionItemRows(records));
-    renderCountBars('#reasonReport', reasonRows(records));
-    renderCountBars('#actionReport', actionRows(records));
     renderSupplyLevelReport(records);
   }
 
@@ -1210,13 +1150,12 @@
     const height = 820;
     const maxCondition = Math.max(...conditionRows.map((row) => row[1]), 1);
     const maxAction = Math.max(...action.map((row) => row[1]), 1);
-    const peopleTotal = totalPeopleCount(records);
     return `
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="Gráfico dos checklists">
         <rect width="${width}" height="${height}" rx="28" fill="#f4f7fb"/>
         <rect x="34" y="34" width="1132" height="96" rx="18" fill="#ffffff" stroke="${colorHex.line}"/>
         <text x="70" y="78" fill="${colorHex.text}" font-size="30" font-weight="700">Gráfico dos checklists</text>
-        <text x="70" y="108" fill="${colorHex.muted}" font-size="16">${numberText(records.length)} checklists | ${numberText(peopleTotal)} pessoas acumuladas | condição, odor, insumos e ação.</text>
+        <text x="70" y="108" fill="${colorHex.muted}" font-size="16">${numberText(records.length)} checklists | ${numberText(records.filter((record) => record.service?.has_ticket === 'sim').length)} chamados | condição, odor, insumos e ação.</text>
         <rect x="34" y="160" width="1132" height="190" rx="18" fill="#ffffff" stroke="${colorHex.line}"/>
         <text x="70" y="204" fill="${colorHex.text}" font-size="22" font-weight="700">${selectedBathroomId ? 'Resumo do banheiro' : 'Todos os banheiros: comparativo'}</text>
         ${groups.slice(0, 4).map((group, index) => {
@@ -1281,11 +1220,10 @@
 
   function renderHistoryMetrics(records) {
     const responsibleCount = new Set(records.map((record) => String(record.responsible_name || '').trim()).filter(Boolean)).size;
-    const peopleTotal = totalPeopleCount(records);
     const lastRecord = records[0];
     const metrics = [
       [numberText(records.length), 'checklists no histórico'],
-      [numberText(peopleTotal), 'pessoas acumuladas'],
+      [numberText(records.filter((record) => record.service?.has_ticket === 'sim').length), 'chamados registrados'],
       [numberText(responsibleCount), 'responsáveis'],
       [lastRecord ? dateText(lastRecord.created_at) : '-', 'último checklist']
     ];
@@ -1409,27 +1347,18 @@
       csvLine(['De', filters.from, 'Até', filters.to, 'Banheiro', filters.bathroom]),
       '',
       csvLine(['Resumo por banheiro']),
-      csvLine(['Banheiro', 'Checklists', 'Pessoas acumuladas', 'Condição parcial ou não', 'Odor leve ou forte', 'Ocorrências'])
+      csvLine(['Banheiro', 'Checklists', 'Chamados', 'Condição parcial ou não', 'Odor leve ou forte', 'Ocorrências'])
     ];
 
     groups.forEach((group) => {
       lines.push(csvLine([
         group.bathroom.name,
         group.records.length,
-        totalPeopleCount(group.records),
+        group.records.filter((record) => record.service?.has_ticket === 'sim').length,
         `${rate(group.records, (record) => record.clean_level !== 'sim')}%`,
         `${rate(group.records, (record) => record.odor_level !== 'nao')}%`,
         group.records.filter(hasOccurrence).length
       ]));
-    });
-
-    lines.push(
-      '',
-      csvLine(['Pessoas acumuladas por campo']),
-      csvLine(['Campo', 'Pessoas acumuladas', 'Observação'])
-    );
-    observedFields(records).forEach(([label, people, note]) => {
-      lines.push(csvLine([label, peopleText(people), note]));
     });
 
     lines.push(
@@ -1440,7 +1369,7 @@
     totals.forEach((item) => {
       lines.push(csvLine([
         item.label,
-        `${decimalText(item.average, 1)} ${item.unit}/100 pessoas`,
+        `${decimalText(item.average, 1)} ${item.unit} por reposição`,
         `${decimalText(item.quantity, item.quantity % 1 ? 1 : 0)} ${item.unit}`,
         item.events
       ]));
@@ -1452,7 +1381,6 @@
       csvLine([
         'Data e hora',
         'Banheiro',
-        'Pessoas consideradas no checklist',
         'Motivo',
         'Banheiro limpo',
         'Odor',
@@ -1472,7 +1400,6 @@
       lines.push(csvLine([
         dateText(record.created_at),
         record.bathroom_name,
-        record.people_count,
         labels[record.reason] || record.reason,
         labels[record.clean_level] || record.clean_level,
         labels[record.odor_level] || record.odor_level,
@@ -1550,8 +1477,11 @@
     $('#clearHistory').addEventListener('click', () => clearHistory().catch((error) => alert(error.message)));
     $('#downloadGraph').addEventListener('click', downloadGraphSvg);
     $('#downloadReport').addEventListener('click', () => window.BathroomUI.printReport('report'));
-    $('#downloadReportBottom').addEventListener('click', () => window.BathroomUI.printReport('report'));
+    $('#downloadReportBottom')?.addEventListener('click', () => window.BathroomUI.printReport('report'));
     window.BathroomUI.init(state.config, api, downloadReportCsv, (mode) => mode === 'graph' ? loadGraph() : loadReport());
+    const requestedView = new URLSearchParams(location.search).get('view');
+    if (requestedView === 'dashboard') await activateView('graph');
+    if (requestedView === 'report') await activateView('report');
   }
 
   function init() {

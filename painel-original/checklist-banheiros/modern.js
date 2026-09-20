@@ -125,6 +125,38 @@
       return `<div class="m-level"><div><span>${label}</span><strong>${count} · ${percent}%</strong></div><div class="m-track"><div style="width:${percent}%;background:${colors[i]}"></div></div></div>`;
     }).join('');
   }
+  function stackedRow(records, getter, levels, colors) {
+    const counts = levels.map(([key, label], index) => ({ key, label, color: colors[index], count: records.filter(record => getter(record) === key).length }));
+    const total = counts.reduce((sum, item) => sum + item.count, 0);
+    return `<div class="m-stack" aria-label="${total} avaliações">${counts.map(item => `<span title="${escape(item.label)}: ${item.count}" style="width:${total ? item.count / total * 100 : 0}%;background:${item.color}">${item.count || ''}</span>`).join('')}</div>`;
+  }
+  function compactCountBars(rows, total, color) {
+    return rows.map(([label, count]) => {
+      const percent = total ? Math.round(count / total * 100) : 0;
+      return `<div class="m-count-bar"><div><span>${escape(label)}</span><strong>${count}</strong></div><div class="m-track"><div style="width:${percent}%;background:${color}"></div></div></div>`;
+    }).join('');
+  }
+  function bathroomDetail(group, currentConfig) {
+    const records = group.records;
+    const cleaning = records.filter(record => record.reason === 'limpeza' || record.actions?.some(action => action.includes('limpeza')));
+    const calls = records.filter(record => record.service?.has_ticket === 'sim').length;
+    const measured = records.map(timeMeasurement).filter(Boolean);
+    const average = (key) => measured.length ? measured.reduce((sum, item) => sum + item[key], 0) / measured.length : NaN;
+    const supplyLevels = [['cheio', 'Cheio'], ['medio', 'Médio'], ['baixo', 'Baixo'], ['vazio', 'Vazio']];
+    const supplyColors = ['#13856b', '#3299a3', '#dbab41', '#cf605b'];
+    const conditionRows = flags.map(([key, label]) => {
+      const count = cleaning.filter(record => record.condition?.[key] || (key === 'detalhe_manutencao' && record.actions?.includes('manutencao'))).length;
+      return [label, count];
+    });
+    const actionRows = Object.entries(actionLabels).map(([key, label]) => [label, records.filter(record => record.actions?.includes(key)).length]).filter(([, count]) => count > 0);
+    return `<article class="m-bathroom-card">
+      <header><div><span>Banheiro</span><h3>${escape(group.bathroom.name)}</h3></div><div class="m-bathroom-totals"><strong>${records.length}</strong><span>${records.length === 1 ? 'checklist' : 'checklists'}</span><strong>${calls}</strong><span>${calls === 1 ? 'chamado' : 'chamados'}</span></div></header>
+      ${records.length ? `<div class="m-detail-section"><h4>Condição e odor</h4><div class="m-legend"><span><i style="background:#13856b"></i>Sim / Não</span><span><i style="background:#dbab41"></i>Parcial / Leve</span><span><i style="background:#cf605b"></i>Não / Forte</span></div><div class="m-distribution-row"><div><span>Banheiro limpo</span><strong>${cleaning.length} avaliações</strong></div>${stackedRow(cleaning, record => record.clean_level, [['sim', 'Sim'], ['parcial', 'Parcial'], ['nao', 'Não']], ['#13856b', '#dbab41', '#cf605b'])}</div><div class="m-distribution-row"><div><span>Odor</span><strong>${cleaning.length} avaliações</strong></div>${stackedRow(cleaning, record => record.odor_level, [['nao', 'Não'], ['leve', 'Leve'], ['forte', 'Forte']], ['#13856b', '#dbab41', '#cf605b'])}</div></div>
+      <div class="m-detail-section"><h4>Nível dos insumos</h4><div class="m-legend">${supplyLevels.map(([key, label], index) => `<span><i style="background:${supplyColors[index]}"></i>${label}</span>`).join('')}</div>${currentConfig.supply_items.map(item => { const evaluated = records.filter(record => record.supplies?.[item.key]); return `<div class="m-distribution-row"><div><span>${escape(item.label)}</span><strong>${evaluated.length} ${evaluated.length === 1 ? 'avaliação' : 'avaliações'}</strong></div>${stackedRow(evaluated, record => record.supplies?.[item.key], supplyLevels, supplyColors)}</div>`; }).join('')}</div>
+      <div class="m-detail-columns"><div class="m-detail-section"><h4>Itens de condição</h4><div class="m-compact-bars">${compactCountBars(conditionRows, cleaning.length, '#dbab41')}</div></div><div class="m-detail-section"><h4>Ações realizadas</h4><div class="m-compact-bars">${actionRows.length ? compactCountBars(actionRows, records.length, '#0878af') : '<p class="m-no-data">Nenhuma ação registrada.</p>'}</div></div></div>
+      <div class="m-service-summary"><span><strong>${calls}</strong> com chamado</span><span><strong>${records.length - calls}</strong> sem chamado</span><span><strong>${formatSeconds(average('wait'))}</strong> espera média</span><span><strong>${formatSeconds(average('clean'))}</strong> limpeza média</span></div>` : '<p class="m-empty">Sem registros no período.</p>'}
+    </article>`;
+  }
   function duration(start, end) {
     if (!start || !end) return 'Tempo não registrado';
     const seconds = Math.max(0, Math.round((Date.parse(end) - Date.parse(start)) / 1000));
@@ -146,7 +178,7 @@
     if (![started, arrived, finished].every(Number.isFinite) || started > arrived || arrived > finished) return null;
     return { wait: (arrived - started) / 1000, clean: (finished - arrived) / 1000 };
   }
-  function timeOverview(records) {
+  function timeOverview(records, compact = false) {
     const measured = records.map(record => ({ record, time: timeMeasurement(record) })).filter(item => item.time);
     const average = (items, key) => items.length ? items.reduce((sum, item) => sum + item.time[key], 0) / items.length : NaN;
     const total = (items, key) => items.reduce((sum, item) => sum + item.time[key], 0);
@@ -155,32 +187,48 @@
       { label: 'Sem chamado', items: measured.filter(item => item.record.service?.has_ticket === 'nao') }
     ].map(group => ({ ...group, wait: average(group.items, 'wait'), clean: average(group.items, 'clean'), accumulated: total(group.items, 'wait') + total(group.items, 'clean') }));
     const maxAverage = Math.max(1, ...groups.map(group => (Number.isFinite(group.wait) ? group.wait : 0) + (Number.isFinite(group.clean) ? group.clean : 0)));
+    const withTicket = records.filter(record => record.service?.has_ticket === 'sim').length;
+    const withoutTicket = records.filter(record => record.service?.has_ticket === 'nao').length;
     const cards = [
       [formatSeconds(average(measured, 'wait')), 'Tempo médio de espera'],
       [formatSeconds(average(measured, 'clean')), 'Tempo médio de limpeza'],
-      [records.filter(record => record.service?.has_ticket === 'nao').length.toLocaleString('pt-BR'), 'Atendimentos sem chamado']
+      [withoutTicket.toLocaleString('pt-BR'), 'Atendimentos sem chamado'],
+      [withTicket.toLocaleString('pt-BR'), 'Atendimentos com chamado'],
+      [(withTicket + withoutTicket).toLocaleString('pt-BR'), 'Total de atendimentos']
     ];
-    return `<section class="m-band m-time-overview"><h2>Resumo dos tempos</h2><p class="m-sub">Comparação entre atendimentos com chamado e sem chamado.</p><div class="m-time-cards">${cards.map(([value, label]) => `<article><span>${label}</span><strong>${value}</strong></article>`).join('')}</div><div class="m-legend"><span><i style="background:#0878af"></i>Espera até a chegada</span><span><i style="background:#13856b"></i>Tempo de limpeza</span></div><div class="m-time-chart">${groups.map(group => `<article class="m-time-row"><div><strong>${group.label}</strong><span>${group.items.length} ${group.items.length === 1 ? 'medição' : 'medições'}</span></div><div class="m-time-track"><span title="Espera média: ${formatSeconds(group.wait)}" style="width:${Number.isFinite(group.wait) ? group.wait / maxAverage * 100 : 0}%;background:#0878af"></span><span title="Limpeza média: ${formatSeconds(group.clean)}" style="width:${Number.isFinite(group.clean) ? group.clean / maxAverage * 100 : 0}%;background:#13856b"></span></div><dl><div><dt>Espera média</dt><dd>${formatSeconds(group.wait)}</dd></div><div><dt>Limpeza média</dt><dd>${formatSeconds(group.clean)}</dd></div><div><dt>Tempo médio total</dt><dd>${formatSeconds(group.wait + group.clean)}</dd></div><div><dt>Tempo acumulado</dt><dd>${group.items.length ? formatSeconds(group.accumulated) : 'Sem dados'}</dd></div></dl></article>`).join('')}</div><p class="m-sub">Calculado com ${measured.length} ${measured.length === 1 ? 'checklist que possui' : 'checklists que possuem'} medição de tempo. Registros antigos sem horários não entram nos cálculos.</p></section>`;
+    const chart = groups.map(group => `<article class="m-time-row ${compact ? 'compact' : ''}"><div><strong>${group.label}</strong><span>${group.items.length} ${group.items.length === 1 ? 'atendimento' : 'atendimentos'}</span></div><div class="m-time-track"><span title="Espera média: ${formatSeconds(group.wait)}" style="width:${Number.isFinite(group.wait) ? group.wait / maxAverage * 100 : 0}%;background:#0878af"></span><span title="Limpeza média: ${formatSeconds(group.clean)}" style="width:${Number.isFinite(group.clean) ? group.clean / maxAverage * 100 : 0}%;background:#13856b"></span></div>${compact ? '' : `<dl><div><dt>Espera média</dt><dd>${formatSeconds(group.wait)}</dd></div><div><dt>Limpeza média</dt><dd>${formatSeconds(group.clean)}</dd></div><div><dt>Tempo médio total</dt><dd>${formatSeconds(group.wait + group.clean)}</dd></div><div><dt>Tempo acumulado</dt><dd>${group.items.length ? formatSeconds(group.accumulated) : 'Sem dados'}</dd></div></dl>`}</article>`).join('');
+    return `<section class="m-band m-time-overview ${compact ? 'compact' : ''}"><h2>Chamados e resumo de tempo</h2><p class="m-sub">Leitura rápida dos atendimentos que possuem marcação de tempo.</p><div class="m-time-cards">${cards.map(([value, label]) => `<article><span>${label}</span><strong>${value}</strong></article>`).join('')}</div><div class="m-legend"><span><i style="background:#0878af"></i>Espera até a chegada</span><span><i style="background:#13856b"></i>Tempo de limpeza</span></div><div class="m-time-chart">${chart}</div><p class="m-sub">${measured.length} ${measured.length === 1 ? 'atendimento com tempo válido' : 'atendimentos com tempo válido'}. O detalhamento completo fica em Relatórios.</p></section>`;
   }
   function times(records) {
-    const cards = records.map(record => `<article class="m-record"><h3>${escape(record.bathroom_name)}</h3><dl><div><dt>Data e hora</dt><dd>${date(record.service?.started_at || record.created_at)} ${time(record.service?.started_at || record.created_at)}</dd></div><div><dt>Chamado</dt><dd>${record.service ? record.service.has_ticket === 'sim' ? escape(record.service.ticket_number) : 'Sem chamado' : 'Não registrado'}</dd></div><div><dt>Responsável</dt><dd>${escape(record.responsible_name)}</dd></div><div><dt>Chegada / Saída</dt><dd>${time(record.service?.arrived_at)} / ${time(record.service?.finished_at)}</dd></div><div><dt>Espera até a chegada</dt><dd>${duration(record.service?.started_at, record.service?.arrived_at)}</dd></div><div><dt>Tempo de limpeza</dt><dd>${duration(record.service?.arrived_at, record.service?.finished_at)}</dd></div><div class="m-wide"><dt>Observação</dt><dd>${escape(record.notes || '—')}</dd></div></dl></article>`).join('') || '<p>Nenhum checklist encontrado no período selecionado.</p>';
-    const rows = records.map(record => `<tr><td>${escape(record.bathroom_name)}</td><td>${date(record.service?.started_at || record.created_at)}<br>${time(record.service?.started_at || record.created_at)}</td><td>${record.service ? record.service.has_ticket === 'sim' ? escape(record.service.ticket_number) : 'Sem chamado' : 'Não registrado'}</td><td>${escape(record.responsible_name)}</td><td>${time(record.service?.arrived_at)} / ${time(record.service?.finished_at)}</td><td>${duration(record.service?.started_at, record.service?.arrived_at)}</td><td>${duration(record.service?.arrived_at, record.service?.finished_at)}</td><td>${escape(record.notes || '—')}</td></tr>`).join('');
-    return `<section class="m-band"><h2>Detalhamento dos tempos</h2><p class="m-sub">Espera: início do checklist até a confirmação de chegada. Limpeza: confirmação de chegada até a finalização.</p><div class="m-records">${cards}</div><table class="m-print-time-table"><thead><tr><th>Banheiro</th><th>Data e hora</th><th>Chamado</th><th>Responsável</th><th>Chegada / Saída</th><th>Espera</th><th>Limpeza</th><th>Observação</th></tr></thead><tbody>${rows}</tbody></table></section>`;
+    const serviceRecords = records.filter(record => record.service?.started_at || record.service?.arrived_at || record.service?.finished_at);
+    const valueOrMissing = value => value && value !== '—' ? value : 'Sem registro';
+    const rows = serviceRecords.map(record => `<tr><td>${escape(record.bathroom_name)}</td><td>${date(record.service?.started_at || record.created_at)}<br>${time(record.service?.started_at || record.created_at)}</td><td>${record.service?.has_ticket === 'sim' ? escape(record.service.ticket_number || 'Sem registro') : record.service?.has_ticket === 'nao' ? 'Sem chamado' : 'Sem registro'}</td><td>${escape(record.responsible_name || 'Sem registro')}</td><td>${record.service?.arrived_at ? time(record.service.arrived_at) : 'Sem registro'} / ${record.service?.finished_at ? time(record.service.finished_at) : 'Sem registro'}</td><td>${record.service?.started_at && record.service?.arrived_at ? duration(record.service.started_at, record.service.arrived_at) : 'Sem registro'}</td><td>${record.service?.arrived_at && record.service?.finished_at ? duration(record.service.arrived_at, record.service.finished_at) : 'Sem registro'}</td><td>${escape(record.notes || 'Sem registro')}</td></tr>`).join('');
+    return `<section class="m-band m-time-details"><h2>Registros de atendimento</h2><p class="m-sub">Somente registros que possuem ao menos um horário de atendimento.</p><div class="m-table-scroll"><table class="m-print-time-table"><thead><tr><th>Banheiro</th><th>Data e hora</th><th>Chamado</th><th>Responsável</th><th>Chegada / Saída</th><th>Espera</th><th>Limpeza</th><th>Observação</th></tr></thead><tbody>${rows || '<tr><td colspan="8">Nenhum atendimento com horário registrado no período.</td></tr>'}</tbody></table></div></section>`;
+  }
+  function reportTimeSummary(records) {
+    const groups = config.bathrooms.map(bathroom => ({ bathroom, records: records.filter(record => record.bathroom_id === bathroom.id) })).filter(group => group.records.length);
+    const rows = groups.map(group => {
+      const measured = group.records.map(timeMeasurement).filter(Boolean);
+      const average = key => measured.length ? measured.reduce((sum, item) => sum + item[key], 0) / measured.length : NaN;
+      const calls = group.records.filter(record => record.service?.has_ticket === 'sim').length;
+      return `<tr><th>${escape(group.bathroom.name)}</th><td>${group.records.length}</td><td>${calls}</td><td>${group.records.length - calls}</td><td>${formatSeconds(average('wait'))}</td><td>${formatSeconds(average('clean'))}</td></tr>`;
+    }).join('');
+    return `<section class="m-band m-report-time"><h2>Chamados e tempos por banheiro</h2><div class="m-table-scroll"><table><thead><tr><th>Banheiro</th><th>Atendimentos</th><th>Com chamado</th><th>Sem chamado</th><th>Espera média</th><th>Limpeza média</th></tr></thead><tbody>${rows || '<tr><td colspan="6">Sem atendimentos no período.</td></tr>'}</tbody></table></div></section>`;
   }
   function renderDashboard(records, currentConfig, filters) {
     const cleaning = records.filter(record => record.reason === 'limpeza' || record.actions?.some(action => action.includes('limpeza')));
-    const supplyRecords = records.filter(record => Object.keys(record.supplies || {}).length);
-    const metrics = [[records.length, 'Checklists realizados'], [cleaning.length, 'Limpeza'], [records.filter(record => record.reason === 'reposicao' || (record.replenishments || []).length).length, 'Reposição'], [records.reduce((n, record) => n + Number(record.people_count || 0), 0), 'Pessoas acumuladas']];
+    const metrics = [[records.length, 'Checklists realizados'], [cleaning.length, 'Limpezas registradas'], [records.filter(record => record.reason === 'reposicao' || (record.replenishments || []).length).length, 'Reposições registradas'], [records.filter(record => record.service?.has_ticket === 'sim').length, 'Chamados registrados']];
     const grouped = currentConfig.bathrooms.filter(bathroom => !$('#graphBathroom').value || bathroom.id === $('#graphBathroom').value).map(bathroom => ({ bathroom, records: records.filter(record => record.bathroom_id === bathroom.id) }));
     const dayCounts = new Map();
     records.forEach(record => { const key = date(record.created_at); dayCounts.set(key, (dayCounts.get(key) || 0) + 1); });
     const dailyRows = [...dayCounts].sort((a, b) => a[0].split('/').reverse().join('-').localeCompare(b[0].split('/').reverse().join('-')));
-    const suppliesHtml = currentConfig.supply_items.map(item => {
-      const quantities = new Map(); let events = 0;
-      records.forEach(record => (record.replenishments || []).filter(entry => entry.item === item.key).forEach(entry => { const unit = entry.unit || item.unit; quantities.set(unit, Math.round(((quantities.get(unit) || 0) + Number(entry.quantity)) * 100) / 100); events++; }));
-      return `<section class="m-supply-chart"><h3>${escape(item.label)}</h3>${bars([...quantities].map(([unit, quantity]) => [unit, quantity, unit]), '#13856b') || '<p class="m-sub">Nenhuma reposição registrada.</p>'}<p class="m-sub">${events} ${events === 1 ? 'registro com reposição' : 'registros com reposição'}</p></section>`;
-    }).join('');
-    $('#modernDashboard').innerHTML = `<p class="m-period">${escape(filters.from)} a ${escape(filters.to)} · ${escape(filters.bathroom)}</p><div class="metric-grid">${metrics.map(([count, label]) => `<article class="metric-card"><span>${label}</span><strong>${count.toLocaleString('pt-BR')}</strong></article>`).join('')}</div><div class="m-chart-pair"><section><h2>Banheiro limpo?</h2>${levelBars(cleaning, record => record.clean_level, [['sim', 'Sim'], ['parcial', 'Parcial'], ['nao', 'Não']], ['#13856b', '#dbab41', '#cf605b'])}<p class="m-sub">Condição registrada nos checklists com limpeza.</p></section><section><h2>Checklists por dia</h2>${bars(dailyRows)}</section></div><section class="m-band"><h2>Todos os banheiros: comparativo</h2><div class="m-legend"><span><i style="background:#0878af"></i>Limpeza</span><span><i style="background:#13856b"></i>Reposição</span></div>${grouped.map(group => { const clean = group.records.filter(record => record.reason === 'limpeza' || record.actions?.some(action => action.includes('limpeza'))).length, supply = group.records.filter(record => record.reason === 'reposicao' || (record.replenishments || []).length).length, max = Math.max(clean + supply, 1); return `<div class="m-level"><div><span>${escape(group.bathroom.name)}</span><strong>${group.records.length} checklists</strong></div><div class="m-stack"><span style="width:${clean / max * 100}%;background:#0878af">${clean || ''}</span><span style="width:${supply / max * 100}%;background:#13856b">${supply || ''}</span></div></div>`; }).join('')}</section><section class="m-band"><h2>Reposição realizada</h2>${suppliesHtml}</section><section class="m-band"><h2>Nível dos insumos por checklist</h2><div class="m-legend">${[['Cheio', '#13856b'], ['Médio', '#3299a3'], ['Baixo', '#dbab41'], ['Vazio', '#cf605b']].map(([label, color]) => `<span><i style="background:${color}"></i>${label}</span>`).join('')}</div>${currentConfig.supply_items.map(item => { const counts = ['cheio', 'medio', 'baixo', 'vazio'].map(level => supplyRecords.filter(record => record.supplies[item.key] === level).length), total = counts.reduce((a, b) => a + b, 0); return `<div class="m-level"><div><span>${escape(item.label)}</span><strong>${total} avaliações</strong></div><div class="m-stack">${counts.map((count, i) => `<span title="${['Cheio', 'Médio', 'Baixo', 'Vazio'][i]}: ${count}" style="width:${total ? count / total * 100 : 0}%;background:${['#13856b', '#3299a3', '#dbab41', '#cf605b'][i]}">${count || ''}</span>`).join('')}</div></div>`; }).join('')}</section><div class="m-chart-pair"><section><h2>Há odor?</h2>${levelBars(cleaning, record => record.odor_level, [['nao', 'Não'], ['leve', 'Leve'], ['forte', 'Forte']], ['#13856b', '#dbab41', '#cf605b'])}</section><section><h2>Itens de condição</h2>${bars(flags.map(([key, label]) => [label, cleaning.filter(record => record.condition?.[key] || (key === 'detalhe_manutencao' && record.actions?.includes('manutencao'))).length]))}</section></div><section class="m-band"><h2>Ação realizada</h2>${bars(Object.entries(actionLabels).map(([key, label]) => [label, records.filter(record => record.actions?.includes(key)).length]))}</section><section class="m-band"><h2>Chamados</h2>${bars([['Com chamado', records.filter(record => record.service?.has_ticket === 'sim').length], ['Sem chamado', records.filter(record => record.service?.has_ticket === 'nao').length], ['Não registrado', records.filter(record => !record.service).length]])}</section>${timeOverview(records)}${times(records)}`;
+    const supplyHeader = currentConfig.supply_items.map(item => `<th>${escape(item.label)}</th>`).join('');
+    const replenishmentRows = grouped.map(group => `<tr><th>${escape(group.bathroom.name)}</th>${currentConfig.supply_items.map(item => {
+      const quantity = group.records.flatMap(record => record.replenishments || []).filter(entry => entry.item === item.key).reduce((sum, entry) => sum + Number(entry.quantity || 0), 0);
+      return `<td><strong>${quantity.toLocaleString('pt-BR')}</strong><span>${escape(item.unit)}</span></td>`;
+    }).join('')}</tr>`).join('');
+    const suppliesHtml = `<div class="m-matrix-scroll"><table class="m-supply-matrix"><thead><tr><th>Banheiro</th>${supplyHeader}</tr></thead><tbody>${replenishmentRows}</tbody></table></div>`;
+    $('#modernDashboard').innerHTML = `<p class="m-period">${escape(filters.from)} a ${escape(filters.to)} · ${escape(filters.bathroom)}</p><div class="metric-grid">${metrics.map(([count, label]) => `<article class="metric-card"><span>${label}</span><strong>${count.toLocaleString('pt-BR')}</strong></article>`).join('')}</div><div class="m-chart-pair"><section><h2>Condição geral</h2>${levelBars(cleaning, record => record.clean_level, [['sim', 'Limpo'], ['parcial', 'Parcial'], ['nao', 'Não limpo']], ['#13856b', '#dbab41', '#cf605b'])}<p class="m-sub">Consolidado dos checklists com limpeza.</p></section><section><h2>Checklists por dia</h2>${bars(dailyRows)}</section></div><section class="m-band"><h2>Detalhamento por banheiro</h2><p class="m-sub">Cada bloco apresenta a mesma leitura: condição, odor, insumos, ocorrências, ações, chamados e tempos.</p><div class="m-bathroom-grid">${grouped.map(group => bathroomDetail(group, currentConfig)).join('')}</div></section><section class="m-band"><h2>Reposição realizada por banheiro</h2><p class="m-sub">Quantidade efetivamente reposta de cada material.</p>${suppliesHtml}</section>${timeOverview(records, true)}`;
   }
   function polishDashboard() {
     for (const strong of document.querySelectorAll('#modernDashboard .m-level strong')) {
@@ -191,7 +239,7 @@
   function renderReportTimes(records) {
     let target = $('#modernReportTimes');
     if (!target) { target = document.createElement('div'); target.id = 'modernReportTimes'; $('#reportView').append(target); }
-    target.innerHTML = `${timeOverview(records)}${times(records)}`;
+    target.innerHTML = `${reportTimeSummary(records)}${times(records)}`;
   }
   async function printReport(mode) {
     if (!await requestAccess()) return;
@@ -214,8 +262,9 @@
     $('#graphView').prepend(heading);
     const pdf = document.createElement('button'); pdf.type = 'button'; pdf.textContent = 'Gerar relatório em PDF'; pdf.onclick = () => printReport('graph'); filters.append(pdf);
     const target = document.createElement('div'); target.id = 'modernDashboard'; $('#graphView').append(target);
-    for (const id of ['downloadReport', 'downloadReportBottom']) $(`#${id}`).textContent = 'Gerar relatório em PDF';
-    const csv = document.createElement('button'); csv.type = 'button'; csv.className = 'secondary-button compact'; csv.textContent = 'Baixar CSV'; csv.onclick = exportCsv; $('#downloadReport').after(csv);
+    $('#loadReport').textContent = 'Aplicar';
+    for (const id of ['downloadReport', 'downloadReportBottom']) { const button = $(`#${id}`); if (button) button.textContent = 'PDF'; }
+    const csv = document.createElement('button'); csv.type = 'button'; csv.className = 'secondary-button compact'; csv.textContent = 'CSV'; csv.onclick = exportCsv; $('#downloadReport').after(csv);
     const exit = document.createElement('button'); exit.className = 'tab m-exit'; exit.type = 'button'; exit.textContent = 'Sair'; exit.onclick = async () => { await api('/api/bathroom-checklists/access', { method: 'DELETE' }); location.reload(); }; $('.tabs').append(exit);
     draw();
   }
