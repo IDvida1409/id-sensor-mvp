@@ -1262,7 +1262,7 @@
     renderReportMetrics(records, selectedBathroomId);
     renderReportSummary(records, selectedBathroomId);
     renderReportBlocks(records);
-    window.BathroomUI.renderReportTimes(records, state.config, selectedBathroomId);
+    window.BathroomUI.renderReportTimes(records);
   }
 
   function historyDetailsText(record) {
