@@ -263,6 +263,7 @@ function dispatchSimulationPush(db, alertId, row) {
 }
 
 function createSimulationAlert(db, row, next) {
+  if (require('./qrDemo').read(db, row.id)?.stabilizing && next.status !== 'offline') return null;
   const tipo = `simulacao_${next.status}`;
   const existing = db.prepare(`
     SELECT id FROM alerts
@@ -616,7 +617,7 @@ function getNocOccurrences(db, options = {}) {
     JOIN unidades u ON u.id = d.unidade_id
     ORDER BY d.nome ASC
   `).all();
-  const cards = rows.map(buildDeviceCard);
+  const cards = rows.map(row => require('./qrDemo').decorate(db, buildDeviceCard(row)));
   const occurrenceCards = cards
     .map((card) => ({ card, rotations: cardRotations(card, filters) }))
     .filter((item) => item.rotations.length);

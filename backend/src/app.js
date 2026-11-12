@@ -15,6 +15,7 @@ const { id, activationCode } = require('./utils/ids');
 const { buildDeviceCard } = require('./services/deviceCard');
 const { buildCartAnalyticReportHtml } = require('./services/cartAnalyticReport');
 const bathroomManagement = require('./services/bathroomManagement');
+const qrDemo = require('./services/qrDemo');
 const { sendActivationEmail } = require('./services/emailService');
 const { gatewayStatusSummary, getMqttBridgeStatus, parseMokoRawPayload } = require('./services/mqttBridge');
 const { sendExpoPush } = require('./services/pushService');
@@ -2801,6 +2802,8 @@ function getDeviceById(deviceId) {
 
 function getDeviceByScannedCode(code) {
   const db = getDb();
+  const demoId = qrDemo.byMac(db, code);
+  if (demoId) return getDeviceById(demoId);
   const byQr = db.prepare(deviceSelectSql('WHERE d.qr_code = ?')).get(code);
   if (byQr) return byQr;
 
@@ -3064,7 +3067,7 @@ function buildOperationalTelemetry(db, row) {
 }
 
 function buildDeviceCardWithTelemetry(db, row) {
-  const card = buildDeviceCard(row);
+  const card = qrDemo.decorate(db, buildDeviceCard(row));
   const operationalTelemetry = buildOperationalTelemetry(db, row);
   card.operationalTelemetry = operationalTelemetry;
 
@@ -3762,22 +3765,7 @@ addRoute('GET', '/devices', async ({ res }) => {
   ok(res, rows.map((row) => buildDeviceCardWithTelemetry(db, row)));
 });
 
-addRoute('GET', '/q/:codigo', async ({ params, res }) => {
-  const code = extractScannedCode(params.codigo);
-  const db = getDb();
-  advanceSimulationIfNeeded(db);
-
-  const row = getDeviceByScannedCode(code);
-  if (!row) {
-    return html(res, 404, renderQrMessagePage(
-      'QR não encontrado',
-      'Não encontramos um equipamento ativo para este QR Code.',
-      code || 'QR NÃO ENCONTRADO'
-    ));
-  }
-
-  return html(res, 200, renderDeviceQrPage(buildDeviceCardWithTelemetry(db, row), code));
-});
+require('./qrDemoRoutes').register({ addRoute, getDb, getDeviceByScannedCode, getDeviceById, buildDeviceCard, ok, fail, html, requestPublicBase });
 
 addRoute('GET', '/a/:codigo', async ({ params, req, res }) => {
   const code = extractScannedCode(params.codigo);

@@ -267,6 +267,7 @@ function initDb() {
     );
   `);
 
+  require('../services/qrDemo').init(database);
   ensureColumn(database, 'bathroom_checklists', 'service_json', 'TEXT');
   ensureColumn(database, 'activation_codes', 'usuario_nome', 'TEXT');
   ensureColumn(database, 'activation_codes', 'usuario_email', 'TEXT');

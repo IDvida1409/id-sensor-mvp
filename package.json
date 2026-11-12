@@ -15,6 +15,8 @@
     "mobile:start": "powershell -ExecutionPolicy Bypass -File ./tools/start-mobile-expo.ps1"
   },
   "dependencies": {
-    "pg": "^8.16.3"
+    "jsqr": "^1.4.0",
+    "pg": "^8.16.3",
+    "qrcode": "^1.5.4"
   }
 }
