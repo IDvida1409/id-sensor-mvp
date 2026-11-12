@@ -23,7 +23,7 @@ Use Reiniciar troca demonstrativa na página de QR para repetir a apresentação
 
 ## QR enviado como referência
 
-Não foi possível extrair um endereço da imagem enviada. O gerador recria o estilo pontilhado, os detalhes azuis e a marca central com um conteúdo diferente e legível para cada equipamento. O QR gerado foi decodificado em teste; a marca central é extraída da referência, e a matriz de pontos é gerada novamente para codificar o endereço público e o MAC.
+Não foi possível extrair um endereço da imagem enviada. O gerador recria o estilo pontilhado, os detalhes azuis e a marca central com um conteúdo diferente e legível para cada equipamento. O QR gerado foi decodificado em teste; os centros dos pontos azuis foram extraídos da referência e são desenhados como círculos vetoriais junto dos pontos pretos. Não há imagem colada, máscara ou pontos cortados. A matriz é gerada novamente para codificar o endereço público e o MAC.
 
 As etiquetas recebem a origem da página onde são abertas. Para escanear com outro aparelho, a demonstração precisa estar publicada em um endereço acessível por esse aparelho. A câmera dentro da página exige HTTPS, exceto em localhost, e permissão do navegador. Também existe entrada manual de código.
 

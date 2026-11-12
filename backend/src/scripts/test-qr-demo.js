@@ -38,6 +38,15 @@ test('QR demonstration: scan, read-only consultation, model, probe choice, stabi
     let publicRead;
     for(const width of [270,315,360,450]){await page.locator('img').evaluate((img,width)=>{img.style.width=width+'px';img.style.height='auto';},width);const png=await page.locator('img').screenshot({path:path.join(output,'etiqueta-publica.png')});const pixels=PNG.sync.read(png);publicRead=require('jsqr')(new Uint8ClampedArray(pixels.data),pixels.width,pixels.height);if(publicRead)break;}
     assert.equal(publicRead?.data,publicUrl,'A etiqueta deve abrir o endereço público com o MAC');
+    assert(!/<(?:image|mask|filter|clipPath)\b/.test(publicSvg),'A marca deve ser feita de pontos vetoriais sem sobreposição de imagem ou recorte');
+    const labelMacs=[...Array.from({length:24},(_,i)=>'DE:00:00:00:00:'+(i+1).toString(16).padStart(2,'0').toUpperCase()),...demo.catalog.map(item=>item.mac)];
+    for(const labelMac of labelMacs){
+      const labelUrl='https://id-sensor-mvp.onrender.com/q/'+encodeURIComponent(labelMac),labelSvg=require('../services/qrLabel').renderLabel(labelUrl,labelMac);
+      await page.setContent('<body style="margin:0"><img src="data:image/svg+xml;base64,'+Buffer.from(labelSvg).toString('base64')+'">');await page.locator('img').evaluate(img=>img.decode());let found;
+      for(const width of[270,315,360,450]){await page.locator('img').evaluate((e,w)=>{e.style.width=w+'px';e.style.height='auto';},width);const pixels=PNG.sync.read(await page.locator('img').screenshot());found=require('jsqr')(new Uint8ClampedArray(pixels.data),pixels.width,pixels.height);if(found)break;}
+      assert.equal(found?.data,labelUrl,'Leitura da etiqueta '+labelMac);
+    }
+
 
     const back=getDb().prepare('SELECT * FROM dispositivos WHERE id = ?').get(warm.card.backendId);assert.equal(back.temperatura_atual,before.body.data.card.temp,'A troca demonstrativa não altera a temperatura-base do painel');
     // The communication exception remains visible even while the demo reading is stabilizing.
