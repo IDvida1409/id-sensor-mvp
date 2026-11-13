@@ -14,11 +14,11 @@
       $('#received').textContent = date(info.received_on); $('#usage').textContent = info.condition;
       $('#assignment').textContent = info.current ? info.current.area + ' · ' + info.current.equipment : 'Sem vínculo com equipamento';
       $('#probe').textContent = info.measurement?.probe || 'Faixa de medição não cadastrada';
-      $('#limits').hidden = !info.measurement; $('#specification').hidden = !info.measurement;
+      $('#limits').hidden = !info.measurement;
       if (info.measurement) {
         const temp = value => (value < 0 ? '−' + Math.abs(value) : '+' + value) + ' °C';
         $('#min').textContent = temp(info.measurement.min); $('#max').textContent = temp(info.measurement.max);
-        $('#measurement-note').textContent = info.measurement.note; $('#specification').href = info.measurement.source;
+        $('#measurement-note').textContent = info.measurement.note;
       }
       const calibration = info.calibration;
       $('#calibrated').textContent = date(calibration.calibrated_on); $('#expires').textContent = date(calibration.expires_on);
@@ -37,11 +37,13 @@
       if (info.current) { $('#temperature').hidden = false; $('#temperature').href = info.current.url; }
       const message = $('#device-menu-message');
       function explain(title, copy) { $('#device-message-title').textContent = title; $('#device-message-text').textContent = copy; message.showModal(); }
+      $('#device-help-close').addEventListener('click',()=>$('#device-help-dialog').close());
+      document.querySelectorAll('#device-help-dialog .tip button').forEach(button=>button.addEventListener('click',()=>{const open=button.getAttribute('aria-expanded')!=='true';button.setAttribute('aria-expanded',String(open));$('#'+button.getAttribute('aria-controls')).hidden=!open;}));
       $('#device-message-close').addEventListener('click', () => message.close());
       document.querySelectorAll('[data-device-action]').forEach(button => button.addEventListener('click', () => {
         const action = button.dataset.deviceAction;
         if (action === 'certificate') { $('.calibration').scrollIntoView({block:'start',behavior:'smooth'}); return; }
-        if (action === 'help') { explain('Ajuda', 'Esta consulta reúne os dados do MAC ' + info.mac + '. A faixa de medição corresponde ao modelo indicado nesta ficha. O certificado e os registros de instalação acompanham este dispositivo.'); return; }
+        if (action === 'help') { $('#device-help-dialog').showModal(); return; }
         if (info.current) { location.href = info.current.url + (action === 'replace' ? '#trocar' : ''); return; }
         explain(action === 'temperature' ? (info.previously_used ? 'Dispositivo sem vínculo' : 'Dispositivo novo') : 'Instalar este dispositivo', action === 'temperature' ? 'Este dispositivo não está vinculado a um equipamento. A temperatura ficará disponível após a instalação.' : 'Abra o QR do dispositivo instalado na geladeira, escolha Trocar dispositivo e informe a chave de acesso. Depois, escaneie o QR deste dispositivo novo.');
       }));

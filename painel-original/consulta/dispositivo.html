@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <title>IDsensor — informações do dispositivo</title>
-  <link rel="stylesheet" href="/consulta/dispositivo.css?v=20261113-tres-modelos">
+  <link rel="stylesheet" href="/consulta/dispositivo.css?v=20261113-menu-idvida">
 </head>
 <body>
   <div class="page">
@@ -15,21 +15,27 @@
       <div id="details" hidden>
         <section class="identity card" aria-labelledby="model"><div class="photo"><img id="photo" alt="Ilustração do dispositivo"></div><div><span id="condition" class="pill"></span><h2 id="model"></h2><p id="manufacturer"></p><span class="small-label">MAC do dispositivo</span><strong id="mac" class="mac"></strong></div></section>
         <section class="card" aria-labelledby="receipt-title"><h2 id="receipt-title">Recebimento no cliente</h2><dl><div><dt>Data de recebimento</dt><dd id="received"></dd></div><div><dt>Situação</dt><dd id="usage"></dd></div><div><dt>Vínculo atual</dt><dd id="assignment"></dd></div></dl></section>
-        <section class="card measurement" aria-labelledby="measurement-title"><h2 id="measurement-title">Faixa de medição</h2><p id="probe" class="muted"></p><div id="limits" class="limits"><div><span>Temperatura mínima</span><strong id="min"></strong></div><div><span>Temperatura máxima</span><strong id="max"></strong></div></div><p id="measurement-note" class="fine-print"></p><a id="specification" class="text-link" target="_blank" rel="noopener">Ficha técnica do fabricante ↗</a></section>
+        <section class="card measurement" aria-labelledby="measurement-title"><h2 id="measurement-title">Faixa de medição</h2><p id="probe" class="muted"></p><div id="limits" class="limits"><div><span>Temperatura mínima</span><strong id="min"></strong></div><div><span>Temperatura máxima</span><strong id="max"></strong></div></div><p id="measurement-note" class="fine-print"></p></section>
         <section class="card calibration" aria-labelledby="calibration-title"><div class="section-heading"><div><h2 id="calibration-title">Calibração</h2><span id="calibration-status" class="calibration-status"></span></div><img id="seal" alt=""></div><dl><div><dt>Data de calibração</dt><dd id="calibrated"></dd></div><div><dt>Vencimento</dt><dd id="expires"></dd></div></dl><a id="certificate" class="button" target="_blank" rel="noopener">Visualizar certificado ↗</a></section>
         <section class="card" aria-labelledby="history-title"><h2 id="history-title">Uso dentro do hospital</h2><p id="history-summary" class="muted"></p><ol id="history" class="timeline"></ol></section>
         <a id="temperature" class="button primary" hidden>Consultar temperatura</a>
       </div>
     </main>
-    <footer>Powered by <img src="/assets/idsensor-logo.png" alt="IDsensor"></footer>
-    <nav class="device-menu" aria-label="Menu do dispositivo">
-      <button type="button" data-device-action="temperature"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14.5V5a3 3 0 0 1 6 0v9.5a5 5 0 1 1-6 0Z"/><path d="M12 7v11"/></svg><span>Temperatura</span></button>
-      <button type="button" data-device-action="certificate"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v13H6zM9 20l3-2 3 2v-4M9 7h6M9 11h6"/></svg><span>Certificado</span></button>
-      <button type="button" data-device-action="replace"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m17 3 4 4-4 4M3 7h18M7 13l-4 4 4 4M3 17h18"/></svg><span>Trocar dispositivo</span></button>
-      <button type="button" data-device-action="help"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9 9a3 3 0 0 1 6 0c0 2-3 2-3 4M12 16v1"/></svg><span>Ajuda</span></button>
-    </nav>
+    <footer>Powered by <img src="/assets/idvida-powered-by.png" alt="IDVIDA"></footer>
+    <nav class="device-menu" aria-label="Menu do dispositivo"><button type="button" data-device-action="temperature"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 14.76V3.5a2 2 0 0 0-4 0v11.26a4.5 4.5 0 1 0 4 0Z"/></svg>Temperatura</button><button type="button" data-device-action="certificate"><img class="certificate-nav-icon" src="/consulta/assets/certificado-menu.png" alt="">Certificado</button><button type="button" data-device-action="replace"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7V4h3m10 0h3v3m0 10v3h-3M7 20H4v-3M7 12h10"/></svg>Trocar dispositivo</button><button type="button" data-device-action="help"><span class="mascot-head" aria-hidden="true"><img src="/consulta/assets/mascote-menu.png" alt=""></span>Ajuda</button></nav>
+<dialog id="device-help-dialog" class="device-help" aria-label="Ajuda"><button type="button" id="device-help-close">Fechar ajuda ×</button>
+        <div class="help-intro"><span class="mascot-head" aria-hidden="true"><img src="/consulta/assets/mascote-menu.png" alt=""></span><div><h2 class="section-title">Alguma dúvida?</h2><p>Confira estas dicas rápidas.</p></div></div>
+        <div class="tips">
+          <div class="tip"><button type="button" aria-expanded="false" aria-controls="qr-tip-high"><i data-lucide="thermometer" aria-hidden="true"></i><span>A temperatura está muito alta</span><i class="chevron" data-lucide="chevron-down" aria-hidden="true"></i></button><p class="tip-answer" id="qr-tip-high" hidden>Confira a posição do sensor, o fechamento da porta, as borrachas de vedação e se há excesso de produtos impedindo a circulação do ar.</p></div>
+          <div class="tip"><button type="button" aria-expanded="false" aria-controls="qr-tip-position"><i data-lucide="map-pin" aria-hidden="true"></i><span>O sensor está bem posicionado?</span><i class="chevron" data-lucide="chevron-down" aria-hidden="true"></i></button><p class="tip-answer" id="qr-tip-position" hidden>Confira se o sensor permanece no local indicado na instalação e se não foi deslocado ou encostado em algum produto.</p></div>
+          <div class="tip"><button type="button" aria-expanded="false" aria-controls="qr-tip-door"><i data-lucide="door-closed" aria-hidden="true"></i><span>Porta e borrachas de vedação</span><i class="chevron" data-lucide="chevron-down" aria-hidden="true"></i></button><p class="tip-answer" id="qr-tip-door" hidden>Verifique se a porta fecha completamente, se algum produto impede o fechamento e se as borrachas apresentam folgas ou danos.</p></div>
+          <div class="tip"><button type="button" aria-expanded="false" aria-controls="qr-tip-load"><i data-lucide="package" aria-hidden="true"></i><span>O equipamento está muito cheio?</span><i class="chevron" data-lucide="chevron-down" aria-hidden="true"></i></button><p class="tip-answer" id="qr-tip-load" hidden>Confira se a quantidade e a posição dos produtos estão bloqueando as saídas ou a circulação de ar.</p></div>
+          <div class="tip"><button type="button" aria-expanded="false" aria-controls="qr-tip-range"><i data-lucide="sliders-horizontal" aria-hidden="true"></i><span>A faixa configurada está adequada?</span><i class="chevron" data-lucide="chevron-down" aria-hidden="true"></i></button><p class="tip-answer" id="qr-tip-range" hidden>Confira se a faixa de temperatura configurada está adequada e se o ajuste do equipamento foi alterado.</p></div>
+          <div class="tip"><button type="button" aria-expanded="false" aria-controls="qr-tip-broken"><i data-lucide="refresh-cw" aria-hidden="true"></i><span>O sensor apresentou problema</span><i class="chevron" data-lucide="chevron-down" aria-hidden="true"></i></button><p class="tip-answer" id="qr-tip-broken" hidden>Para substituir o sensor, toque em Trocar dispositivo, informe a chave de acesso e escaneie o QR do dispositivo novo.</p></div>
+        </div>
+      </dialog>
     <dialog id="device-menu-message" class="device-message" aria-labelledby="device-message-title"><h2 id="device-message-title"></h2><p id="device-message-text"></p><button type="button" id="device-message-close">Entendi</button></dialog>
   </div>
-  <script>/*DEVICE_INFO_BOOT*/</script><script src="/consulta/dispositivo.js?v=20261113-tres-modelos" defer></script>
+  <script>/*DEVICE_INFO_BOOT*/</script><script src="/consulta/dispositivo.js?v=20261113-menu-idvida" defer></script>
 </body>
 </html>

@@ -50,3 +50,7 @@ O convite Alguma dúvida? aparece e desaparece; a cabeça do mascote fica dentro
 
 backend/src/scripts/test-qr-demo.js verifica os três perfis, os dois caminhos de substituição, a escolha da probe, o aviso, o PDF, os dois cards e a decodificação das etiquetas.
 backend/src/scripts/test-qr-camera.js verifica a câmera com vídeo simulado das etiquetas, permissão, fechamento, zoom, recuperação após erro e liberação das trilhas de vídeo. A leitura do QR não efetiva a troca sem confirmação.
+
+## Ajustes visuais aprovados
+
+Os menus das fichas usam os mesmos desenhos do primeiro modelo: termômetro, selo neutro de certificado, leitura QR e cabeça do mascote. Por enquanto, as dúvidas são as mesmas da consulta de temperatura. O rodapé usa o logo IDVIDA enviado pelo usuário, com 44 px de largura e altura proporcional, ao lado de Powered by. O acesso à página do fabricante foi removido da interface; o fabricante permanece como dado do dispositivo.
