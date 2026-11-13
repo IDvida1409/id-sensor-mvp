@@ -44,10 +44,8 @@
     const { card, sensor, stabilizing } = current;
     text('.location', card.clientName || 'Cliente');
     text('h1', card.local || card.unitName || 'Área monitorada');
-    text('.location-detail', card.name);
-    let infoLink = $('#qr-device-info-link');
-    if (!infoLink) { infoLink = document.createElement('a'); infoLink.id = 'qr-device-info-link'; infoLink.textContent = 'Informações do dispositivo →'; $('.location-detail').after(infoLink); }
-    infoLink.href = '/dispositivo/' + encodeURIComponent(sensor.mac);
+    text('.location-detail', card.name + ' · ' + sensor.model.replace(' — demonstração',''));
+    const infoLink = $('#qr-device-info-link'); infoLink.href = '/dispositivo/' + encodeURIComponent(sensor.mac); infoLink.setAttribute('aria-label', 'Informações do dispositivo ' + sensor.model);
     text('.device-name', card.name);
     const state = !card.online ? 'offline' : stabilizing ? 'blue' : card.state;
     const cardEl = $('#qr-sensor-card');

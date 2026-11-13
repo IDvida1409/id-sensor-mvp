@@ -41,9 +41,9 @@
       document.querySelectorAll('[data-device-action]').forEach(button => button.addEventListener('click', () => {
         const action = button.dataset.deviceAction;
         if (action === 'certificate') { $('.calibration').scrollIntoView({block:'start',behavior:'smooth'}); return; }
-        if (action === 'help') { explain('Ajuda', 'Esta consulta reúne os dados do MAC ' + info.mac + '. A faixa de medição pertence à probe do modelo indicado. O certificado e os registros de instalação acompanham este dispositivo.'); return; }
+        if (action === 'help') { explain('Ajuda', 'Esta consulta reúne os dados do MAC ' + info.mac + '. A faixa de medição corresponde ao modelo indicado nesta ficha. O certificado e os registros de instalação acompanham este dispositivo.'); return; }
         if (info.current) { location.href = info.current.url + (action === 'replace' ? '#trocar' : ''); return; }
-        explain(action === 'temperature' ? 'Dispositivo novo' : 'Instalar este dispositivo', action === 'temperature' ? 'Este dispositivo ainda não está vinculado a um equipamento. A temperatura ficará disponível após a instalação.' : 'Abra o QR do dispositivo instalado na geladeira, escolha Trocar dispositivo e informe a chave de acesso. Depois, escaneie o QR deste dispositivo novo.');
+        explain(action === 'temperature' ? (info.previously_used ? 'Dispositivo sem vínculo' : 'Dispositivo novo') : 'Instalar este dispositivo', action === 'temperature' ? 'Este dispositivo não está vinculado a um equipamento. A temperatura ficará disponível após a instalação.' : 'Abra o QR do dispositivo instalado na geladeira, escolha Trocar dispositivo e informe a chave de acesso. Depois, escaneie o QR deste dispositivo novo.');
       }));
       $('#details').hidden = false; $('#feedback').hidden = true;
       document.title = 'IDsensor — ' + info.model + ' · ' + info.mac;

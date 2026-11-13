@@ -8,6 +8,11 @@ const examples = {
     measurement: { min: -200, max: 200, probe: 'Pt100 · 4 fios', source: 'https://www.minew.com/product/mst01-pt100-temperature-sensor/', note: 'Faixa de medição da probe Pt100 desta versão. Não é a faixa de alarme do equipamento.' }
   },
   'DE:00:00:00:00:01': {
+    model: 'S1', image_profile: 's1-aprovado',
+    measurement: { min: -20, max: 60, probe: 'Sensor integrado · sem probe externa', source: 'https://www.minew.com/pt/product/s1-ble-temperature-and-humidity-sensor/', note: 'Medição de temperatura e umidade pelo sensor integrado.' },
+    received_on: '2025-07-25', previously_used: true, history: []
+  },
+  'DE:10:00:00:00:02': {
     model: 'MST01', image_profile: 'mst01-aprovado',
     measurement: { min: -40, max: 125, probe: 'Probe de temperatura e umidade', source: 'https://www.minew.com/product/mst01-industrial-temperature-and-humidity-sensor/', note: 'Faixa de medição da probe deste dispositivo. Não é a faixa de alarme do equipamento.' },
     received_on: '2025-07-25', previously_used: true,
@@ -30,9 +35,15 @@ function register({ addRoute, getDb, getDeviceById, buildDeviceCard, ok, html })
     if (!sensor && !example) throw Object.assign(Error('Dispositivo não encontrado.'), { statusCode: 404 });
     const actualMac = sensor?.mac || mac;
     const state = row && demo.read(db, row.id);
-    const previouslyUsed = !!(example?.previously_used || row);
+    const previouslyUsed = !!(example?.previously_used || candidate?.previously_used || row);
     const history = (example?.history || []).map(item => ({ ...item, illustrative: true }));
     if (card) history.push({ area: card.local || card.unitName, equipment: card.name, from: state?.startedAt?.slice(0, 10) || (example ? '2026-05-05' : null), to: null, current: true });
+    if (!card && mac === 'DE:00:00:00:00:01') {
+      const original = getDeviceById('disp_geladeira_01');
+      const replacement = original && demo.read(db, original.id);
+      if (replacement) { const oldCard = buildDeviceCard(original); history.push({ area: oldCard.local || oldCard.unitName, equipment: oldCard.name, from: '2026-05-05', to: replacement.startedAt.slice(0,10) }); }
+    }
+
     const calibrated = sensor?.calibrated_on || '2025-07-21';
     const expires = sensor?.expires_on || '2026-07-31';
     const days = Math.ceil((Date.parse(expires + 'T23:59:59Z') - Date.now()) / 86400000);
@@ -43,6 +54,7 @@ function register({ addRoute, getDb, getDeviceById, buildDeviceCard, ok, html })
       received_on: example?.received_on || null,
       condition: card ? 'Em uso' : previouslyUsed ? 'Disponível' : 'Novo',
       previously_used: previouslyUsed,
+      has_probe: sensor?.has_probe ?? mac !== 'DE:00:00:00:00:01',
       current: card ? { area: card.local || card.unitName, equipment: card.name, url: '/q/' + encodeURIComponent(actualMac) } : null,
       history,
       measurement: example?.measurement || null,
