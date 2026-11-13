@@ -174,5 +174,5 @@
   $('#qr-view-certificate').addEventListener('click', () => { if (current.sensor) window.open(endpoint('/certificate'), '_blank', 'noopener'); });
   $('#qr-close-document').addEventListener('click', () => { $('#qr-certificate-viewer').hidden = true; $('#qr-certificate-summary').hidden = false; });
   window.addEventListener('pagehide', () => { stopCamera(); hideTeaser(); }); document.addEventListener('visibilitychange', () => { if (document.hidden) { stopCamera(); hideTeaser(); } else { refresh(); if (!$('[data-panel="temperature"]').hidden) scheduleTeaser(); } });
-  showTab('temperature'); step('key'); refresh(); setInterval(() => { if (!document.hidden && !busy) refresh(); }, 10000);
+  showTab(location.hash === '#trocar' ? 'replace' : 'temperature'); step('key'); refresh(); setInterval(() => { if (!document.hidden && !busy) refresh(); }, 10000);
 })();

@@ -1,9 +1,7 @@
 // Client presentation only. No sensor provisioning, real telemetry, or outbound messages.
 const crypto = require('node:crypto');
 const catalog = [
-  { mac:'DE:10:00:00:00:01', code:'DEMO-NOVO-01', manufacturer:'Minew', model:'MST01 Pt100 — demonstração', has_probe:true, image_profile:'mst01-pt100-aprovado', calibrated_on:'2026-11-01', expires_on:'2027-11-01' },
-  { mac:'DE:10:00:00:00:02', code:'DEMO-NOVO-02', manufacturer:'Exemplo demonstrativo', model:'Dispositivo com cabo — demonstração', has_probe:true, image_profile:'white-probe', calibrated_on:'2026-11-02', expires_on:'2027-11-02' },
-  { mac:'DE:10:00:00:00:03', code:'DEMO-NOVO-03', manufacturer:'Exemplo demonstrativo', model:'Dispositivo sem cabo — demonstração', has_probe:false, image_profile:'white', calibrated_on:'2026-11-03', expires_on:'2027-11-03' }
+  { mac:'DE:10:00:00:00:01', code:'DEMO-NOVO-01', manufacturer:'Minew', model:'MST01 Pt100 — demonstração', has_probe:true, image_profile:'mst01-pt100-aprovado', calibrated_on:'2026-11-01', expires_on:'2027-11-01' }
 ];
 const grants=new Map();
 function init(db){db.exec('CREATE TABLE IF NOT EXISTS qr_demo_replacements (device_id TEXT PRIMARY KEY, state_json TEXT NOT NULL)');}
@@ -36,6 +34,6 @@ function decorate(db,card){
 }
 function authorize(deviceId,key){if(String(key||'').trim().toUpperCase()!=='12345678')throw Object.assign(Error('Nesta demonstração, use a chave 12345678.'),{statusCode:401});const token=crypto.randomBytes(24).toString('base64url');for(const[t,v]of grants)if(v.until<Date.now())grants.delete(t);grants.set(token,{deviceId,until:Date.now()+1800000});return{token,expiresIn:1800};}
 function check(deviceId,token){const grant=grants.get(token);if(!grant||grant.deviceId!==deviceId||grant.until<Date.now())throw Object.assign(Error('Acesso demonstrativo expirado. Digite 12345678 novamente.'),{statusCode:401});}
-function identify(db,deviceId,token,value){check(deviceId,token);const found=findSensor(value);if(!found)throw Object.assign(Error('Use um dos QR Codes de exemplo da demonstração.'),{statusCode:404});const linked=byMac(db,found.mac);if(linked&&linked!==deviceId)throw Object.assign(Error('Este dispositivo de exemplo já está em uso. Reinicie a demonstração ou escolha outro.'),{statusCode:409});return found;}
+function identify(db,deviceId,token,value){check(deviceId,token);const found=findSensor(value);if(!found)throw Object.assign(Error('Escaneie o QR do MST01 Pt100 novo.'),{statusCode:404});const linked=byMac(db,found.mac);if(linked&&linked!==deviceId)throw Object.assign(Error('Este dispositivo de exemplo já está em uso. Reinicie a demonstração ou escolha outro.'),{statusCode:409});return found;}
 function replace(db,deviceId,token,value,replaceProbe){const sensor=identify(db,deviceId,token,value);if(sensor.has_probe&&typeof replaceProbe!=='boolean')throw Object.assign(Error('Escolha se o cabo também será trocado.'),{statusCode:400});const stabilizing=!sensor.has_probe||replaceProbe===true;const startedAt=new Date().toISOString();const state={sensor,stabilizing,startedAt,replaceProbe:!!replaceProbe,finishedAt:stabilizing?null:startedAt,justification:stabilizing?'Troca de dispositivo — em estabilização':null};save(db,deviceId,state);grants.delete(token);return{sensor,stabilizing:state.stabilizing,nextCode:sensor.mac,demonstration:true};}
 module.exports={catalog,init,read,save,scanned,findSensor,byMac,decorate,authorize,identify,replace};

@@ -2,7 +2,7 @@
 
 Este fluxo usa o painel existente e temperaturas simuladas. Não cadastra sensores físicos, não recebe telemetria real e não envia SMS/e-mails. A demonstração de troca não altera a temperatura-base dos 24 equipamentos.
 
-No painel, o botão **QR da demonstração** abre `/consulta/demo.html`. Escolha o equipamento e abra ou baixe sua etiqueta. A leitura do QR leva a `/q/DE:00:00:00:00:01` (MAC fictício do dispositivo correspondente ao card escolhido).
+No painel, o botão **QR da demonstração** abre `/consulta/demo.html`. A página mostra apenas as duas etiquetas aprovadas: MST01 em uso e MST01 Pt100 novo. A leitura do QR leva a `/q/DE:00:00:00:00:01` (MAC fictício do dispositivo correspondente ao card escolhido).
 
 A consulta usa o visual aprovado e oferece Temperatura, Certificado, Trocar dispositivo e Ajuda. Os valores são carregados do backend do painel; não há números fixos substituindo o resultado da API na página.
 
@@ -11,9 +11,9 @@ A consulta usa o visual aprovado e oferece Temperatura, Certificado, Trocar disp
 1. Abra a consulta pelo QR do equipamento.
 2. Confira o card e o certificado de exemplo do painel.
 3. Toque em Trocar dispositivo e digite **12345678**.
-4. Escaneie um dos três QR Codes de dispositivos novos em `/consulta/demo.html`, ou digite `DEMO-NOVO-01`, `DEMO-NOVO-02` ou `DEMO-NOVO-03`.
-5. O sistema exibe imagem pequena, MAC, data da calibração e fabricante. Fabricantes não confirmados estão identificados como exemplos demonstrativos.
-6. Modelos com cabo oferecem a escolha entre substituir o conjunto ou manter o cabo. O modelo sem cabo vai diretamente à confirmação.
+4. Escaneie o QR do MST01 Pt100 novo em `/consulta/demo.html`, ou digite `DEMO-NOVO-01` / `DE:10:00:00:00:01`.
+5. O sistema exibe imagem pequena, MAC, data da calibração e fabricante. Os dois modelos aprovados são Minew.
+6. Modelos com cabo oferecem a escolha entre substituir o conjunto ou manter o cabo. Os dois dispositivos aprovados possuem cabo/probe.
 7. Ao escolher trocar o conjunto, o aviso aparece à frente antes de efetivar a troca.
 8. Depois da confirmação, o mesmo equipamento permanece na mesma área, com o MAC e o documento demonstrativo do dispositivo novo.
 9. A temperatura é simulada acima da faixa e converge gradualmente para dentro dela, para mostrar a estabilização ao cliente. O modo termina ao entrar na faixa; não há prazo fixo de 60 minutos.
@@ -35,7 +35,7 @@ As etiquetas recebem a origem da página onde são abertas. Para escanear com ou
 - `painel-original/qr-panel.js`: entrada no painel existente.
 - `backend/src/scripts/test-qr-demo.js`: testes de API, decodificação do QR e fluxo no navegador com banco temporário.
 
-As três ilustrações foram recriadas a partir das fotos fornecidas usando a geração de imagens integrada. O visor do primeiro modelo permanece sem leitura de temperatura. As versões PNG originais continuam na pasta de imagens geradas do chat; as versões WebP usadas pela demonstração estão em `painel-original/consulta/assets`.
+As duas fotos aprovadas foram recriadas a partir das referências usando a geração de imagens integrada. Os visores permanecem sem leitura de temperatura. As versões PNG originais continuam na pasta de imagens geradas do chat; as versões WebP usadas pela demonstração estão em `painel-original/consulta/assets`.
 
 ## Fichas de informações do dispositivo
 
@@ -60,8 +60,14 @@ O teste `backend/src/scripts/test-qr-camera.js` usa vídeo simulado com as etiqu
 
 ## Aviso e estabilização na troca
 
-Modelos com cabo exigem a escolha entre manter a probe atual e trocar dispositivo com cabo/probe. A pergunta aparece na etapa de identificação; o aviso aprovado abre como diálogo modal antes da confirmação da troca completa. Sensores sem cabo não exibem essa pergunta, mas a troca completa também demonstra a estabilização de seu sensor interno.
+Modelos com cabo exigem a escolha entre manter a probe atual e trocar dispositivo com cabo/probe. A pergunta aparece na etapa de identificação; o aviso aprovado abre como diálogo modal antes da confirmação da troca completa. O catálogo da demonstração não inclui sensores sem cabo.
 
 Painel e consulta compartilham amostras simuladas de dez segundos. A descida gradual da leitura mostra a indicação Temperatura em estabilização — troca de dispositivo nos dois cards, encerrando quando a leitura entra na faixa, sem temporizador de expiração. Após o encerramento, a leitura volta à fonte do equipamento em vez de ficar em um ponto médio fixo. Manter a probe preserva a leitura atual do painel. O estado fora de faixa é justificado desde o início da estabilização.
 
 Por solicitação do usuário, os links de certificado de todos os MACs usam o mesmo PDF demonstrativo existente, `painel-original/certificado-geladeira-1.pdf`. As datas e o MAC continuam identificados na ficha; o PDF é o exemplo comum autorizado para a apresentação.
+
+## Dois dispositivos aprovados e menu
+
+A demonstração contém exclusivamente MST01 em uso (DE:00:00:00:00:01, −40 °C a +125 °C) e MST01 Pt100 novo (DE:10:00:00:00:01, −200 °C a +200 °C). Os sensores extras anteriores foram removidos do catálogo e seus QR Codes não são aceitos na troca.
+
+A ficha individual possui menu Temperatura, Certificado, Trocar dispositivo e Ajuda. Sem vínculo, o Pt100 apresenta as informações e explica que a temperatura ficará disponível após instalar. Para instalar, a troca parte do QR do dispositivo atual, recebe a chave e lê a etiqueta do novo. O MST01 em uso mantém o histórico ilustrativo de áreas e acesso à temperatura do equipamento.

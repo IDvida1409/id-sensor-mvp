@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <title>IDsensor — informações do dispositivo</title>
-  <link rel="stylesheet" href="/consulta/dispositivo.css?v=20261113-consulta-individual">
+  <link rel="stylesheet" href="/consulta/dispositivo.css?v=20261113-menu-dispositivo">
 </head>
 <body>
   <div class="page">
@@ -22,7 +22,14 @@
       </div>
     </main>
     <footer>Powered by <img src="/assets/idsensor-logo.png" alt="IDsensor"></footer>
+    <nav class="device-menu" aria-label="Menu do dispositivo">
+      <button type="button" data-device-action="temperature"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14.5V5a3 3 0 0 1 6 0v9.5a5 5 0 1 1-6 0Z"/><path d="M12 7v11"/></svg><span>Temperatura</span></button>
+      <button type="button" data-device-action="certificate"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v13H6zM9 20l3-2 3 2v-4M9 7h6M9 11h6"/></svg><span>Certificado</span></button>
+      <button type="button" data-device-action="replace"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m17 3 4 4-4 4M3 7h18M7 13l-4 4 4 4M3 17h18"/></svg><span>Trocar dispositivo</span></button>
+      <button type="button" data-device-action="help"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9 9a3 3 0 0 1 6 0c0 2-3 2-3 4M12 16v1"/></svg><span>Ajuda</span></button>
+    </nav>
+    <dialog id="device-menu-message" class="device-message" aria-labelledby="device-message-title"><h2 id="device-message-title"></h2><p id="device-message-text"></p><button type="button" id="device-message-close">Entendi</button></dialog>
   </div>
-  <script>/*DEVICE_INFO_BOOT*/</script><script src="/consulta/dispositivo.js?v=20261113" defer></script>
+  <script>/*DEVICE_INFO_BOOT*/</script><script src="/consulta/dispositivo.js?v=20261113-menu-dispositivo" defer></script>
 </body>
 </html>

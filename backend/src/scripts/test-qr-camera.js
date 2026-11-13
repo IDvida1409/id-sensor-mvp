@@ -63,7 +63,7 @@ test('Câmera frontal: modal, permissão, cancelamento, zoom e leitura real dos 
     await page.locator('#qr-camera-zoom').evaluate(e => { e.value = '1.5'; e.dispatchEvent(new Event('input')); });
     assert.equal(await page.locator('#qr-camera-video').evaluate(e => e.style.transform), 'scale(1.5)');
     await page.evaluate(() => { window.cameraTest.mode = 'unknown'; });
-    await page.waitForFunction(() => document.querySelector('#qr-camera-status').textContent.includes('QR Codes de exemplo'), { timeout: 15000 });
+    await page.waitForFunction(() => document.querySelector('#qr-camera-status').textContent.includes('MST01 Pt100'), { timeout: 15000 });
     fs.mkdirSync(path.join(root, 'output/qr-demo'), { recursive: true });
     await page.screenshot({ path: path.join(root, 'output/qr-demo/camera-modal-celular.png'), fullPage: false });
     assert(await page.locator('#qr-camera-dialog').evaluate(e => e.matches(':modal')));
