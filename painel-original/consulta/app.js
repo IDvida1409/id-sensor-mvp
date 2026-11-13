@@ -161,7 +161,7 @@
   $('#qr-confirm-swap').addEventListener('click', () => {
     if (!identified) return;
     if (!identified.has_probe || replaceProbe) {
-      text('#qr-notice-intro', identified.has_probe ? 'Ao confirmar a troca do dispositivo e do cabo de temperatura, será iniciado o período de estabilização da leitura.' : 'Ao confirmar a troca do dispositivo, será iniciado o período de estabilização da leitura.');
+      text('#qr-notice-intro', identified.has_probe ? 'Ao confirmar a troca do dispositivo e da probe, será iniciado o período de estabilização da leitura.' : 'Ao confirmar a troca do dispositivo, será iniciado o período de estabilização da leitura.');
       const notice = $('#qr-real-notice'); notice.hidden = false; notice.showModal(); $('#qr-real-commit').focus();
     } else commit();
   });
