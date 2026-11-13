@@ -10,7 +10,7 @@ A consulta usa o visual aprovado e oferece Temperatura, Certificado, Trocar disp
 
 1. Abra a consulta pelo QR do equipamento.
 2. Confira o card e o certificado de exemplo do painel.
-3. Toque em Trocar dispositivo e digite **DEMO**.
+3. Toque em Trocar dispositivo e digite **12345678**.
 4. Escaneie um dos três QR Codes de dispositivos novos em `/consulta/demo.html`, ou digite `DEMO-NOVO-01`, `DEMO-NOVO-02` ou `DEMO-NOVO-03`.
 5. O sistema exibe imagem pequena, MAC, data da calibração e fabricante. Fabricantes não confirmados estão identificados como exemplos demonstrativos.
 6. Modelos com cabo oferecem a escolha entre substituir o conjunto ou manter o cabo. O modelo sem cabo vai diretamente à confirmação.

@@ -16,7 +16,23 @@
     return result.data;
   }
   function showStatus(message) { status.hidden = false; status.textContent = message; }
+  let teaserTimer;
+  function setTeaserVisible(visible) {
+    const teaser = $('#qr-help-teaser');
+    teaser.classList.toggle('is-visible', visible);
+    teaser.setAttribute('aria-hidden', String(!visible));
+    teaser.inert = !visible;
+  }
+  function hideTeaser() { clearTimeout(teaserTimer); setTeaserVisible(false); }
+  function scheduleTeaser(delay = 3000) {
+    hideTeaser();
+    teaserTimer = setTimeout(() => {
+      setTeaserVisible(true);
+      teaserTimer = setTimeout(() => { setTeaserVisible(false); scheduleTeaser(24000); }, 6000);
+    }, delay);
+  }
   function showTab(name) {
+    if (name === 'temperature' && !document.hidden) scheduleTeaser(); else hideTeaser();
     if (name !== 'replace') stopCamera();
     $$('[data-panel]').forEach(p => p.hidden = p.dataset.panel !== name);
     $$('.nav-button').forEach(b => b.setAttribute('aria-selected', String(b.dataset.go === name)));
@@ -156,7 +172,7 @@
     catch (error) { $('#qr-key-feedback').hidden = false; text('#qr-key-feedback', error.message); }
   });
   $('#qr-simulate-scan').addEventListener('click', startCamera);
-  $('#qr-swap-key .key-hint').textContent = 'Chave para testar esta demonstração: DEMO.';
+  $('#qr-swap-key .key-hint').textContent = 'Chave para testar esta demonstração: 12345678.';
   const manual = document.createElement('form'); manual.innerHTML = '<label class="field-label" for="qr-manual-code">Ou digite o MAC / código do dispositivo novo</label><input class="key-input" id="qr-manual-code" required autocomplete="off" placeholder="MAC ou link do QR"><button type="submit" class="action secondary">Identificar dispositivo</button>';
   $('#qr-swap-scan').append(manual); manual.addEventListener('submit', event => { event.preventDefault(); identify($('#qr-manual-code').value); });
   const examples=document.createElement('a');examples.href='/consulta/demo.html';examples.target='_blank';examples.rel='noopener';examples.className='back-action swap-back';examples.textContent='Ver QR Codes dos dispositivos de exemplo';$('#qr-swap-scan').append(examples);
@@ -170,6 +186,6 @@
   $('#qr-real-notice').addEventListener('keydown', event => { if (event.key === 'Escape') $('#qr-real-cancel').click(); if (event.key === 'Tab') { const target = event.shiftKey ? $('#qr-real-cancel') : $('#qr-real-commit'); if ((event.target === $('#qr-real-cancel') && !event.shiftKey) || (event.target === $('#qr-real-commit') && event.shiftKey)) { event.preventDefault(); target.focus(); } } });
   $('#qr-view-certificate').addEventListener('click', () => { if (current.sensor) window.open(endpoint('/certificate'), '_blank', 'noopener'); });
   $('#qr-close-document').addEventListener('click', () => { $('#qr-certificate-viewer').hidden = true; $('#qr-certificate-summary').hidden = false; });
-  window.addEventListener('pagehide', stopCamera); document.addEventListener('visibilitychange', () => { if (document.hidden) stopCamera(); else refresh(); });
+  window.addEventListener('pagehide', () => { stopCamera(); hideTeaser(); }); document.addEventListener('visibilitychange', () => { if (document.hidden) { stopCamera(); hideTeaser(); } else { refresh(); if (!$('[data-panel="temperature"]').hidden) scheduleTeaser(); } });
   showTab('temperature'); step('key'); refresh(); setInterval(() => { if (!document.hidden && !busy) refresh(); }, 10000);
 })();

@@ -13,8 +13,9 @@ test('QR demonstration: scan, read-only consultation, model, probe choice, stabi
     const all=await request('/devices');assert.equal(all.body.data.length,24);
     const before=await request(endpoint);assert.equal(before.body.data.demonstration,true);assert.equal(before.body.data.card.name,'Geladeira 01');
     assert.equal((await request(endpoint+'/access',{key:'errada'})).status,401);
+    assert.equal((await request(endpoint+'/access',{key:'DEMO'})).status,401,'A chave anterior deve ser rejeitada');
     assert.equal((await request(endpoint+'/replace',{scanned:'DEMO-NOVO-01',replaceProbe:true})).status,401);
-    const access=(await request(endpoint+'/access',{key:'DEMO'})).body.data.token;
+    const access=(await request(endpoint+'/access',{key:'12345678'})).body.data.token;
     assert.equal((await request(endpoint+'/identify',{scanned:'desconhecido'},access)).status,404);
     const identified=(await request(endpoint+'/identify',{scanned:base+'/q/DEMO-NOVO-01'},access)).body.data;assert.equal(identified.has_probe,true);assert.equal(identified.mac,demo.catalog[0].mac);
     assert.equal((await request(endpoint+'/replace',{scanned:'DEMO-NOVO-01'},access)).status,400);
@@ -56,17 +57,26 @@ test('QR demonstration: scan, read-only consultation, model, probe choice, stabi
     const state=demo.read(getDb(),back.id);state.startedAt=new Date(Date.now()-60000).toISOString();demo.save(getDb(),back.id,state);
     const stable=(await request('/api/qr/'+code)).body.data;assert.equal(stable.stabilizing,false);assert(stable.card.temp>=stable.card.min&&stable.card.temp<=stable.card.max);
     const report=(await request('/api/qr/'+code+'/report')).body.data;assert(report.replacement.finishedAt);assert.match(report.replacement.justification,/Troca de dispositivo/);
-    await request('/api/qr/'+code+'/reset',{key:'DEMO'});
-    await page.goto(base+'/q/DEV-GELADEIRA-01');await page.locator('.page-content:not([hidden])').waitFor();assert.match(await page.locator('#qr-live-status').textContent(),/simulados/);
+    await request('/api/qr/'+code+'/reset',{key:'12345678'});
+    await page.clock.install();
+    await page.goto(base+'/q/DEV-GELADEIRA-01');await page.locator('.page-content:not([hidden])').waitFor();
+    const teaser=page.locator('#qr-help-teaser'),help=page.locator('[data-go="help"].nav-button');
+    assert.equal(await teaser.isVisible(),false);assert.equal(await help.isVisible(),true);
+    await page.clock.fastForward(3500);await page.clock.runFor(350);assert.equal(await teaser.isVisible(),true);
+    await page.clock.fastForward(6500);await page.clock.runFor(350);assert.equal(await teaser.isVisible(),false);assert.equal(await help.isVisible(),true);
+    await page.clock.fastForward(24500);await page.clock.runFor(350);assert.equal(await teaser.isVisible(),true);
+    await teaser.locator('button').click();assert.equal(await teaser.isVisible(),false);assert.equal(await help.isVisible(),true);
+    await page.locator('#qr-nav-temperature').click();
+    assert.match(await page.locator('#qr-live-status').textContent(),/simulados/);
     await page.screenshot({path:path.join(output,'consulta-temperatura.png'),fullPage:true});
-    await page.locator('#qr-nav-replace').click();await page.locator('#qr-access-key').fill('DEMO');await page.locator('#qr-key-form button').click();await page.locator('#qr-manual-code').fill('DEMO-NOVO-01');await page.locator('#qr-swap-scan form button').click();await page.locator('#qr-swap-probe:not([hidden])').waitFor();
+    await page.locator('#qr-nav-replace').click();await page.locator('#qr-access-key').fill('12345678');await page.locator('#qr-key-form button').click();await page.locator('#qr-manual-code').fill('DEMO-NOVO-01');await page.locator('#qr-swap-scan form button').click();await page.locator('#qr-swap-probe:not([hidden])').waitFor();
     assert.equal(await page.locator('.device-identification dd').first().textContent(),demo.catalog[0].mac);
     await page.locator('[name="qr-probe-choice"][value="replace"]').check();await page.locator('#qr-probe-continue').click();await page.locator('#qr-confirm-swap').click();await page.locator('#qr-real-notice:not([hidden])').waitFor();
     await page.screenshot({path:path.join(output,'aviso-estabilizacao.png'),fullPage:true});
     await page.locator('#qr-real-commit').click();await page.locator('#qr-swap-success:not([hidden])').waitFor();await page.locator('#qr-nav-temperature').click();await page.locator('#qr-live-stabilization:not([hidden])').waitFor();
     await page.screenshot({path:path.join(output,'temperatura-estabilizacao.png'),fullPage:true});
-    await request('/api/qr/'+code+'/reset',{key:'DEMO'});
-    await page.goto(base+'/q/DEV-GELADEIRA-01');await page.locator('.page-content:not([hidden])').waitFor();await page.locator('#qr-nav-replace').click();await page.locator('#qr-access-key').fill('DEMO');await page.locator('#qr-key-form button').click();await page.locator('#qr-manual-code').fill('DEMO-NOVO-03');await page.locator('#qr-swap-scan form button').click();await page.locator('#qr-swap-confirm:not([hidden])').waitFor();assert.equal(await page.locator('#qr-swap-probe').isVisible(),false);
+    await request('/api/qr/'+code+'/reset',{key:'12345678'});
+    await page.goto(base+'/q/DEV-GELADEIRA-01');await page.locator('.page-content:not([hidden])').waitFor();await page.locator('#qr-nav-replace').click();await page.locator('#qr-access-key').fill('12345678');await page.locator('#qr-key-form button').click();await page.locator('#qr-manual-code').fill('DEMO-NOVO-03');await page.locator('#qr-swap-scan form button').click();await page.locator('#qr-swap-confirm:not([hidden])').waitFor();assert.equal(await page.locator('#qr-swap-probe').isVisible(),false);
     for(const width of[320,390,736]){await page.setViewportSize({width,height:1000});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));}
     assert.deepEqual(errors,[]);fs.writeFileSync(path.join(output,'test-result.json'),JSON.stringify({passed:true,qrDecoded:true,publicData:'demonstration',physicalHardware:false,browserErrors:errors},null,2));
   }finally{if(browser)await browser.close();server.closeAllConnections();await new Promise(resolve=>server.close(resolve));getDb().close();}

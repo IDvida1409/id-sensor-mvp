@@ -14,6 +14,6 @@ function register({addRoute,getDb,getDeviceByScannedCode,getDeviceById,buildDevi
   addRoute('GET','/api/qr/:codigo/label.svg',async({params,req,res})=>{const source=demo.scanned(params.codigo),candidate=demo.findSensor(source);const mac=candidate?candidate.mac:demo.decorate(getDb(),buildDeviceCard(resolve(source))).sensor.mac;const svg=renderLabel(requestPublicBase(req)+'/q/'+encodeURIComponent(mac),mac);res.writeHead(200,{'Content-Type':'image/svg+xml','Cache-Control':'no-store'});res.end(svg);});
   addRoute('GET','/api/qr-demo/catalog',async({res})=>ok(res,demo.catalog));
   addRoute('GET','/api/qr/:codigo/report',async({params,res})=>{const row=resolve(params.codigo);demo.decorate(getDb(),buildDeviceCard(row));ok(res,{demonstration:true,equipment:row.nome,replacement:demo.read(getDb(),row.id)});});
-  addRoute('POST','/api/qr/:codigo/reset',async({params,body,res})=>{if(String(body.key||'').toUpperCase()!=='DEMO')return fail(res,401,'Use a chave de demonstração.');getDb().prepare('DELETE FROM qr_demo_replacements WHERE device_id = ?').run(resolve(params.codigo).id);ok(res,{reset:true});});
+  addRoute('POST','/api/qr/:codigo/reset',async({params,body,res})=>{if(String(body.key||'').toUpperCase()!=='12345678')return fail(res,401,'Use a chave de demonstração.');getDb().prepare('DELETE FROM qr_demo_replacements WHERE device_id = ?').run(resolve(params.codigo).id);ok(res,{reset:true});});
 }
 module.exports={register};
