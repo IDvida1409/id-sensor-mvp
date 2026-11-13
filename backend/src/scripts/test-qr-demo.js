@@ -18,7 +18,7 @@ test('QR demonstration: scan, read-only consultation, model, probe choice, stabi
     assert.equal(usedInfo.previously_used,true);assert.equal(usedInfo.history.length,3);assert.equal(usedInfo.current.equipment,'Geladeira 01');assert.equal(usedInfo.calibration.status,'expired');assert.equal(usedInfo.model,'MST01');assert.equal(usedInfo.condition,'Em uso');assert.deepEqual([usedInfo.measurement.min,usedInfo.measurement.max],[-40,125]);assert.equal(usedInfo.image,'/consulta/assets/mst01-aprovado.webp');
     assert.equal((await request('/api/device-info/AA%3ABB%3ACC%3ADD%3AEE%3AFF')).status,404);
     assert.match(await(await fetch(base+'/q/'+encodeURIComponent(demo.catalog[0].mac))).text(),/IDSENSOR_DEVICE_MAC/,'O QR do sensor sem vínculo abre a ficha');
-    assert.match(await(await fetch(base+newInfo.calibration.certificate)).text(),new RegExp(demo.catalog[0].mac));
+    const pdf=fs.readFileSync(path.join(root,'painel-original/certificado-geladeira-1.pdf'));const infoPdf=await fetch(base+newInfo.calibration.certificate);assert.match(infoPdf.headers.get('content-type'),/application\/pdf/);assert(Buffer.from(await infoPdf.arrayBuffer()).equals(pdf));
     assert.equal((await request(endpoint+'/access',{key:'errada'})).status,401);
     assert.equal((await request(endpoint+'/access',{key:'DEMO'})).status,401,'A chave anterior deve ser rejeitada');
     assert.equal((await request(endpoint+'/replace',{scanned:'DEMO-NOVO-01',replaceProbe:true})).status,401);
@@ -31,7 +31,7 @@ test('QR demonstration: scan, read-only consultation, model, probe choice, stabi
     const code=encodeURIComponent(replaced.body.data.nextCode),warm=(await request('/api/qr/'+code)).body.data;
     assert.equal(warm.stabilizing,true);assert.equal(warm.card.name,before.body.data.card.name);assert.equal(warm.card.local,before.body.data.card.local);assert.equal(warm.card.status,'EM ESTABILIZAÇÃO');
     const linkedInfo=(await request('/api/device-info/'+code)).body.data;assert.equal(linkedInfo.previously_used,true);assert.equal(linkedInfo.current.equipment,'Geladeira 01');
-    const newCertificate=await fetch(base+'/api/qr/'+code+'/certificate');assert.match(await newCertificate.text(),new RegExp(demo.catalog[0].mac));
+    const newCertificate=await fetch(base+'/api/qr/'+code+'/certificate');assert.match(newCertificate.headers.get('content-type'),/application\/pdf/);assert(Buffer.from(await newCertificate.arrayBuffer()).equals(pdf));const panelSnapshot=(await request('/devices')).body.data.find(c=>c.backendId===warm.card.backendId);assert.equal(panelSnapshot.temp,warm.card.temp);assert.equal(panelSnapshot.stabilizing,true);
     const source=fs.readFileSync(path.join(root,'painel-original/consulta/app.js'),'utf8'),markup=fs.readFileSync(path.join(root,'painel-original/consulta/index.html'),'utf8');assert(!source.includes('60 minutos'));assert(markup.includes('Os alertas de equipamento sem comunicação permanecerão ativos.'));
     const {chromium}=require('playwright');browser=await chromium.launch({executablePath:'C:/Program Files/Google/Chrome/Application/chrome.exe',headless:true});
     const page=await browser.newPage({viewport:{width:390,height:980}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
@@ -62,9 +62,13 @@ test('QR demonstration: scan, read-only consultation, model, probe choice, stabi
     getDb().prepare("UPDATE dispositivos SET status = 'offline' WHERE id = ?").run(back.id);
     const offline=(await request('/api/qr/'+code)).body.data;assert.equal(offline.card.online,false);assert.equal(offline.stabilizing,true);
     getDb().prepare("UPDATE dispositivos SET status = 'normal' WHERE id = ?").run(back.id);
-    const state=demo.read(getDb(),back.id);state.startedAt=new Date(Date.now()-60000).toISOString();demo.save(getDb(),back.id,state);
-    const stable=(await request('/api/qr/'+code)).body.data;assert.equal(stable.stabilizing,false);assert(stable.card.temp>=stable.card.min&&stable.card.temp<=stable.card.max);
+    const state=demo.read(getDb(),back.id);state.startedAt=new Date(Date.now()-3600000).toISOString();demo.save(getDb(),back.id,state);
+    const stable=(await request('/api/qr/'+code)).body.data;assert.equal(stable.stabilizing,false);assert.equal(stable.card.temp,before.body.data.card.temp,'Após a estabilização a leitura volta à mesma fonte do painel');
     const report=(await request('/api/qr/'+code+'/report')).body.data;assert(report.replacement.finishedAt);assert.match(report.replacement.justification,/Troca de dispositivo/);
+    await request('/api/qr/'+code+'/reset',{key:'12345678'});
+    const keepAccess=(await request(endpoint+'/access',{key:'12345678'})).body.data.token;
+    await request(endpoint+'/replace',{scanned:'DEMO-NOVO-01',replaceProbe:false},keepAccess);
+    const kept=(await request('/api/qr/'+code)).body.data;assert.equal(kept.stabilizing,false);assert.equal(kept.card.temp,before.body.data.card.temp);
     await request('/api/qr/'+code+'/reset',{key:'12345678'});
     for(const [mac,label,expectedStatus,min,max,model,condition] of [['DE:10:00:00:00:01','novo','Dentro do prazo','−200 °C','+200 °C','MST01 Pt100','Novo'],['DE:00:00:00:00:01','utilizado','Certificado vencido','−40 °C','+125 °C','MST01','Em uso']]){
       await page.goto(base+'/dispositivo/'+encodeURIComponent(mac));await page.locator('#details:not([hidden])').waitFor();
@@ -88,12 +92,22 @@ test('QR demonstration: scan, read-only consultation, model, probe choice, stabi
     await page.screenshot({path:path.join(output,'consulta-temperatura.png'),fullPage:true});
     await page.locator('#qr-nav-replace').click();await page.locator('#qr-access-key').fill('12345678');await page.locator('#qr-key-form button').click();await page.locator('#qr-manual-code').fill('DEMO-NOVO-01');await page.locator('#qr-swap-scan form button').click();await page.locator('#qr-swap-probe:not([hidden])').waitFor();
     assert.equal(await page.locator('.device-identification dd').first().textContent(),demo.catalog[0].mac);
-    await page.locator('[name="qr-probe-choice"][value="replace"]').check();await page.locator('#qr-probe-continue').click();await page.locator('#qr-confirm-swap').click();await page.locator('#qr-real-notice:not([hidden])').waitFor();
+    await page.locator('[name="qr-probe-choice"][value="replace"]').check();await page.locator('#qr-probe-continue').click();await page.locator('#qr-confirm-swap').click();await page.locator('#qr-real-notice:not([hidden])').waitFor();assert(await page.locator('#qr-real-notice').evaluate(e=>e.matches(':modal')));
     await page.screenshot({path:path.join(output,'aviso-estabilizacao.png'),fullPage:true});
     await page.locator('#qr-real-commit').click();await page.locator('#qr-swap-success:not([hidden])').waitFor();await page.locator('#qr-nav-temperature').click();await page.locator('#qr-live-stabilization:not([hidden])').waitFor();
     await page.screenshot({path:path.join(output,'temperatura-estabilizacao.png'),fullPage:true});
+    const auth=(await request('/api/auth/login',{username:'idvida.master',password:process.env.PANEL_MASTER_PASSWORD||'idvida816'})).body;
+    assert(auth.ok);const panelPage=await browser.newPage({viewport:{width:1440,height:1000}});await panelPage.addInitScript(({session,apiBase})=>{localStorage.setItem('idsensor.panel.session.v2',JSON.stringify(session));localStorage.setItem('PANEL_API_BASE_URL',apiBase);},{session:auth.data,apiBase:base});await panelPage.route('https://**/*',route=>route.abort());
+    await panelPage.goto(base);await panelPage.waitForFunction(()=>window.devices?.some(d=>d.id===1&&d.stabilizing));
+    const panelCard=panelPage.locator('.grid .card').filter({hasText:'Geladeira 01'}).first();assert(await panelCard.locator('.qr-stabilizing-note').isVisible());
+    const panelTemp=await panelPage.evaluate(()=>window.devices.find(d=>d.id===1).temp),qrTemp=(await request('/api/qr/'+code)).body.data.card.temp;assert.equal(panelTemp,qrTemp);assert.equal(await page.locator('#qr-temp-value').textContent(),panelTemp.toFixed(1)+'°C');
+    await panelCard.screenshot({path:path.join(output,'card-painel-estabilizacao.png')});await panelPage.close();
+
     await request('/api/qr/'+code+'/reset',{key:'12345678'});
     await page.goto(base+'/q/DEV-GELADEIRA-01');await page.locator('.page-content:not([hidden])').waitFor();await page.locator('#qr-nav-replace').click();await page.locator('#qr-access-key').fill('12345678');await page.locator('#qr-key-form button').click();await page.locator('#qr-manual-code').fill('DEMO-NOVO-03');await page.locator('#qr-swap-scan form button').click();await page.locator('#qr-swap-confirm:not([hidden])').waitFor();assert.equal(await page.locator('#qr-swap-probe').isVisible(),false);
+    await page.locator('#qr-confirm-swap').click();await page.locator('#qr-real-notice:not([hidden])').waitFor();await page.locator('#qr-real-commit').click();await page.locator('#qr-swap-success:not([hidden])').waitFor();await page.locator('#qr-nav-temperature').click();assert(await page.locator('#qr-live-stabilization').isVisible());
+    const noCable=(await request('/api/qr/'+encodeURIComponent(demo.catalog[2].mac))).body.data;assert.equal(noCable.stabilizing,true);assert.equal(noCable.sensor.has_probe,false);
+
     for(const width of[320,390,736]){await page.setViewportSize({width,height:1000});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));}
     assert.deepEqual(errors,[]);fs.writeFileSync(path.join(output,'test-result.json'),JSON.stringify({passed:true,qrDecoded:true,publicData:'demonstration',physicalHardware:false,browserErrors:errors},null,2));
   }finally{if(browser)await browser.close();server.closeAllConnections();await new Promise(resolve=>server.close(resolve));getDb().close();}

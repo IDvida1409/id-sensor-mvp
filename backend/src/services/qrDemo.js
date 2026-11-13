@@ -17,24 +17,25 @@ function decorate(db,card){
   const id=card.backendId||card.id,state=read(db,id);
   if(!state){const sensor=initialSensor(card);return {...card,sensor,code:sensor.mac,qrCode:sensor.mac,demonstration:true,stabilizing:false};}
   const next={...card,sensor:state.sensor,demonstration:true,stabilizing:!!state.stabilizing,qrCode:state.sensor.mac,code:state.sensor.mac};
-  if(state.finishedAt || !state.stabilizing){
-    next.temp=state.finalTemperature ?? (Number(card.min)+Number(card.max))/2;next.tempLabel=next.temp.toFixed(1)+'°C';next.state='blue';next.status='NORMAL';next.online=card.online;next.chart=[next.temp];next.dailyMin=next.temp;next.dailyMax=next.temp;
-  }
+  // Normal readings always come from the same equipment card; do not replace them with a fixed midpoint.
+  if(!state.stabilizing) return next;
   if(state.stabilizing && card.online){
-    // Fast, explicitly simulated cooling for the customer presentation. Exit by the configured range, not by a timeout.
-    const seconds=Math.max(0,(Date.now()-Date.parse(state.startedAt))/1000),target=(Number(card.min)+Number(card.max))/2;
-    const start=Number(card.max)+4,temperature=Math.max(target,start-seconds*.18);
+    // A shared ten-second sample keeps both views on the same simulated reading.
+    // Cooling is gradual enough to show the state on the panel. There is no expiry timer.
+    const sample=Math.floor(Math.max(0,Date.now()-Date.parse(state.startedAt))/10000),target=(Number(card.min)+Number(card.max))/2;
+    const start=state.startTemperature ?? Number(card.max)+4,temperature=Math.max(target,start-sample*.25);
+    if(temperature>=card.min&&temperature<=card.max){
+      state.stabilizing=false;state.finishedAt=new Date().toISOString();state.finalTemperature=card.temp;state.justification='Troca de dispositivo — em estabilização';save(db,id,state);
+      return {...next,stabilizing:false};
+    }
     next.temp=Math.round(temperature*10)/10;next.tempLabel=next.temp.toFixed(1)+'°C';next.dailyMin=next.temp;next.dailyMax=start;next.chart=[start,next.temp];
     next.online=true;next.state='blue';next.status='EM ESTABILIZAÇÃO';next.timerLabel='Temperatura em estabilização — troca de dispositivo';next.events=['Troca de dispositivo — em estabilização'];
     if(next.visualContract)next.visualContract={...next.visualContract,shouldShowBell:false};
-    state.maximumTemperature=Math.max(state.maximumTemperature||start,next.temp);
-    if(next.temp>=card.min&&next.temp<=card.max){state.stabilizing=false;state.finishedAt=new Date().toISOString();state.finalTemperature=next.temp;state.justification='Troca de dispositivo — em estabilização';next.stabilizing=false;next.status='NORMAL';next.timerLabel='Dentro da faixa configurada';next.events=['Temperatura estabilizada após a troca'];}
-    save(db,id,state);
   }
   return next;
 }
 function authorize(deviceId,key){if(String(key||'').trim().toUpperCase()!=='12345678')throw Object.assign(Error('Nesta demonstração, use a chave 12345678.'),{statusCode:401});const token=crypto.randomBytes(24).toString('base64url');for(const[t,v]of grants)if(v.until<Date.now())grants.delete(t);grants.set(token,{deviceId,until:Date.now()+1800000});return{token,expiresIn:1800};}
 function check(deviceId,token){const grant=grants.get(token);if(!grant||grant.deviceId!==deviceId||grant.until<Date.now())throw Object.assign(Error('Acesso demonstrativo expirado. Digite 12345678 novamente.'),{statusCode:401});}
 function identify(db,deviceId,token,value){check(deviceId,token);const found=findSensor(value);if(!found)throw Object.assign(Error('Use um dos QR Codes de exemplo da demonstração.'),{statusCode:404});const linked=byMac(db,found.mac);if(linked&&linked!==deviceId)throw Object.assign(Error('Este dispositivo de exemplo já está em uso. Reinicie a demonstração ou escolha outro.'),{statusCode:409});return found;}
-function replace(db,deviceId,token,value,replaceProbe){const sensor=identify(db,deviceId,token,value);if(sensor.has_probe&&typeof replaceProbe!=='boolean')throw Object.assign(Error('Escolha se o cabo também será trocado.'),{statusCode:400});const state={sensor,stabilizing:sensor.has_probe&&replaceProbe===true,startedAt:new Date().toISOString(),replaceProbe:!!replaceProbe,finishedAt:null,justification:null};save(db,deviceId,state);grants.delete(token);return{sensor,stabilizing:state.stabilizing,nextCode:sensor.mac,demonstration:true};}
+function replace(db,deviceId,token,value,replaceProbe){const sensor=identify(db,deviceId,token,value);if(sensor.has_probe&&typeof replaceProbe!=='boolean')throw Object.assign(Error('Escolha se o cabo também será trocado.'),{statusCode:400});const stabilizing=!sensor.has_probe||replaceProbe===true;const startedAt=new Date().toISOString();const state={sensor,stabilizing,startedAt,replaceProbe:!!replaceProbe,finishedAt:stabilizing?null:startedAt,justification:stabilizing?'Troca de dispositivo — em estabilização':null};save(db,deviceId,state);grants.delete(token);return{sensor,stabilizing:state.stabilizing,nextCode:sensor.mac,demonstration:true};}
 module.exports={catalog,init,read,save,scanned,findSensor,byMac,decorate,authorize,identify,replace};

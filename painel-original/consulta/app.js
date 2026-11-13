@@ -38,7 +38,7 @@
     $$('.nav-button').forEach(b => b.setAttribute('aria-selected', String(b.dataset.go === name)));
     if (name !== 'certificate') { $('#qr-certificate-summary').hidden = false; $('#qr-certificate-viewer').hidden = true; }
   }
-  function step(name) { $$('[id^="qr-swap-"]').forEach(el => el.hidden = el.id !== 'qr-swap-' + name); }
+  function step(name) { $$('[id^="qr-swap-"]').forEach(el => el.hidden = el.id !== 'qr-swap-' + name); if (!$('.page-content').hidden) $('#qr-swap-' + name)?.scrollIntoView({block:'start'}); }
   function clearAccess() { access = ''; identified = null; replaceProbe = null; $('#qr-access-key').value = ''; }
   function render() {
     const { card, sensor, stabilizing } = current;
@@ -110,7 +110,7 @@
     const fields = $$('#qr-swap-confirm .sensor-info .info-row strong');
     fields[0].textContent = current.card.local || '—'; fields[1].textContent = current.card.name;
     fields[2].textContent = 'Do dispositivo novo'; fields[3].textContent = identified.has_probe ? replaceProbe ? 'Substituir o cabo' : 'Manter o cabo atual' : 'Sem cabo externo';
-    fields[4].textContent = identified.has_probe && replaceProbe ? 'Até atingir a faixa configurada' : 'Não solicitado';
+    fields[4].textContent = (!identified.has_probe || replaceProbe) ? 'Até atingir a faixa configurada' : 'Manter a probe atual';
     text('#qr-swap-stabilization-note', identified.has_probe && replaceProbe ? 'Confira o dispositivo e a substituição do cabo antes de confirmar.' : 'Será trocado somente o dispositivo.');
     step('confirm');
   }
@@ -131,12 +131,12 @@
     busy = true; $('#qr-real-commit').disabled = true;
     try {
       const result = await api('/replace', { scanned: identified.mac, replaceProbe: identified.has_probe ? replaceProbe : false });
-      $('#qr-real-notice').hidden = true; code = result.nextCode; clearAccess();
+      closeSwapNotice(); code = result.nextCode; clearAccess();
       history.replaceState(null, '', '/q/' + encodeURIComponent(code));
       await refresh(); step('success'); showTab('replace');
       const fields = $$('#qr-swap-success .sensor-info .info-row strong');
       fields[0].textContent = result.sensor.mac; fields[1].textContent = current.card.local; fields[2].textContent = 'Do dispositivo novo';
-      text('#qr-success-stabilization-note', result.stabilizing ? 'Temperatura em estabilização — troca de dispositivo. O modo termina quando a leitura atingir a faixa configurada. Alertas de falta de comunicação continuam ativos.' : 'Dispositivo substituído. Aguardando a primeira leitura.');
+      text('#qr-success-stabilization-note', result.stabilizing ? 'Temperatura em estabilização — troca de dispositivo. O modo termina quando a leitura atingir a faixa configurada. Alertas de falta de comunicação continuam ativos.' : 'Dispositivo substituído. A leitura continua sincronizada com o painel.');
     } catch (error) { showStatus(error.message); }
     finally { busy = false; $('#qr-real-commit').disabled = false; }
   }
@@ -156,12 +156,20 @@
   $('#qr-swap-scan').append(manual); manual.addEventListener('submit', event => { event.preventDefault(); identify($('#qr-manual-code').value); });
   const examples=document.createElement('a');examples.href='/consulta/demo.html';examples.target='_blank';examples.rel='noopener';examples.className='back-action swap-back';examples.textContent='Ver QR Codes dos dispositivos de exemplo';$('#qr-swap-scan').append(examples);
   const report=document.createElement('button');report.type='button';report.className='action secondary';report.textContent='Baixar relatório da demonstração';$('#qr-swap-success').append(report);
-  report.addEventListener('click',async()=>{try{const result=await api('/report'),swap=result.replacement;if(!swap)return;const rows=[['Equipamento','Início','Fim','MAC novo','Justificativa'],[result.equipment,swap.startedAt,swap.finishedAt||'Em estabilização',swap.sensor.mac,swap.replaceProbe?'Troca de dispositivo — em estabilização':'Troca somente do dispositivo']];const csv='\uFEFF'+rows.map(row=>row.map(value=>'"'+String(value).replace(/"/g,'""')+'"').join(';')).join('\r\n');const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'})),a=document.createElement('a');a.href=url;a.download='relatorio-demonstracao-troca.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}catch(error){showStatus(error.message);}});
+  report.addEventListener('click',async()=>{try{const result=await api('/report'),swap=result.replacement;if(!swap)return;const rows=[['Equipamento','Início','Fim','MAC novo','Justificativa'],[result.equipment,swap.startedAt,swap.finishedAt||'Em estabilização',swap.sensor.mac,swap.justification || 'Troca somente do dispositivo']];const csv='\uFEFF'+rows.map(row=>row.map(value=>'"'+String(value).replace(/"/g,'""')+'"').join(';')).join('\r\n');const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'})),a=document.createElement('a');a.href=url;a.download='relatorio-demonstracao-troca.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}catch(error){showStatus(error.message);}});
   $$('[name="qr-probe-choice"]').forEach(input => input.addEventListener('change', () => { replaceProbe = input.value === 'replace'; $('#qr-probe-continue').disabled = false; $('#qr-probe-explanation').hidden = true; }));
   $('#qr-probe-continue').addEventListener('click', () => { if (replaceProbe !== null) renderConfirmation(); });
-  $('#qr-confirm-swap').addEventListener('click', () => { if (identified?.has_probe && replaceProbe) { $('#qr-real-notice').hidden = false; $('#qr-real-commit').focus(); } else commit(); });
+  function closeSwapNotice() { const notice = $('#qr-real-notice'); if (notice.open) notice.close(); notice.hidden = true; }
+  $('#qr-confirm-swap').addEventListener('click', () => {
+    if (!identified) return;
+    if (!identified.has_probe || replaceProbe) {
+      text('#qr-notice-intro', identified.has_probe ? 'Ao confirmar a troca do dispositivo e do cabo de temperatura, será iniciado o período de estabilização da leitura.' : 'Ao confirmar a troca do dispositivo, será iniciado o período de estabilização da leitura.');
+      const notice = $('#qr-real-notice'); notice.hidden = false; notice.showModal(); $('#qr-real-commit').focus();
+    } else commit();
+  });
+  $('#qr-real-notice').addEventListener('cancel', event => { event.preventDefault(); closeSwapNotice(); $('#qr-confirm-swap').focus(); });
   $('#qr-real-commit').addEventListener('click', commit);
-  $('#qr-real-cancel').addEventListener('click', () => { $('#qr-real-notice').hidden = true; $('#qr-confirm-swap').focus(); });
+  $('#qr-real-cancel').addEventListener('click', () => { closeSwapNotice(); $('#qr-confirm-swap').focus(); });
   $('#qr-real-notice').addEventListener('keydown', event => { if (event.key === 'Escape') $('#qr-real-cancel').click(); if (event.key === 'Tab') { const target = event.shiftKey ? $('#qr-real-cancel') : $('#qr-real-commit'); if ((event.target === $('#qr-real-cancel') && !event.shiftKey) || (event.target === $('#qr-real-commit') && event.shiftKey)) { event.preventDefault(); target.focus(); } } });
   $('#qr-view-certificate').addEventListener('click', () => { if (current.sensor) window.open(endpoint('/certificate'), '_blank', 'noopener'); });
   $('#qr-close-document').addEventListener('click', () => { $('#qr-certificate-viewer').hidden = true; $('#qr-certificate-summary').hidden = false; });

@@ -57,3 +57,11 @@ A ficha usa um único modelo de página e busca os dados pelo MAC; não há bot�
 A câmera da troca abre em diálogo modal na frente da página, com câmera traseira em resolução maior, marcação e zoom. O leitor considera a região visível e uma região central ampliada, com leitura nativa quando disponível e jsQR em várias escalas como alternativa. Um código não reconhecido mostra o motivo e mantém a leitura ativa. Fechar, cancelar ou sair da página libera a câmera.
 
 O teste `backend/src/scripts/test-qr-camera.js` usa vídeo simulado com as etiquetas reais, em formatos horizontal e vertical, e verifica permissão, fechamento durante a abertura, zoom, leitura após erro e liberação das trilhas de vídeo. A confirmação da troca continua separada da leitura. O convite de ajuda usa a cabeça do mascote dentro de um único botão, e o menu Ajuda permanece fixo.
+
+## Aviso e estabilização na troca
+
+Modelos com cabo exigem a escolha entre manter a probe atual e trocar dispositivo com cabo/probe. A pergunta aparece na etapa de identificação; o aviso aprovado abre como diálogo modal antes da confirmação da troca completa. Sensores sem cabo não exibem essa pergunta, mas a troca completa também demonstra a estabilização de seu sensor interno.
+
+Painel e consulta compartilham amostras simuladas de dez segundos. A descida gradual da leitura mostra a indicação Temperatura em estabilização — troca de dispositivo nos dois cards, encerrando quando a leitura entra na faixa, sem temporizador de expiração. Após o encerramento, a leitura volta à fonte do equipamento em vez de ficar em um ponto médio fixo. Manter a probe preserva a leitura atual do painel. O estado fora de faixa é justificado desde o início da estabilização.
+
+Por solicitação do usuário, os links de certificado de todos os MACs usam o mesmo PDF demonstrativo existente, `painel-original/certificado-geladeira-1.pdf`. As datas e o MAC continuam identificados na ficha; o PDF é o exemplo comum autorizado para a apresentação.

@@ -17,8 +17,6 @@ const examples = {
     ]
   }
 };
-const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const date = value => value ? value.split('-').reverse().join('/') : 'Não informado';
 
 function register({ addRoute, getDb, getDeviceById, buildDeviceCard, ok, html }) {
   function getInfo(value) {
@@ -59,10 +57,7 @@ function register({ addRoute, getDb, getDeviceById, buildDeviceCard, ok, html })
   }
   addRoute('GET', '/dispositivo/:mac', async ({ params, res }) => renderPage(params.mac, res));
   addRoute('GET', '/api/device-info/:mac', async ({ params, res }) => { res.setHeader('Cache-Control', 'no-store'); ok(res, getInfo(params.mac)); });
-  addRoute('GET', '/api/device-info/:mac/certificate', async ({ params, res }) => {
-    const info = getInfo(params.mac);
-    html(res, 200, `<!doctype html><html lang="pt-BR"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Certificado de calibração — demonstração</title><style>body{font:15px 'Segoe UI',Arial;color:#243e5d;background:#eef3f8;margin:0;padding:20px}main{max-width:640px;background:white;border:1px solid #dce5ee;border-radius:16px;margin:20px auto;padding:24px;line-height:1.6}h1{font-size:23px}dl{display:grid;grid-template-columns:1fr 1fr;gap:16px}dt{color:#647b94}dd{margin:0;font-weight:600;overflow-wrap:anywhere}.note{padding:14px;background:#f0f4f9;border-radius:10px}a{color:#255e9a}</style><main><img src="/assets/idsensor-logo.png" width="130" alt="IDsensor"><h1>Certificado de calibração</h1><p class="note">Exemplo para demonstração. Documento sem validade metrológica.</p><dl><div><dt>MAC</dt><dd>${esc(info.mac)}</dd></div><div><dt>Fabricante / modelo</dt><dd>${esc(info.manufacturer)} · ${esc(info.model)}</dd></div><div><dt>Calibração</dt><dd>${date(info.calibration.calibrated_on)}</dd></div><div><dt>Vencimento</dt><dd>${date(info.calibration.expires_on)}</dd></div></dl><p><a href="/dispositivo/${encodeURIComponent(info.mac)}">Voltar às informações do dispositivo</a></p></main></html>`);
-  });
+  addRoute('GET', '/api/device-info/:mac/certificate', async ({ params, res }) => { getInfo(params.mac); require('./services/demoCertificate').send(res); });
   return { getInfo, renderPage };
 }
 
