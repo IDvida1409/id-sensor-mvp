@@ -49,3 +49,11 @@ As fotos dos dois modelos foram recriadas com a ferramenta integrada de geraçã
 Referências confirmadas: https://www.minew.com/product/mst01-pt100-temperature-sensor/ e https://www.minew.com/product/mst01-industrial-temperature-and-humidity-sensor/ .
 
 O QR `/q/:mac` de um sensor de exemplo sem vínculo abre a ficha; quando ele está vinculado, abre a temperatura. A consulta de temperatura inclui um link para as informações. As fichas são de leitura; o fluxo de troca continua exigindo 12345678 e a confirmação do cabo.
+
+## Leitor da troca e consulta individual
+
+A ficha usa um único modelo de página e busca os dados pelo MAC; não há botões para alternar de dispositivo dentro dela. Cada etiqueta continua identificando exclusivamente o próprio sensor.
+
+A câmera da troca abre em diálogo modal na frente da página, com câmera traseira em resolução maior, marcação e zoom. O leitor considera a região visível e uma região central ampliada, com leitura nativa quando disponível e jsQR em várias escalas como alternativa. Um código não reconhecido mostra o motivo e mantém a leitura ativa. Fechar, cancelar ou sair da página libera a câmera.
+
+O teste `backend/src/scripts/test-qr-camera.js` usa vídeo simulado com as etiquetas reais, em formatos horizontal e vertical, e verifica permissão, fechamento durante a abertura, zoom, leitura após erro e liberação das trilhas de vídeo. A confirmação da troca continua separada da leitura. O convite de ajuda usa a cabeça do mascote dentro de um único botão, e o menu Ajuda permanece fixo.

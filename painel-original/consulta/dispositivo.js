@@ -35,8 +35,6 @@
         li.append(area, equipment, period); $('#history').append(li);
       }
       if (info.current) { $('#temperature').hidden = false; $('#temperature').href = info.current.url; }
-      const example = info.mac === 'DE:10:00:00:00:01' ? '#example-new' : info.mac === 'DE:00:00:00:00:01' ? '#example-used' : null;
-      if (example) $(example).setAttribute('aria-current', 'page');
       $('#details').hidden = false; $('#feedback').hidden = true;
       document.title = 'IDsensor — ' + info.model + ' · ' + info.mac;
     } catch (error) { $('#feedback').textContent = error.message; }

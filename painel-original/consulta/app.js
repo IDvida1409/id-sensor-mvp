@@ -3,7 +3,7 @@
   const root = document.getElementById('ids-qr-preview');
   const $ = selector => root.querySelector(selector);
   const $$ = selector => [...root.querySelectorAll(selector)];
-  let code = window.IDSENSOR_QR_CODE || '', current = null, access = '', identified = null, replaceProbe = null, stream = null, scanTimer = null, busy = false, lastUpdated = 0;
+  let code = window.IDSENSOR_QR_CODE || '', current = null, access = '', identified = null, replaceProbe = null, scanner = null, busy = false, lastUpdated = 0;
   const status = $('#qr-live-status');
   const endpoint = suffix => '/api/qr/' + encodeURIComponent(code) + (suffix || '');
   const temp = value => value === null || value === undefined || !Number.isFinite(Number(value)) ? '--' : Number(value).toFixed(1) + '°C';
@@ -115,40 +115,16 @@
     step('confirm');
   }
   async function identify(raw) {
-    if (busy) return;
+    if (busy) return false;
     busy = true;
-    try { identified = await api('/identify', { scanned: raw }); replaceProbe = null; stopCamera(); renderIdentified(); identified.has_probe ? step('probe') : renderConfirmation(); }
-    catch (error) { showStatus(error.message); }
+    try { identified = await api('/identify', { scanned: raw }); replaceProbe = null; stopCamera(); renderIdentified(); identified.has_probe ? step('probe') : renderConfirmation(); return true; }
+    catch (error) { showStatus(error.message); return { accepted: false, message: error.message }; }
     finally { busy = false; }
   }
-  function stopCamera() { clearTimeout(scanTimer); if (stream) stream.getTracks().forEach(track => track.stop()); stream = null; const video = $('#qr-camera-video'); if (video) video.remove(); }
-  async function startCamera() {
-    if (!navigator.mediaDevices?.getUserMedia) return showStatus('A câmera requer HTTPS e um navegador compatível. Use a opção de digitar o código.');
-    try {
-      stopCamera(); stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
-      const video = document.createElement('video'); video.id = 'qr-camera-video'; video.className = 'qr-camera'; video.setAttribute('playsinline', ''); video.muted = true; video.srcObject = stream;
-      $('#qr-swap-scan .camera-frame').after(video); await video.play();
-      const canvas = document.createElement('canvas'), context = canvas.getContext('2d', { willReadFrequently: true });
-      const scan = () => {
-        if (!stream) return;
-        if (video.readyState >= 2 && video.videoWidth) {
-          canvas.width = Math.min(video.videoWidth, 720); canvas.height = Math.round(canvas.width * video.videoHeight / video.videoWidth);
-          context.drawImage(video, 0, 0, canvas.width, canvas.height);
-          const pixels = context.getImageData(0, 0, canvas.width, canvas.height);
-          let result = window.jsQR?.(pixels.data, pixels.width, pixels.height, { inversionAttempts: 'attemptBoth' });
-          // Dotted labels are easier to decode at a second sampling scale.
-          for (const width of [270, 225, 315]) {
-            if (result) break;
-            canvas.width = width; canvas.height = Math.round(width * video.videoHeight / video.videoWidth);
-            context.drawImage(video, 0, 0, canvas.width, canvas.height);
-            const scaled = context.getImageData(0, 0, canvas.width, canvas.height);
-            result = window.jsQR?.(scaled.data, scaled.width, scaled.height, { inversionAttempts: 'attemptBoth' });
-          }
-          if (result?.data) { identify(result.data); return; }
-        }
-        scanTimer = setTimeout(scan, 200);
-      }; scan();
-    } catch { showStatus('Não foi possível abrir a câmera. Autorize o acesso no navegador ou digite o código do dispositivo.'); }
+  function stopCamera() { scanner?.close(); }
+  function startCamera() {
+    if (!scanner) scanner = window.IDSensorQrScanner.create({ root, onCode: identify });
+    scanner.open();
   }
   async function commit() {
     if (busy || !identified) return;
