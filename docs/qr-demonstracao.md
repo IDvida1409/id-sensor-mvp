@@ -36,3 +36,14 @@ As etiquetas recebem a origem da página onde são abertas. Para escanear com ou
 - `backend/src/scripts/test-qr-demo.js`: testes de API, decodificação do QR e fluxo no navegador com banco temporário.
 
 As três ilustrações foram recriadas a partir das fotos fornecidas usando a geração de imagens integrada. O visor do primeiro modelo permanece sem leitura de temperatura. As versões PNG originais continuam na pasta de imagens geradas do chat; as versões WebP usadas pela demonstração estão em `painel-original/consulta/assets`.
+
+## Fichas de informações do dispositivo
+
+- `/dispositivo/DE:10:00:00:00:01`: exemplo novo, recebido no cliente em 10/11/2026, sem uso anterior.
+- `/dispositivo/DE:00:00:00:00:01`: exemplo já utilizado, com áreas anteriores ilustrativas e o vínculo atual carregado do painel.
+
+As fichas mostram imagem, fabricante, modelo, MAC, recebimento, condição de uso, calibração e certificado do próprio MAC. As datas de recebimento e passagens anteriores são exemplos comerciais, não um cadastro real do hospital. Não há histórico de certificados.
+
+A versão ilustrada nos dois exemplos é a MST01-09 com Pt100, de −200 °C a +200 °C na ponta de medição, conforme a ficha técnica da Minew: https://www.minew.com/wp-content/uploads/2024/09/MST01-Pt100-Temperature-Sensor2.pdf . Essa capacidade não é atribuída genericamente a toda a família MST01, ao cabo ou ao corpo. Outros modelos sem faixa cadastrada exibem essa ausência.
+
+O QR `/q/:mac` de um sensor de exemplo sem vínculo abre a ficha; quando ele está vinculado, abre a temperatura. A consulta de temperatura inclui um link para as informações. As fichas são de leitura; o fluxo de troca continua exigindo 12345678 e a confirmação do cabo.

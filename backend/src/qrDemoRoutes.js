@@ -3,9 +3,10 @@ const demo=require('./services/qrDemo');
 const {renderLabel}=require('./services/qrLabel');
 const esc=value=>String(value||'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 function register({addRoute,getDb,getDeviceByScannedCode,getDeviceById,buildDeviceCard,ok,fail,html,requestPublicBase}){
+  const deviceInfo=require('./deviceInfoRoutes').register({addRoute,getDb,getDeviceById,buildDeviceCard,ok,html});
   const token=req=>String(req.headers.authorization||'').replace(/^Bearer\s+/i,'');
   function resolve(code){const db=getDb(),id=demo.byMac(db,code);const row=id?getDeviceById(id):getDeviceByScannedCode(demo.scanned(code));if(!row)throw Object.assign(Error('Equipamento de demonstração não encontrado.'),{statusCode:404});return row;}
-  addRoute('GET','/q/:codigo',async({params,res})=>{const page=fs.readFileSync(path.resolve(__dirname,'../../painel-original/consulta/index.html'),'utf8').replace('/*QR_BOOT*/','window.IDSENSOR_QR_CODE='+JSON.stringify(demo.scanned(params.codigo)).replace(/</g,'\\u003c')+';');html(res,200,page);});
+  addRoute('GET','/q/:codigo',async({params,res})=>{const sensor=demo.findSensor(params.codigo);if(sensor&&!demo.byMac(getDb(),sensor.mac))return deviceInfo.renderPage(sensor.mac,res);const page=fs.readFileSync(path.resolve(__dirname,'../../painel-original/consulta/index.html'),'utf8').replace('/*QR_BOOT*/','window.IDSENSOR_QR_CODE='+JSON.stringify(demo.scanned(params.codigo)).replace(/</g,'\\u003c')+';');html(res,200,page);});
   addRoute('GET','/api/qr/:codigo',async({params,res})=>{const row=resolve(params.codigo),card=demo.decorate(getDb(),buildDeviceCard(row));ok(res,{card,sensor:card.sensor,stabilizing:card.stabilizing,demonstration:true,simulation:true});});
   addRoute('POST','/api/qr/:codigo/access',async({params,body,res})=>ok(res,demo.authorize(resolve(params.codigo).id,body.key)));
   addRoute('POST','/api/qr/:codigo/identify',async({params,body,req,res})=>ok(res,demo.identify(getDb(),resolve(params.codigo).id,token(req),body.scanned)));

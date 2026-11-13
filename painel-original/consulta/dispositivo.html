@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>IDsensor — informações do dispositivo</title>
+  <link rel="stylesheet" href="/consulta/dispositivo.css?v=20261113">
+</head>
+<body>
+  <div class="page">
+    <header><a href="/consulta/demo.html" aria-label="Voltar à demonstração"><img src="/assets/idsensor-logo.png" alt="IDsensor"></a><span class="tag">Consulta pelo QR</span></header>
+    <main>
+      <p class="demo-note">Demonstração · dados de recebimento e uso ilustrativos</p>
+      <div class="heading"><p class="eyebrow">IDENTIFICAÇÃO DO SENSOR</p><h1>Informações do dispositivo</h1><p>Dados que acompanham este MAC.</p></div>
+      <p id="feedback" role="status">Carregando informações…</p>
+      <div id="details" hidden>
+        <section class="identity card" aria-labelledby="model"><div class="photo"><img id="photo" alt="Ilustração do dispositivo"></div><div><span id="condition" class="pill"></span><h2 id="model"></h2><p id="manufacturer"></p><span class="small-label">MAC do dispositivo</span><strong id="mac" class="mac"></strong></div></section>
+        <section class="card" aria-labelledby="receipt-title"><h2 id="receipt-title">Recebimento no cliente</h2><dl><div><dt>Data de recebimento</dt><dd id="received"></dd></div><div><dt>Condição de uso</dt><dd id="usage"></dd></div><div><dt>Vínculo atual</dt><dd id="assignment"></dd></div></dl></section>
+        <section class="card measurement" aria-labelledby="measurement-title"><h2 id="measurement-title">Capacidade de medição</h2><p id="probe" class="muted"></p><div id="limits" class="limits"><div><span>Temperatura mínima</span><strong id="min"></strong></div><div><span>Temperatura máxima</span><strong id="max"></strong></div></div><p id="measurement-note" class="fine-print"></p><a id="specification" class="text-link" target="_blank" rel="noopener">Ficha técnica do fabricante ↗</a></section>
+        <section class="card calibration" aria-labelledby="calibration-title"><div class="section-heading"><div><h2 id="calibration-title">Calibração</h2><span id="calibration-status" class="calibration-status"></span></div><img id="seal" alt=""></div><dl><div><dt>Data de calibração</dt><dd id="calibrated"></dd></div><div><dt>Vencimento</dt><dd id="expires"></dd></div></dl><a id="certificate" class="button" target="_blank" rel="noopener">Visualizar certificado ↗</a></section>
+        <section class="card" aria-labelledby="history-title"><h2 id="history-title">Uso dentro do hospital</h2><p id="history-summary" class="muted"></p><ol id="history" class="timeline"></ol></section>
+        <a id="temperature" class="button primary" hidden>Consultar temperatura</a>
+        <aside class="examples"><span>Ver os exemplos</span><div><a href="/dispositivo/DE:10:00:00:00:01" id="example-new">Dispositivo novo</a><a href="/dispositivo/DE:00:00:00:00:01" id="example-used">Já utilizado</a></div></aside>
+      </div>
+    </main>
+    <footer>Powered by <img src="/assets/idsensor-logo.png" alt="IDsensor"></footer>
+  </div>
+  <script>/*DEVICE_INFO_BOOT*/</script><script src="/consulta/dispositivo.js?v=20261113" defer></script>
+</body>
+</html>
