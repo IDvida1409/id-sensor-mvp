@@ -11,7 +11,7 @@
       $('#photo').src = info.image; $('#photo').alt = 'Ilustração do ' + info.model;
       $('#model').textContent = info.model; $('#manufacturer').textContent = info.manufacturer; $('#mac').textContent = info.mac;
       $('#condition').textContent = info.condition; $('#condition').classList.toggle('used', info.previously_used);
-      $('#received').textContent = date(info.received_on); $('#usage').textContent = info.previously_used ? 'Já utilizado' : 'Nunca utilizado';
+      $('#received').textContent = date(info.received_on); $('#usage').textContent = info.condition;
       $('#assignment').textContent = info.current ? info.current.area + ' · ' + info.current.equipment : 'Sem vínculo com equipamento';
       $('#probe').textContent = info.measurement?.probe || 'Faixa de medição não cadastrada';
       $('#limits').hidden = !info.measurement; $('#specification').hidden = !info.measurement;
@@ -26,7 +26,7 @@
       $('#calibration-status').classList.add(calibration.status);
       $('#seal').src = '/assets/icone-certificado-' + { valid: 'azul', expired: 'vermelho', warning: 'laranja' }[calibration.status] + '-painel-atual.png';
       $('#certificate').href = calibration.certificate;
-      $('#history-summary').textContent = info.history.length ? 'Áreas e equipamentos deste exemplo de utilização.' : 'Este dispositivo ainda não foi utilizado em nenhuma área do hospital.';
+      $('#history-summary').textContent = info.history.length ? 'Áreas e equipamentos deste exemplo de utilização.' : 'Sem registros de instalação.';
       for (const entry of info.history) {
         const li = document.createElement('li'); if (entry.current) li.className = 'current';
         const area = document.createElement('strong'); area.textContent = entry.area;

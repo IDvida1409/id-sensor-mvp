@@ -94,7 +94,7 @@
   }
   function renderIdentified() {
     const info = $('.device-identification');
-    const profile = ['minew-probe', 'white-probe', 'white'].includes(identified.image_profile) ? identified.image_profile : 'white';
+    const profile = ['minew-probe', 'white-probe', 'white', 'mst01-pt100-aprovado', 'mst01-aprovado'].includes(identified.image_profile) ? identified.image_profile : 'white';
     info.querySelector('img').src = '/consulta/assets/' + profile + '.webp';
     const fields = info.querySelectorAll('dd');
     fields[0].textContent = identified.mac; fields[1].textContent = date(identified.calibrated_on); fields[2].textContent = identified.manufacturer;

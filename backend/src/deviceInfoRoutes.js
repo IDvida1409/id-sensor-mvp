@@ -1,10 +1,15 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const demo = require('./services/qrDemo');
-const source = 'https://www.minew.com/wp-content/uploads/2024/09/MST01-Pt100-Temperature-Sensor2.pdf';
 const examples = {
-  'DE:10:00:00:00:01': { received_on: '2026-11-10', previously_used: false, history: [] },
+  'DE:10:00:00:00:01': {
+    model: 'MST01 Pt100', image_profile: 'mst01-pt100-aprovado',
+    received_on: '2026-11-10', previously_used: false, history: [],
+    measurement: { min: -200, max: 200, probe: 'Pt100 · 4 fios', source: 'https://www.minew.com/product/mst01-pt100-temperature-sensor/', note: 'Faixa de medição da probe Pt100 desta versão. Não é a faixa de alarme do equipamento.' }
+  },
   'DE:00:00:00:00:01': {
+    model: 'MST01', image_profile: 'mst01-aprovado',
+    measurement: { min: -40, max: 125, probe: 'Probe de temperatura e umidade', source: 'https://www.minew.com/product/mst01-industrial-temperature-and-humidity-sensor/', note: 'Faixa de medição da probe deste dispositivo. Não é a faixa de alarme do equipamento.' },
     received_on: '2025-07-25', previously_used: true,
     history: [
       { area: 'Farmácia central', equipment: 'Geladeira de medicamentos', from: '2025-07-28', to: '2025-12-18' },
@@ -35,14 +40,14 @@ function register({ addRoute, getDb, getDeviceById, buildDeviceCard, ok, html })
     const days = Math.ceil((Date.parse(expires + 'T23:59:59Z') - Date.now()) / 86400000);
     return {
       demonstration: true, mac: actualMac,
-      manufacturer: sensor?.manufacturer || 'Minew', model: example ? 'MST01-09' : sensor.model,
-      image: '/consulta/assets/' + (sensor?.image_profile || 'minew-probe') + '.webp',
+      manufacturer: example ? 'Minew' : sensor.manufacturer, model: example?.model || sensor.model,
+      image: '/consulta/assets/' + (example?.image_profile || sensor?.image_profile || 'minew-probe') + '.webp',
       received_on: example?.received_on || null,
-      condition: previouslyUsed ? 'Já utilizado' : 'Novo · sem uso',
+      condition: card ? 'Em uso' : previouslyUsed ? 'Disponível' : 'Novo',
       previously_used: previouslyUsed,
       current: card ? { area: card.local || card.unitName, equipment: card.name, url: '/q/' + encodeURIComponent(actualMac) } : null,
       history,
-      measurement: example ? { min: -200, max: 200, probe: 'Pt100 · 4 fios', source, note: 'Faixa de medição da probe. Os limites do corpo e do cabo seguem a ficha técnica.' } : null,
+      measurement: example?.measurement || null,
       calibration: { calibrated_on: calibrated, expires_on: expires, status: days < 0 ? 'expired' : days <= 30 ? 'warning' : 'valid', certificate: '/api/device-info/' + encodeURIComponent(actualMac) + '/certificate' }
     };
   }

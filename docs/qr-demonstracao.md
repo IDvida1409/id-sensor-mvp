@@ -39,11 +39,13 @@ As três ilustrações foram recriadas a partir das fotos fornecidas usando a ge
 
 ## Fichas de informações do dispositivo
 
-- `/dispositivo/DE:10:00:00:00:01`: exemplo novo, recebido no cliente em 10/11/2026, sem uso anterior.
-- `/dispositivo/DE:00:00:00:00:01`: exemplo já utilizado, com áreas anteriores ilustrativas e o vínculo atual carregado do painel.
+- `/dispositivo/DE:10:00:00:00:01`: MST01 Pt100 novo (−200 °C a +200 °C), recebido no cliente em 10/11/2026, sem uso anterior.
+- `/dispositivo/DE:00:00:00:00:01`: MST01 em uso (−40 °C a +125 °C), com áreas anteriores ilustrativas e o vínculo atual carregado do painel.
 
 As fichas mostram imagem, fabricante, modelo, MAC, recebimento, condição de uso, calibração e certificado do próprio MAC. As datas de recebimento e passagens anteriores são exemplos comerciais, não um cadastro real do hospital. Não há histórico de certificados.
 
-A versão ilustrada nos dois exemplos é a MST01-09 com Pt100, de −200 °C a +200 °C na ponta de medição, conforme a ficha técnica da Minew: https://www.minew.com/wp-content/uploads/2024/09/MST01-Pt100-Temperature-Sensor2.pdf . Essa capacidade não é atribuída genericamente a toda a família MST01, ao cabo ou ao corpo. Outros modelos sem faixa cadastrada exibem essa ausência.
+As fotos dos dois modelos foram recriadas com a ferramenta integrada de geração de imagens e aprovadas pelo usuário antes da aplicação. O MST01 Pt100 (novo) usa cabo metálico e probe Pt100 da referência aprovada, com faixa de −200 °C a +200 °C. O MST01 em uso usa cabo preto e a probe da referência aprovada, com faixa de −40 °C a +125 °C. Cada perfil mantém a própria foto, modelo e faixa; não se aplica a especificação Pt100 ao outro dispositivo. Na interface, os estados são Novo, Em uso ou Disponível.
+
+Referências confirmadas: https://www.minew.com/product/mst01-pt100-temperature-sensor/ e https://www.minew.com/product/mst01-industrial-temperature-and-humidity-sensor/ .
 
 O QR `/q/:mac` de um sensor de exemplo sem vínculo abre a ficha; quando ele está vinculado, abre a temperatura. A consulta de temperatura inclui um link para as informações. As fichas são de leitura; o fluxo de troca continua exigindo 12345678 e a confirmação do cabo.

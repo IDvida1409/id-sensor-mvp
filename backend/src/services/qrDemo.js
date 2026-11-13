@@ -1,7 +1,7 @@
 // Client presentation only. No sensor provisioning, real telemetry, or outbound messages.
 const crypto = require('node:crypto');
 const catalog = [
-  { mac:'DE:10:00:00:00:01', code:'DEMO-NOVO-01', manufacturer:'Minew', model:'MST01 — demonstração', has_probe:true, image_profile:'minew-probe', calibrated_on:'2026-11-01', expires_on:'2027-11-01' },
+  { mac:'DE:10:00:00:00:01', code:'DEMO-NOVO-01', manufacturer:'Minew', model:'MST01 Pt100 — demonstração', has_probe:true, image_profile:'mst01-pt100-aprovado', calibrated_on:'2026-11-01', expires_on:'2027-11-01' },
   { mac:'DE:10:00:00:00:02', code:'DEMO-NOVO-02', manufacturer:'Exemplo demonstrativo', model:'Dispositivo com cabo — demonstração', has_probe:true, image_profile:'white-probe', calibrated_on:'2026-11-02', expires_on:'2027-11-02' },
   { mac:'DE:10:00:00:00:03', code:'DEMO-NOVO-03', manufacturer:'Exemplo demonstrativo', model:'Dispositivo sem cabo — demonstração', has_probe:false, image_profile:'white', calibrated_on:'2026-11-03', expires_on:'2027-11-03' }
 ];
@@ -11,7 +11,7 @@ function read(db,id){const row=db.prepare('SELECT state_json FROM qr_demo_replac
 function save(db,id,state){db.prepare('INSERT INTO qr_demo_replacements (device_id,state_json) VALUES (?,?) ON CONFLICT(device_id) DO UPDATE SET state_json = excluded.state_json').run(id,JSON.stringify(state));}
 function scanned(value){let code=String(value||'').trim();try{code=decodeURIComponent(code);if(code.includes('://'))code=decodeURIComponent(new URL(code).pathname.split('/').filter(Boolean).pop()||'');}catch{return '';}return code.toUpperCase();}
 function findSensor(code){code=scanned(code);return catalog.find(item=>item.mac===code||item.code===code)||null;}
-function initialSensor(card){return {mac:'DE:00:00:00:'+String(Math.floor(Number(card.panelId||card.id||1)/256)).padStart(2,'0')+':'+Number(card.panelId||card.id||1).toString(16).padStart(2,'0').toUpperCase(),manufacturer:'Minew — exemplo',model:'MST01 — demonstração',has_probe:true,image_profile:'minew-probe',calibrated_on:'2025-07-21',expires_on:'2026-07-31',example_certificate:true};}
+function initialSensor(card){return {mac:'DE:00:00:00:'+String(Math.floor(Number(card.panelId||card.id||1)/256)).padStart(2,'0')+':'+Number(card.panelId||card.id||1).toString(16).padStart(2,'0').toUpperCase(),manufacturer:'Minew — exemplo',model:'MST01 — demonstração',has_probe:true,image_profile:'mst01-aprovado',calibrated_on:'2025-07-21',expires_on:'2026-07-31',example_certificate:true};}
 function byMac(db,code){code=scanned(code);const row=db.prepare('SELECT device_id,state_json FROM qr_demo_replacements').all().find(row=>{try{return JSON.parse(row.state_json).sensor.mac===code;}catch{return false;}});if(row)return row.device_id;if(/^DE:00:00:00:[0-9A-F]{2}:[0-9A-F]{2}$/.test(code)){const number=parseInt(code.split(':').slice(-2).join(''),16);const equipment=db.prepare('SELECT id FROM dispositivos WHERE qr_code = ?').get('DEV-GELADEIRA-'+String(number).padStart(2,'0'));if(equipment&&!read(db,equipment.id))return equipment.id;}return null;}
 function decorate(db,card){
   const id=card.backendId||card.id,state=read(db,id);

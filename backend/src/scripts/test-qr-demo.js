@@ -13,9 +13,9 @@ test('QR demonstration: scan, read-only consultation, model, probe choice, stabi
     const all=await request('/devices');assert.equal(all.body.data.length,24);
     const before=await request(endpoint);assert.equal(before.body.data.demonstration,true);assert.equal(before.body.data.card.name,'Geladeira 01');
     const newInfo=(await request('/api/device-info/'+encodeURIComponent(demo.catalog[0].mac))).body.data;
-    assert.equal(newInfo.previously_used,false);assert.equal(newInfo.history.length,0);assert.equal(newInfo.received_on,'2026-11-10');assert.deepEqual([newInfo.measurement.min,newInfo.measurement.max],[-200,200]);assert.equal(newInfo.model,'MST01-09');
+    assert.equal(newInfo.previously_used,false);assert.equal(newInfo.history.length,0);assert.equal(newInfo.received_on,'2026-11-10');assert.deepEqual([newInfo.measurement.min,newInfo.measurement.max],[-200,200]);assert.equal(newInfo.model,'MST01 Pt100');assert.equal(newInfo.condition,'Novo');assert.equal(newInfo.image,'/consulta/assets/mst01-pt100-aprovado.webp');
     const usedInfo=(await request('/api/device-info/DE%3A00%3A00%3A00%3A00%3A01')).body.data;
-    assert.equal(usedInfo.previously_used,true);assert.equal(usedInfo.history.length,3);assert.equal(usedInfo.current.equipment,'Geladeira 01');assert.equal(usedInfo.calibration.status,'expired');
+    assert.equal(usedInfo.previously_used,true);assert.equal(usedInfo.history.length,3);assert.equal(usedInfo.current.equipment,'Geladeira 01');assert.equal(usedInfo.calibration.status,'expired');assert.equal(usedInfo.model,'MST01');assert.equal(usedInfo.condition,'Em uso');assert.deepEqual([usedInfo.measurement.min,usedInfo.measurement.max],[-40,125]);assert.equal(usedInfo.image,'/consulta/assets/mst01-aprovado.webp');
     assert.equal((await request('/api/device-info/AA%3ABB%3ACC%3ADD%3AEE%3AFF')).status,404);
     assert.match(await(await fetch(base+'/q/'+encodeURIComponent(demo.catalog[0].mac))).text(),/IDSENSOR_DEVICE_MAC/,'O QR do sensor sem vínculo abre a ficha');
     assert.match(await(await fetch(base+newInfo.calibration.certificate)).text(),new RegExp(demo.catalog[0].mac));
@@ -66,10 +66,10 @@ test('QR demonstration: scan, read-only consultation, model, probe choice, stabi
     const stable=(await request('/api/qr/'+code)).body.data;assert.equal(stable.stabilizing,false);assert(stable.card.temp>=stable.card.min&&stable.card.temp<=stable.card.max);
     const report=(await request('/api/qr/'+code+'/report')).body.data;assert(report.replacement.finishedAt);assert.match(report.replacement.justification,/Troca de dispositivo/);
     await request('/api/qr/'+code+'/reset',{key:'12345678'});
-    for(const [mac,label,expectedStatus] of [['DE:10:00:00:00:01','novo','Dentro do prazo'],['DE:00:00:00:00:01','utilizado','Certificado vencido']]){
+    for(const [mac,label,expectedStatus,min,max,model,condition] of [['DE:10:00:00:00:01','novo','Dentro do prazo','−200 °C','+200 °C','MST01 Pt100','Novo'],['DE:00:00:00:00:01','utilizado','Certificado vencido','−40 °C','+125 °C','MST01','Em uso']]){
       await page.goto(base+'/dispositivo/'+encodeURIComponent(mac));await page.locator('#details:not([hidden])').waitFor();
       assert.equal(await page.locator('#mac').textContent(),mac);assert.equal(await page.locator('#calibration-status').textContent(),expectedStatus);
-      assert.equal(await page.locator('#min').textContent(),'−200 °C');assert.equal(await page.locator('#max').textContent(),'+200 °C');
+      assert.equal(await page.locator('#min').textContent(),min);assert.equal(await page.locator('#max').textContent(),max);assert.equal(await page.locator('#model').textContent(),model);assert.equal(await page.locator('#condition').textContent(),condition);assert.equal(await page.locator('#usage').textContent(),condition);assert(!/Nunca utilizado|Já utilizado/.test(await page.locator('body').innerText()));
       await page.locator('#photo').evaluate(img=>img.decode());await page.locator('#seal').evaluate(img=>img.decode());
       await page.screenshot({path:path.join(output,'dispositivo-'+label+'.png'),fullPage:true});
       for(const width of[320,390,736]){await page.setViewportSize({width,height:1000});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Ficha sem rolagem horizontal');}
